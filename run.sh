@@ -228,9 +228,10 @@ get_system_info() {
         fi
         
         # Get load averages (1, 5, 15 minute averages)
-        load_avg_1=$(uptime | sed 's/.*load averages: //' | awk '{print $1}')
-        load_avg_5=$(uptime | sed 's/.*load averages: //' | awk '{print $2}')
-        load_avg_15=$(uptime | sed 's/.*load averages: //' | awk '{print $3}')
+        # Handle both formats: "load average:" and "load averages:"
+        load_avg_1=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $1}' | sed 's/,//')
+        load_avg_5=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $2}' | sed 's/,//')
+        load_avg_15=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $3}' | sed 's/,//')
         
         # Calculate load average percentages (load per core)
         load_1_percent=$(echo "scale=1; $load_avg_1 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
@@ -242,17 +243,31 @@ get_system_info() {
         # Linux (Ubuntu/AWS) - try multiple methods
         if command -v mpstat >/dev/null 2>&1; then
             # Use mpstat if available (most accurate)
-            cpu_load_raw=$(mpstat 1 1 | awk 'END {print 100-$NF}')
-            cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+            cpu_load_raw=$(mpstat 1 1 | awk 'END {print 100-$NF}' | sed 's/,/./')
+            if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+                cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+            else
+                cpu_load_percent="0"
+            fi
             cpu_breakdown="mpstat: ${cpu_load_percent}%"
         elif command -v top >/dev/null 2>&1; then
-            # Use top command
-            cpu_load_raw=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//')
-            cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+            # Use top command - try multiple formats
+            cpu_load_raw=$(top -bn1 | grep -E "Cpu\(s\)|%Cpu" | head -1 | awk '{print $2}' | sed 's/%us,//; s/,/./')
+            if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+                cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+            else
+                # Try alternative top format
+                cpu_load_raw=$(top -bn1 | grep -E "Cpu\(s\)|%Cpu" | head -1 | awk '{print $2}' | sed 's/%us//; s/,/./')
+                if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+                    cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+                else
+                    cpu_load_percent="0"
+                fi
+            fi
             cpu_breakdown="top: ${cpu_load_percent}%"
         else
             # Fallback to load average
-            cpu_load_raw=$(uptime | awk -F'load averages:' '{print $2}' | awk '{print $2}' | sed 's/,//')
+            cpu_load_raw=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $2}' | sed 's/,//')
             if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
                 cpu_load_percent=$(echo "scale=1; $cpu_load_raw * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
             else
@@ -261,10 +276,11 @@ get_system_info() {
             cpu_breakdown="load avg: ${cpu_load_percent}%"
         fi
         
-        # Get load averages (1, 5, 15 minute averages)
-        load_avg_1=$(uptime | sed 's/.*load averages: //' | awk '{print $1}')
-        load_avg_5=$(uptime | sed 's/.*load averages: //' | awk '{print $2}')
-        load_avg_15=$(uptime | sed 's/.*load averages: //' | awk '{print $3}')
+        # Get load averages (1, 5, 15 minute averages) - Linux uses "load average:"
+        # Handle both formats: "load average:" and "load averages:"
+        load_avg_1=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $1}' | sed 's/,//')
+        load_avg_5=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $2}' | sed 's/,//')
+        load_avg_15=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $3}' | sed 's/,//')
         
         # Calculate load average percentages (load per core)
         load_1_percent=$(echo "scale=1; $load_avg_1 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
