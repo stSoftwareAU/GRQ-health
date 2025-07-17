@@ -35,33 +35,37 @@ get_system_info() {
             uptime_sec=0
         fi
     else
-        # Linux and others: parse uptime output
-        local uptime_seconds=$(uptime | awk -F'up' '{print $2}' | awk -F',' '{print $1}' | sed 's/ //g')
-        if [[ $uptime_seconds =~ ^[0-9]+$ ]]; then
-            uptime_sec=$uptime_seconds
-        elif [[ $uptime_seconds =~ ^[0-9]+m$ ]]; then
-            uptime_sec=$(echo $uptime_seconds | sed 's/m//' | awk '{print $1 * 60}')
-        elif [[ $uptime_seconds =~ ^[0-9]+h$ ]]; then
-            uptime_sec=$(echo $uptime_seconds | sed 's/h//' | awk '{print $1 * 3600}')
-        elif [[ $uptime_seconds =~ ^[0-9]+d$ ]]; then
-            uptime_sec=$(echo $uptime_seconds | sed 's/d//' | awk '{print $1 * 86400}')
+        # Linux: use /proc/uptime for accurate uptime
+        if [ -f /proc/uptime ]; then
+            uptime_sec=$(cat /proc/uptime | awk '{print int($1)}')
         else
-            uptime_sec=$(uptime | awk -F'up' '{print $2}' | awk -F',' '{print $1}' | awk '{
-                days = 0; hours = 0; mins = 0;
-                if ($0 ~ /[0-9]+ days?/) {
-                    days = $0; gsub(/.*?([0-9]+) days?.*/, "\\1", days)
-                }
-                if ($0 ~ /[0-9]+:[0-9]+/) {
-                    split($0, time, /:/); hours = time[1]; mins = time[2]
-                    gsub(/.*?([0-9]+):.*/, "\\1", hours)
-                    gsub(/.*:[0-9]+:([0-9]+).*/, "\\1", mins)
-                } else if ($0 ~ /[0-9]+ hours?/) {
-                    hours = $0; gsub(/.*?([0-9]+) hours?.*/, "\\1", hours)
-                } else if ($0 ~ /[0-9]+ mins?/) {
-                    mins = $0; gsub(/.*?([0-9]+) mins?.*/, "\\1", mins)
-                }
-                print days * 86400 + hours * 3600 + mins * 60
-            }')
+            # Fallback to parsing uptime command
+            uptime_output=$(uptime)
+            # Extract the uptime part after "up"
+            uptime_part=$(echo "$uptime_output" | sed -n 's/.*up \([^,]*\).*/\1/p')
+            
+            # Parse different formats: "2 days, 3:45", "3:45", "45 min", "2 hours", etc.
+            if [[ $uptime_part =~ ([0-9]+)\ days? ]]; then
+                days=${BASH_REMATCH[1]}
+            else
+                days=0
+            fi
+            
+            if [[ $uptime_part =~ ([0-9]+):([0-9]+) ]]; then
+                hours=${BASH_REMATCH[1]}
+                mins=${BASH_REMATCH[2]}
+            elif [[ $uptime_part =~ ([0-9]+)\ hours? ]]; then
+                hours=${BASH_REMATCH[1]}
+                mins=0
+            elif [[ $uptime_part =~ ([0-9]+)\ min ]]; then
+                hours=0
+                mins=${BASH_REMATCH[1]}
+            else
+                hours=0
+                mins=0
+            fi
+            
+            uptime_sec=$((days * 86400 + hours * 3600 + mins * 60))
         fi
     fi
     
@@ -69,13 +73,25 @@ get_system_info() {
     if command -v df >/dev/null 2>&1; then
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS
+            total_disk=$(df -h / | awk 'NR==2 {print $2}' | sed 's/Gi//')
             free_disk_space=$(df -h / | awk 'NR==2 {print $4}' | sed 's/Gi//')
+            used_disk=$(df -h / | awk 'NR==2 {print $3}' | sed 's/Gi//')
         else
             # Linux/AWS
+            total_disk=$(df -h / | awk 'NR==2 {print $2}' | sed 's/G//')
             free_disk_space=$(df -h / | awk 'NR==2 {print $4}' | sed 's/G//')
+            used_disk=$(df -h / | awk 'NR==2 {print $3}' | sed 's/G//')
+        fi
+        
+        # Calculate disk usage percentage
+        if [[ "$total_disk" =~ ^[0-9]+$ && "$used_disk" =~ ^[0-9]+$ ]]; then
+            disk_usage_percent=$(echo "scale=1; $used_disk * 100 / $total_disk" | bc -l 2>/dev/null || echo "0")
+        else
+            disk_usage_percent="0"
         fi
     else
         free_disk_space="unknown"
+        disk_usage_percent="0"
     fi
     
     # Get memory usage
@@ -91,15 +107,32 @@ get_system_info() {
         mem_usage_percent="unknown"
     fi
     
-    # Get CPU load
+    # Get CPU load (average over last 5 minutes)
     if command -v uptime >/dev/null 2>&1; then
-        cpu_load=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
-        if [[ -z "$cpu_load" && "$OSTYPE" == "darwin"* ]]; then
+        # Get the 5-minute load average (second value)
+        cpu_load_raw=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $2}' | sed 's/,//')
+        if [[ -z "$cpu_load_raw" && "$OSTYPE" == "darwin"* ]]; then
             # Fallback for macOS if blank
-            cpu_load=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}' | tr -d '{}')
+            cpu_load_raw=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}' | tr -d '{}')
+        fi
+        
+        # Convert load average to percentage
+        if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+            # Get number of CPU cores
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
+            else
+                cpu_cores=$(nproc 2>/dev/null || echo "1")
+            fi
+            
+            # Convert load average to percentage (load per core * 100)
+            cpu_load_percent=$(echo "scale=1; $cpu_load_raw * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
+            cpu_load="${cpu_load_percent}%"
+        else
+            cpu_load="0%"
         fi
     else
-        cpu_load="unknown"
+        cpu_load="0%"
     fi
     
     # Get timezone
@@ -134,7 +167,7 @@ get_system_info() {
         uptime_sec=0
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"mem_usage_percent\": \"$mem_usage_percent\", \"cpu_load\": \"$cpu_load\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"disk_usage_percent\": \"$disk_usage_percent\", \"mem_usage_percent\": \"$mem_usage_percent\", \"cpu_load\": \"$cpu_load\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
 }
 
 # Function to check if we need to update
