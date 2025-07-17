@@ -15,6 +15,29 @@ JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
 HEALTHY_THRESHOLD_HOURS=24
 
+# Parse command line arguments
+FORCE_UPDATE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force|-f)
+            FORCE_UPDATE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo "Options:"
+            echo "  --force, -f    Force update regardless of last heartbeat time"
+            echo "  --help, -h     Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 # Get current timestamp
 CURRENT_TS=$(date +%s)
 
@@ -218,7 +241,17 @@ should_update() {
     fi
     
     if ! command -v jq >/dev/null 2>&1; then
-        echo "Warning: jq not found, will update anyway"
+        echo "Error: jq is required but not found. Please install jq to continue."
+        echo "Installation:"
+        echo "  macOS: brew install jq"
+        echo "  Ubuntu/Debian: sudo apt-get install jq"
+        echo "  Amazon Linux: sudo yum install jq"
+        exit 1
+    fi
+    
+    # If force update is requested, always update
+    if [ "$FORCE_UPDATE" = true ]; then
+        echo "Force update requested - updating regardless of last heartbeat time"
         return 0
     fi
     
@@ -242,7 +275,7 @@ update_json() {
     fi
     
     # Update or create JSON file
-    if [ -f "$JSON_FILE" ] && command -v jq >/dev/null 2>&1; then
+    if [ -f "$JSON_FILE" ]; then
         # Update existing file
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
@@ -250,21 +283,12 @@ update_json() {
            '.[$host] = ($info + {"heart_beat_ts": ($ts | tonumber)})' \
            "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
-        # Create new file without jq
-        if [ ! -f "$JSON_FILE" ]; then
-            echo "{" > "$JSON_FILE"
-        else
-            # Remove last closing brace
-            head -n -1 "$JSON_FILE" > "${JSON_FILE}.tmp2"
-            mv "${JSON_FILE}.tmp2" "$JSON_FILE"
-            echo "," >> "$JSON_FILE"
-        fi
-        # Add host entry
-        cat >> "$JSON_FILE" << EOF
-  "$HOSTNAME": $system_info,
-  "$HOSTNAME": {"heart_beat_ts": $CURRENT_TS}
-}
-EOF
+        # Create new file
+        jq --arg host "$HOSTNAME" \
+           --arg ts "$CURRENT_TS" \
+           --argjson info "$system_info" \
+           '{($host): ($info + {"heart_beat_ts": ($ts | tonumber)})}' \
+           > "$JSON_FILE"
     fi
     # Clean up tmp backup
     [ -f "${JSON_FILE}.tmp" ] && rm -f "${JSON_FILE}.tmp"
