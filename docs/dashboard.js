@@ -33,6 +33,36 @@ function createHostCard(hostname, data) {
     const healthStatus = getHealthStatus(data.heart_beat_ts);
     const statusClass = healthStatus;
     const logUrl = `./${hostname}/node.log`;
+    
+    // Format disk space display
+    let diskDisplay = data.free_disk_space;
+    if (data.free_disk_space && data.free_disk_space !== 'unknown') {
+        diskDisplay = `${data.free_disk_space}GB`;
+        if (data.disk_usage_percent && data.disk_usage_percent !== 0) {
+            diskDisplay += ` (${data.disk_usage_percent}% used)`;
+        }
+    }
+    
+    // Format CPU load display
+    let cpuDisplay = data.cpu_load;
+    if (data.cpu_load && data.cpu_load !== 'unknown') {
+        if (data.cpu_load.includes('%')) {
+            cpuDisplay = data.cpu_load;
+        } else {
+            // Convert load average to percentage if it's a number
+            const loadValue = parseFloat(data.cpu_load);
+            if (!isNaN(loadValue)) {
+                cpuDisplay = `${(loadValue * 100)}%`;
+            }
+        }
+    }
+    
+    // Format memory display
+    let memDisplay = data.mem_usage_percent;
+    if (data.mem_usage_percent && data.mem_usage_percent !== 'unknown') {
+        memDisplay = `${data.mem_usage_percent}%`;
+    }
+    
     return `
         <div class="col-lg-6 col-xl-4">
             <div class="host-card ${statusClass}" data-status="${healthStatus}">
@@ -53,17 +83,17 @@ function createHostCard(hostname, data) {
                 <div class="row mt-2">
                     <div class="col-6">
                         <small class="text-muted">Free Disk</small>
-                        <div class="fw-bold">${data.free_disk_space}GB</div>
+                        <div class="fw-bold">${diskDisplay}</div>
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Memory</small>
-                        <div class="fw-bold">${data.mem_usage_percent}%</div>
+                        <div class="fw-bold">${memDisplay}</div>
                     </div>
                 </div>
                 <div class="row mt-2">
                     <div class="col-6">
                         <small class="text-muted">CPU Load</small>
-                        <div class="fw-bold">${data.cpu_load}</div>
+                        <div class="fw-bold">${cpuDisplay}</div>
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Network</small>
@@ -182,5 +212,8 @@ async function loadData() {
     }
 }
 
+// Load data on page load
 document.addEventListener('DOMContentLoaded', loadData);
+
+// Auto-refresh every 60 seconds
 setInterval(loadData, 60000); 
