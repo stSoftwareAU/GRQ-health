@@ -5,6 +5,10 @@
 
 set -e
 
+BASE_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+cd "${BASE_DIR}"
+
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=12
