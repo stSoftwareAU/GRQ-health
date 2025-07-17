@@ -11,7 +11,7 @@ cd "${BASE_DIR}"
 
 # Configuration
 JSON_FILE="docs/index.json"
-HEARTBEAT_THRESHOLD_HOURS=12
+HEARTBEAT_THRESHOLD_HOURS=8
 HEALTHY_THRESHOLD_HOURS=24
 
 # Get current timestamp
