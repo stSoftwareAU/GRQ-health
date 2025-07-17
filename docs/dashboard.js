@@ -51,9 +51,9 @@ function getHealthStatus(_hostname, data) {
     
     // Check for warning states
     if (hoursSinceHeartbeat <= 24) {
-        // Disk usage warning (over 85%) - applies to all hosts including mobile
-        // High disk usage is bad - indicates potential storage issues
-        if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 85) {
+        // Disk usage warning (less than 25% free) - applies to all hosts including mobile
+        // Low free disk space is bad - indicates potential storage issues
+        if (data.free_disk_percent && parseFloat(data.free_disk_percent) < 25) {
             return 'warning';
         }
         
@@ -137,9 +137,9 @@ function createHostCard(hostname, data) {
     
     // Active hosts with health data
     // Format disk space display - consistent with memory/CPU format
-    let diskDisplay = data.disk_usage_percent;
-    if (data.disk_usage_percent && data.disk_usage_percent !== 'unknown') {
-        diskDisplay = `${data.disk_usage_percent}%`;
+    let diskDisplay = data.free_disk_percent;
+    if (data.free_disk_percent && data.free_disk_percent !== 'unknown') {
+        diskDisplay = `${data.free_disk_percent}%`;
         // Add total disk info if available
         if (data.total_disk_gb && data.total_disk_gb !== 'unknown' && data.total_disk_gb !== '0' && parseFloat(data.total_disk_gb) > 0) {
             diskDisplay += ` of ${data.total_disk_gb}GB`;
@@ -301,8 +301,8 @@ function updateStats(hosts) {
         const warningHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning');
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
-            if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 85) {
-                warningReason += `Disk usage: ${data.disk_usage_percent}%`;
+            if (data.free_disk_percent && parseFloat(data.free_disk_percent) < 25) {
+                warningReason += `Low free disk space: ${data.free_disk_percent}%`;
             }
             if (data.os_info && data.os_version) {
                 if ((data.os_info.includes('macOS') && data.os_version < '14.0') || 
