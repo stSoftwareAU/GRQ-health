@@ -276,11 +276,11 @@ update_json() {
     
     # Update or create JSON file
     if [ -f "$JSON_FILE" ]; then
-        # Update existing file
+        # Update existing file - preserve existing attributes
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
            --argjson info "$system_info" \
-           '.[$host] = ($info + {"heart_beat_ts": ($ts | tonumber)})' \
+           '.[$host] = (.[$host] // {} + $info + {"heart_beat_ts": ($ts | tonumber)})' \
            "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
         # Create new file
