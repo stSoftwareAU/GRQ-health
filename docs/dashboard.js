@@ -38,7 +38,7 @@ function createHostCard(hostname, data) {
     let diskDisplay = data.free_disk_space;
     if (data.free_disk_space && data.free_disk_space !== 'unknown') {
         diskDisplay = `${data.free_disk_space}GB`;
-        if (data.disk_usage_percent && data.disk_usage_percent !== 0) {
+        if (data.disk_usage_percent && data.disk_usage_percent !== '0' && data.disk_usage_percent !== 0) {
             diskDisplay += ` (${data.disk_usage_percent}% used)`;
         }
     }
@@ -52,7 +52,7 @@ function createHostCard(hostname, data) {
             // Convert load average to percentage if it's a number
             const loadValue = parseFloat(data.cpu_load);
             if (!isNaN(loadValue)) {
-                cpuDisplay = `${(loadValue * 100)}%`;
+                cpuDisplay = `${loadValue}%`;
             }
         }
     }
