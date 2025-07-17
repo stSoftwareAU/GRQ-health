@@ -18,12 +18,36 @@ function formatTimestamp(timestamp) {
     return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-function getHealthStatus(heartbeatTs, diskUsagePercent, osInfo, osVersion) {
+function getHealthStatus(hostname, data) {
+    // Check if this is a dead machine
+    if (data.death_date) {
+        return 'dead';
+    }
+    
+    // Check if this is a MacBook Air (don't mark as unhealthy for being offline)
+    if (hostname === "Tina's" || hostname === "Nigel's") {
+        // For MacBook Airs, only mark as critical if offline for more than 7 days
+        if (!data.heart_beat_ts) {
+            return 'historical';
+        }
+        const now = Math.floor(Date.now() / 1000);
+        const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
+        if (hoursSinceHeartbeat > 168) { // 7 days
+            return 'critical';
+        }
+        return 'historical';
+    }
+    
+    // For active hosts, check heartbeat
+    if (!data.heart_beat_ts) {
+        return 'unknown';
+    }
+    
     const now = Math.floor(Date.now() / 1000);
-    const hoursSinceHeartbeat = (now - heartbeatTs) / 3600;
+    const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
     
     // Handle timezone issues - if heartbeat is in the future, assume it's recent
-    if (heartbeatTs > now) {
+    if (data.heart_beat_ts > now) {
         return 'healthy';
     }
     
@@ -35,16 +59,16 @@ function getHealthStatus(heartbeatTs, diskUsagePercent, osInfo, osVersion) {
     // Check for warning states
     if (hoursSinceHeartbeat <= 24) {
         // Disk usage warning (over 75%)
-        if (diskUsagePercent && parseFloat(diskUsagePercent) > 75) {
+        if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 75) {
             return 'warning';
         }
         
         // OS version warning (basic check)
-        if (osInfo && osVersion) {
-            if (osInfo.includes('macOS') && osVersion < '14.0') {
+        if (data.os_info && data.os_version) {
+            if (data.os_info.includes('macOS') && data.os_version < '14.0') {
                 return 'warning';
             }
-            if (osInfo.includes('Ubuntu') && osVersion < '22.04') {
+            if (data.os_info.includes('Ubuntu') && data.os_version < '22.04') {
                 return 'warning';
             }
         }
@@ -56,10 +80,68 @@ function getHealthStatus(heartbeatTs, diskUsagePercent, osInfo, osVersion) {
 }
 
 function createHostCard(hostname, data) {
-    const healthStatus = getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version);
+    const healthStatus = getHealthStatus(hostname, data);
     const statusClass = healthStatus;
     const logUrl = `./${hostname}/node.log`;
+    const emoji = data.emoji || '';
+    const location = data.location || '';
     
+    if (healthStatus === 'dead') {
+        return `
+            <div class="col-lg-6 col-xl-4">
+                <div class="host-card dead" data-status="dead">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">${emoji} ${hostname}</h5>
+                        <span class="health-status dead">Dead</span>
+                    </div>
+                    ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
+                    <div class="row">
+                        <div class="col-12">
+                            <small class="text-muted">Death Date</small>
+                            <div class="fw-bold">${data.death_date}</div>
+                        </div>
+                    </div>
+                    ${data.os_info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">OS</small><div class="fw-bold">${data.os_info}</div></div></div>` : ''}
+                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
+                    <div class="text-center mt-3">
+                        <span class="badge bg-secondary">Historical Record</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (healthStatus === 'historical') {
+        // MacBook Airs and other historical hosts
+        return `
+            <div class="col-lg-6 col-xl-4">
+                <div class="host-card historical" data-status="historical">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">${emoji} ${hostname}</h5>
+                        <span class="health-status historical">Historical</span>
+                    </div>
+                    ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted">OS</small>
+                            <div class="fw-bold">${data.os_info}</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">Last Seen</small>
+                            <div class="fw-bold">${data.last_seen || 'Unknown'}</div>
+                        </div>
+                    </div>
+                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
+                    ${data.sample_rate ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Sample Rate</small><div class="fw-bold">${data.sample_rate}</div></div></div>` : ''}
+                    <div class="text-center mt-3">
+                        <span class="badge bg-info">MacBook Air</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Active hosts with health data
     // Format disk space display
     let diskDisplay = data.free_disk_space;
     if (data.free_disk_space && data.free_disk_space !== 'unknown') {
@@ -93,9 +175,10 @@ function createHostCard(hostname, data) {
         <div class="col-lg-6 col-xl-4">
             <div class="host-card ${statusClass}" data-status="${healthStatus}">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">${hostname}</h5>
+                    <h5 class="mb-0">${emoji} ${hostname}</h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
                 </div>
+                ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
                 <div class="row">
                     <div class="col-6">
                         <small class="text-muted">OS</small>
@@ -132,6 +215,7 @@ function createHostCard(hostname, data) {
                         <div class="fw-bold">${data.timezone}</div>
                     </div>
                 </div>
+                ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${formatTimestamp(data.heart_beat_ts)}</div>
                 <div class="text-end mt-2">
                     <a href="${logUrl}" target="_blank" class="btn btn-sm btn-outline-primary">
@@ -146,9 +230,9 @@ function createHostCard(hostname, data) {
 function updateStats(hosts) {
     const stats = {
         total: hosts.length,
-        healthy: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'healthy').length,
-        warning: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'warning').length,
-        critical: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'critical').length
+        healthy: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'healthy').length,
+        warning: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning').length,
+        critical: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical').length
     };
 
     document.getElementById('totalHosts').textContent = stats.total;
@@ -156,11 +240,15 @@ function updateStats(hosts) {
     document.getElementById('warningHosts').textContent = stats.warning;
     document.getElementById('criticalHosts').textContent = stats.critical;
 
+    // Update page title based on overall health
+    const isHealthy = stats.critical === 0;
+    document.title = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
+
     // Show critical hosts section if there are any
     const criticalSection = document.getElementById('criticalSection');
     const criticalHostsList = document.getElementById('criticalHostsList');
     if (stats.critical > 0) {
-        const criticalHosts = hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'critical');
+        const criticalHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical');
         const criticalHtml = criticalHosts.map(([hostname, data]) => {
             const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
             return `<div class="critical-host-item">
@@ -177,7 +265,7 @@ function updateStats(hosts) {
     const warningSection = document.getElementById('warningSection');
     const warningHostsList = document.getElementById('warningHostsList');
     if (stats.warning > 0) {
-        const warningHosts = hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'warning');
+        const warningHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning');
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
             if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 75) {
@@ -215,14 +303,14 @@ function filterHosts(filter, event) {
         }
     }
     // Filter hosts
-    const filteredHosts = allHosts.filter(([_, data]) => {
-        const status = getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version);
+    const filteredHosts = allHosts.filter(([hostname, data]) => {
+        const status = getHealthStatus(hostname, data);
         return filter === 'all' || status === filter;
     });
     // Sort: critical first, then warning, then healthy, then by last seen (most recent first)
-    filteredHosts.sort(([_, dataA], [__, dataB]) => {
-        const statusA = getHealthStatus(dataA.heart_beat_ts, dataA.disk_usage_percent, dataA.os_info, dataA.os_version);
-        const statusB = getHealthStatus(dataB.heart_beat_ts, dataB.disk_usage_percent, dataB.os_info, dataB.os_version);
+    filteredHosts.sort(([hostnameA, dataA], [hostnameB, dataB]) => {
+        const statusA = getHealthStatus(hostnameA, dataA);
+        const statusB = getHealthStatus(hostnameB, dataB);
         const priority = { critical: 3, warning: 2, healthy: 1 };
         
         // First sort by health status
@@ -258,7 +346,10 @@ async function loadData() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
+        
+        // Convert to array of [hostname, data] pairs
         allHosts = Object.entries(data);
+        
         updateStats(allHosts);
         filterHosts(currentFilter);
     } catch (error) {

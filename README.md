@@ -1,6 +1,6 @@
 # GRQ Health Monitoring System
 
-A distributed health monitoring system that tracks the status of multiple hosts across different operating systems and timezones. The system provides a beautiful web dashboard to visualize host health status with a focus on identifying unhealthy hosts.
+A distributed health monitoring system that tracks the status of multiple hosts across different operating systems and timezones. The system provides a beautiful web dashboard to visualize host health status with location tracking, historical records, and smart health logic.
 
 ## Features
 
@@ -8,6 +8,13 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Automatic health checks**: Monitors uptime, disk space, memory usage, CPU load, and network connectivity
 - **Smart updates**: Only updates when heartbeat is older than 12 hours
 - **Beautiful dashboard**: Modern web interface with real-time health status
+- **Location tracking**: Shows where each host is located with emoji indicators
+- **Historical records**: Maintains information about dead machines and MacBook Airs
+- **Smart health logic**: 
+  - Known dead machines don't affect system health
+  - MacBook Airs are expected to be offline and only marked critical after 7 days
+  - Slow machines are identified and tracked separately
+- **Dynamic page title**: Changes between "GRQ Healthy" and "GRQ Unhealthy" for uptime monitoring
 - **GitHub Pages integration**: Automatic deployment of the dashboard
 - **Timezone awareness**: Handles hosts in different timezones correctly
 
@@ -68,43 +75,137 @@ The script performs the following operations:
    - Pushes to remote repository
    - Triggers GitHub Pages deployment
 
-### JSON Data Structure
+### Enhanced JSON Data Structure
+
+The system uses a simple structure where each hostname is a key:
 
 ```json
 {
-  "hostname-1": {
+  "GRQ-23": {
     "uptime": 86400,
     "free_disk_space": "50",
+    "disk_usage_percent": "39.7",
     "mem_usage_percent": "65.2",
     "cpu_load": "1.25",
-    "timezone": "UTC",
-    "os_info": "Ubuntu",
-    "os_version": "20.04.3 LTS",
+    "timezone": "AEST",
+    "os_info": "macOS",
+    "os_version": "15.5",
     "network_status": "connected",
-    "heart_beat_ts": 1704067200
+    "heart_beat_ts": 1704067200,
+    "location": "Newport Office",
+    "info": "Mac m4",
+    "emoji": "🍭"
   },
-  "hostname-2": {
-    // ... similar structure
+  "GRQ-2": {
+    "death_date": "5 May 2024",
+    "location": "Silicon Heaven",
+    "emoji": "💀",
+    "os_info": "",
+    "info": ""
+  },
+  "Tina's": {
+    "location": "Out 'n about",
+    "emoji": "🕊️",
+    "os_info": "Mac",
+    "info": "Mac m3",
+    "last_seen": "2 Jun 2025",
+    "sample_rate": "1m 1s"
   }
 }
 ```
 
-### Health Status Classification
+### Enhanced Health Status Classification
 
-- **Healthy**: Last heartbeat within 24 hours
-- **Warning**: Last heartbeat 24-48 hours ago
-- **Critical**: Last heartbeat more than 48 hours ago
+- **Healthy**: 
+  - Heartbeat within 24 hours
+  - Disk usage under 75%
+  - OS version up to date
+- **Warning**: 
+  - Disk usage over 75%
+  - Outdated OS version
+  - Heartbeat within 24 hours
+- **Critical**: 
+  - No heartbeat for 24+ hours (except MacBook Airs)
+  - MacBook Airs only marked critical after 7 days offline
+- **Dead**: Known dead machines (don't affect system health)
+- **Historical**: MacBook Airs and other mobile devices
 
 ## Dashboard Features
 
-The web dashboard (`docs/index.html`) provides:
+The enhanced web dashboard (`docs/index.html`) provides:
 
 - **Real-time statistics**: Total hosts, healthy, warning, and critical counts
 - **Host cards**: Individual cards for each host with detailed information
+- **Location display**: Shows where each host is located with emoji indicators
+- **Historical section**: Displays dead machines and MacBook Airs
 - **Filtering**: Filter by health status (all, healthy, warning, critical)
-- **Auto-refresh**: Updates every 5 minutes
+- **Auto-refresh**: Updates every 60 seconds
 - **Responsive design**: Works on desktop and mobile devices
 - **Visual indicators**: Color-coded status indicators and borders
+- **Dynamic title**: Changes between "GRQ Healthy" and "GRQ Unhealthy"
+
+### Emoji Legend
+
+- 💀 Dead machines (in Silicon Heaven)
+- 👌 Healthy machines
+- 🐌 Slow machines
+- 🏭 Mac Studio/Workstation
+- 👴🏻 Old Linux machines
+- 🍭 Mac m4 machines
+- 🚀 High-performance machines
+- 🕊️ MacBook Airs (mobile)
+
+## Manual Host Management
+
+You can manually edit `docs/index.json` to add or modify hosts:
+
+### Adding a New Active Host
+```json
+{
+  "GRQ-24": {
+    "uptime": 0,
+    "free_disk_space": "100",
+    "disk_usage_percent": "20",
+    "mem_usage_percent": "10",
+    "cpu_load": "5%",
+    "timezone": "AEST",
+    "os_info": "macOS",
+    "os_version": "15.5",
+    "network_status": "connected",
+    "heart_beat_ts": 1752728062,
+    "location": "Newport Office",
+    "info": "New Mac",
+    "emoji": "🍭"
+  }
+}
+```
+
+### Marking a Host as Dead
+```json
+{
+  "GRQ-25": {
+    "death_date": "15 Jun 2025",
+    "location": "Silicon Heaven",
+    "emoji": "💀",
+    "os_info": "Linux",
+    "info": "Old server"
+  }
+}
+```
+
+### Adding a MacBook Air
+```json
+{
+  "New MacBook": {
+    "location": "Out 'n about",
+    "emoji": "🕊️",
+    "os_info": "Mac",
+    "info": "Mac m4",
+    "last_seen": "15 Jun 2025",
+    "sample_rate": "2m 30s"
+  }
+}
+```
 
 ## Setup Instructions
 
@@ -162,6 +263,14 @@ You can modify the following variables in `run.sh`:
 - `HEALTHY_THRESHOLD_HOURS`: What constitutes "healthy" status (default: 24 hours)
 - `JSON_FILE`: Path to the JSON data file (default: docs/index.json)
 
+## Uptime Monitoring
+
+The page title automatically changes to:
+- **"GRQ Healthy"** when all active hosts are healthy
+- **"GRQ Unhealthy"** when any active host is critical
+
+This allows uptime monitoring services to check the page title for system health status.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -217,3 +326,7 @@ For issues and questions:
 1. Check the troubleshooting section
 2. Review the script output for error messages
 3. Open an issue in the GitHub repository
+
+## Documentation
+
+For detailed documentation about the dashboard features and data structure, see [docs/README.md](docs/README.md).
