@@ -166,12 +166,20 @@ function filterHosts(filter, event) {
         const status = getHealthStatus(data.heart_beat_ts);
         return filter === 'all' || status === filter;
     });
-    // Sort: critical first, then warning, then healthy
+    // Sort: critical first, then warning, then healthy, then by last seen (most recent first)
     filteredHosts.sort(([_, dataA], [__, dataB]) => {
         const statusA = getHealthStatus(dataA.heart_beat_ts);
         const statusB = getHealthStatus(dataB.heart_beat_ts);
         const priority = { critical: 3, warning: 2, healthy: 1 };
-        return priority[statusB] - priority[statusA];
+        
+        // First sort by health status
+        const statusDiff = priority[statusB] - priority[statusA];
+        if (statusDiff !== 0) {
+            return statusDiff;
+        }
+        
+        // Then sort by last seen (most recent first)
+        return dataB.heart_beat_ts - dataA.heart_beat_ts;
     });
     displayHosts(filteredHosts);
 }
