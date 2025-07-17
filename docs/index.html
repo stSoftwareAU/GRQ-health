@@ -293,6 +293,10 @@
             </div>
         </div>
 
+        <div id="debugSection" style="background: #f8d7da; border: 1px solid #dee2e6; border-radius: 10px; padding: 15px; margin-bottom: 20px;">         <h4 style="margin: 0 0 10px 0;">Debug Information</h4>
+            <div id="debugInfo"></div>
+        </div>
+
         <div id="content">
             <div class="loading">Loading health data...</div>
         </div>
@@ -383,9 +387,9 @@
         function updateStats(hosts) {
             const stats = {
                 total: hosts.length,
-                healthy: hosts.filter(h => getHealthStatus(h.heart_beat_ts) === 'healthy').length,
-                warning: hosts.filter(h => getHealthStatus(h.heart_beat_ts) === 'warning').length,
-                critical: hosts.filter(h => getHealthStatus(h.heart_beat_ts) === 'critical').length
+                healthy: hosts.filter(([hostname, data]) => getHealthStatus(data.heart_beat_ts) === 'healthy').length,
+                warning: hosts.filter(([hostname, data]) => getHealthStatus(data.heart_beat_ts) === 'warning').length,
+                critical: hosts.filter(([hostname, data]) => getHealthStatus(data.heart_beat_ts) === 'critical').length
             };
 
             document.getElementById('totalHosts').textContent = stats.total;
@@ -462,6 +466,27 @@
                 
                 const data = await response.json();
                 allHosts = Object.entries(data);
+                
+                // Debug output
+                console.log('Raw data:', data);
+                allHosts.forEach(([hostname, hostData]) => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const hoursSince = (now - hostData.heart_beat_ts) / 3600;
+                    const status = getHealthStatus(hostData.heart_beat_ts);
+                    console.log(`Host: ${hostname}, heartbeat: ${hostData.heart_beat_ts}, now: ${now}, hours since: ${hoursSince}, status: ${status}`);
+                });
+                
+                // Update debug section
+                const debugInfo = document.getElementById('debugInfo');
+                const debugHtml = allHosts.map(([hostname, hostData]) => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const hoursSince = (now - hostData.heart_beat_ts) / 3600;
+                    const status = getHealthStatus(hostData.heart_beat_ts);
+                    return `<div style="margin: 5px 0; font-family: monospace; font-size: 12px;">
+                        <strong>${hostname}:</strong> heartbeat=${hostData.heart_beat_ts}, now=${now}, hours since=${hoursSince.toFixed(2)}, status=${status}
+                    </div>`;
+                }).join('');
+                debugInfo.innerHTML = debugHtml;
                 
                 updateStats(allHosts);
                 filterHosts(currentFilter);
