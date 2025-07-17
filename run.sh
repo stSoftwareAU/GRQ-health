@@ -232,6 +232,7 @@ main() {
         commit_and_push
     else
         echo "No update needed (last heartbeat was less than $HEARTBEAT_THRESHOLD_HOURS hours ago)"
+        exit 0
     fi
 }
 
