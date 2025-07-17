@@ -116,77 +116,132 @@ get_system_info() {
         # Calculate disk usage percentage - handle different units
         if [[ "$total_disk" =~ ^[0-9]+$ && "$used_disk" =~ ^[0-9]+$ ]]; then
             disk_usage_percent=$(echo "scale=1; $used_disk * 100 / $total_disk" | bc -l 2>/dev/null || echo "0")
+            total_disk_gb=$total_disk
         else
             disk_usage_percent="0"
+            total_disk_gb="0"
         fi
     else
         free_disk_space="unknown"
         disk_usage_percent="0"
+        total_disk_gb="0"
     fi
     
-    # Get memory usage
+    # Get memory usage - cross-platform
     if command -v free >/dev/null 2>&1; then
-        # Linux - use free command
+        # Linux (Ubuntu/AWS) - use free command
         total_mem=$(free -m | awk 'NR==2{print $2}')
         used_mem=$(free -m | awk 'NR==2{print $3}')
-        mem_usage_percent=$(echo "scale=1; $used_mem * 100 / $total_mem" | bc -l 2>/dev/null || echo "0")
+        if [[ -n "$total_mem" && "$total_mem" -gt 0 ]]; then
+            mem_usage_percent=$(echo "scale=1; $used_mem * 100 / $total_mem" | bc -l 2>/dev/null || echo "0")
+            # Convert MB to GB for display
+            total_mem_gb=$(echo "scale=1; $total_mem / 1024" | bc -l 2>/dev/null || echo "0")
+        else
+            mem_usage_percent="0"
+            total_mem_gb="0"
+        fi
     elif command -v vm_stat >/dev/null 2>&1; then
         # macOS - improved memory calculation
         vm_stat_output=$(vm_stat)
         total_mem=$(sysctl -n hw.memsize 2>/dev/null | awk '{print $1 / 1024 / 1024 / 1024}')
-        if [[ -z "$total_mem" ]]; then
+        if [[ -z "$total_mem" || "$total_mem" = "0" ]]; then
             total_mem=0
-        fi
-        
-        # Calculate used memory from vm_stat
-        active_pages=$(echo "$vm_stat_output" | awk '/Pages active:/ {print $3}' | tr -d '.')
-        wired_pages=$(echo "$vm_stat_output" | awk '/Pages wired down:/ {print $4}' | tr -d '.')
-        compressed_pages=$(echo "$vm_stat_output" | awk '/Pages occupied by compressor:/ {print $5}' | tr -d '.')
-        
-        if [[ -n "$active_pages" && -n "$wired_pages" && -n "$compressed_pages" ]]; then
-            used_mem_gb=$(echo "scale=2; ($active_pages + $wired_pages + $compressed_pages) * 4096 / 1024 / 1024 / 1024" | bc -l 2>/dev/null || echo "0")
-            mem_usage_percent=$(echo "scale=1; $used_mem_gb * 100 / $total_mem" | bc -l 2>/dev/null || echo "0")
-        else
+            total_mem_gb=0
             mem_usage_percent="0"
+        else
+            total_mem_gb=$total_mem
+            
+            # Calculate used memory from vm_stat
+            active_pages=$(echo "$vm_stat_output" | awk '/Pages active:/ {print $3}' | tr -d '.')
+            wired_pages=$(echo "$vm_stat_output" | awk '/Pages wired down:/ {print $4}' | tr -d '.')
+            compressed_pages=$(echo "$vm_stat_output" | awk '/Pages occupied by compressor:/ {print $5}' | tr -d '.')
+            
+            if [[ -n "$active_pages" && -n "$wired_pages" && -n "$compressed_pages" ]]; then
+                used_mem_gb=$(echo "scale=2; ($active_pages + $wired_pages + $compressed_pages) * 4096 / 1024 / 1024 / 1024" | bc -l 2>/dev/null || echo "0")
+                mem_usage_percent=$(echo "scale=1; $used_mem_gb * 100 / $total_mem" | bc -l 2>/dev/null || echo "0")
+            else
+                mem_usage_percent="0"
+            fi
         fi
     else
+        # Fallback for other systems
         mem_usage_percent="0"
+        total_mem_gb="0"
     fi
     
-    # Get CPU load (average over last 5 minutes)
-    if command -v uptime >/dev/null 2>&1; then
-        # Get the 5-minute load average (second value)
-        cpu_load_raw=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $2}' | sed 's/,//')
-        if [[ -z "$cpu_load_raw" && "$OSTYPE" == "darwin"* ]]; then
-            # Fallback for macOS if blank
-            cpu_load_raw=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}' | tr -d '{}')
-        fi
-        
-        # Convert load average to percentage
-        if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
-            # Get number of CPU cores - cross-platform
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
-            else
-                # Linux - try multiple methods
-                if command -v nproc >/dev/null 2>&1; then
-                    cpu_cores=$(nproc 2>/dev/null || echo "1")
-                elif [ -f /proc/cpuinfo ]; then
-                    cpu_cores=$(grep -c processor /proc/cpuinfo 2>/dev/null || echo "1")
-                else
-                    cpu_cores="1"
-                fi
-            fi
-            
-            # Convert load average to percentage (load per core * 100)
-            cpu_load_percent=$(echo "scale=1; $cpu_load_raw * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-            cpu_load="${cpu_load_percent}%"
+    # Get CPU cores count - cross-platform
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
+    else
+        # Linux (Ubuntu/AWS) - try multiple methods
+        if command -v nproc >/dev/null 2>&1; then
+            cpu_cores=$(nproc 2>/dev/null || echo "1")
+        elif [ -f /proc/cpuinfo ]; then
+            cpu_cores=$(grep -c processor /proc/cpuinfo 2>/dev/null || echo "1")
+        elif command -v lscpu >/dev/null 2>&1; then
+            cpu_cores=$(lscpu | grep "CPU(s):" | awk '{print $2}' 2>/dev/null || echo "1")
         else
-            cpu_load="0%"
+            cpu_cores="1"
+        fi
+    fi
+    
+    # Ensure cpu_cores is a valid number
+    if [[ ! "$cpu_cores" =~ ^[0-9]+$ ]] || [[ "$cpu_cores" -lt 1 ]]; then
+        cpu_cores="1"
+    fi
+    
+    # Check if bc is available for calculations
+    if ! command -v bc >/dev/null 2>&1; then
+        echo "Warning: bc not found. Some calculations may be simplified."
+        echo "Installation:"
+        echo "  macOS: brew install bc"
+        echo "  Ubuntu/Debian: sudo apt-get install bc"
+        echo "  Amazon Linux: sudo yum install bc"
+    fi
+    
+    # Get CPU usage percentage - cross-platform
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS - use top command to get CPU usage
+        cpu_load_raw=$(top -l 1 | grep "CPU usage" | awk '{print $3}' | sed 's/%//')
+        if [[ -z "$cpu_load_raw" ]]; then
+            # Fallback to load average if top doesn't work
+            cpu_load_raw=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $2}' | sed 's/,//')
+            if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+                cpu_load_percent=$(echo "scale=1; $cpu_load_raw * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
+            else
+                cpu_load_percent="0"
+            fi
+        else
+            cpu_load_percent=$cpu_load_raw
         fi
     else
-        cpu_load="0%"
+        # Linux (Ubuntu/AWS) - try multiple methods
+        if command -v mpstat >/dev/null 2>&1; then
+            # Use mpstat if available (most accurate)
+            cpu_load_raw=$(mpstat 1 1 | awk 'END {print 100-$NF}')
+            cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+        elif command -v top >/dev/null 2>&1; then
+            # Use top command
+            cpu_load_raw=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//')
+            cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+        else
+            # Fallback to load average
+            cpu_load_raw=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $2}' | sed 's/,//')
+            if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+                cpu_load_percent=$(echo "scale=1; $cpu_load_raw * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
+            else
+                cpu_load_percent="0"
+            fi
+        fi
     fi
+    
+    # Ensure CPU usage is reasonable (0-100%)
+    if [[ ! "$cpu_load_percent" =~ ^[0-9]*\.?[0-9]+$ ]] || [[ $(echo "$cpu_load_percent > 100" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
+        cpu_load_percent="0"
+    fi
+    
+    cpu_load="${cpu_load_percent}%"
     
     # Get timezone
     timezone=$(date +%Z)
@@ -231,7 +286,7 @@ get_system_info() {
         uptime_sec=0
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"disk_usage_percent\": \"$disk_usage_percent\", \"mem_usage_percent\": \"$mem_usage_percent\", \"cpu_load\": \"$cpu_load\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"disk_usage_percent\": \"$disk_usage_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
 }
 
 # Function to check if we need to update
