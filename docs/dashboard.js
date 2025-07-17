@@ -51,8 +51,9 @@ function getHealthStatus(_hostname, data) {
     
     // Check for warning states
     if (hoursSinceHeartbeat <= 24) {
-        // Disk usage warning (over 75%) - applies to all hosts including mobile
-        if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 75) {
+        // Disk usage warning (over 85%) - applies to all hosts including mobile
+        // High disk usage is bad - indicates potential storage issues
+        if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 85) {
             return 'warning';
         }
         
@@ -135,16 +136,17 @@ function createHostCard(hostname, data) {
     }
     
     // Active hosts with health data
-    // Format disk space display
-    let diskDisplay = data.free_disk_space;
-    if (data.free_disk_space && data.free_disk_space !== 'unknown') {
-        diskDisplay = `${data.free_disk_space}GB`;
-        if (data.disk_usage_percent && data.disk_usage_percent !== '0' && data.disk_usage_percent !== 0) {
-            diskDisplay += ` (${data.disk_usage_percent}% used)`;
+    // Format disk space display - consistent with memory/CPU format
+    let diskDisplay = data.disk_usage_percent;
+    if (data.disk_usage_percent && data.disk_usage_percent !== 'unknown') {
+        diskDisplay = `${data.disk_usage_percent}%`;
+        // Add total disk info if available
+        if (data.total_disk_gb && data.total_disk_gb !== 'unknown' && data.total_disk_gb !== '0' && parseFloat(data.total_disk_gb) > 0) {
+            diskDisplay += ` of ${data.total_disk_gb}GB`;
         }
     }
     
-    // Format CPU load display
+    // Format CPU usage display
     let cpuDisplay = data.cpu_load;
     if (data.cpu_load && data.cpu_load !== 'unknown') {
         if (data.cpu_load.includes('%')) {
@@ -159,7 +161,7 @@ function createHostCard(hostname, data) {
     }
     
     // Add CPU cores info if available
-    if (data.cpu_cores && data.cpu_cores !== 'unknown') {
+    if (data.cpu_cores && data.cpu_cores !== 'unknown' && data.cpu_cores !== '0') {
         cpuDisplay += ` (${data.cpu_cores} cores)`;
     }
     
@@ -168,7 +170,7 @@ function createHostCard(hostname, data) {
     if (data.mem_usage_percent && data.mem_usage_percent !== 'unknown') {
         memDisplay = `${data.mem_usage_percent}%`;
         // Add total memory info if available
-        if (data.total_mem_gb && data.total_mem_gb !== 'unknown' && data.total_mem_gb !== '0') {
+        if (data.total_mem_gb && data.total_mem_gb !== 'unknown' && data.total_mem_gb !== '0' && parseFloat(data.total_mem_gb) > 0) {
             memDisplay += ` of ${data.total_mem_gb}GB`;
         }
     }
@@ -293,7 +295,7 @@ function updateStats(hosts) {
         const warningHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning');
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
-            if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 75) {
+            if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 85) {
                 warningReason += `Disk usage: ${data.disk_usage_percent}%`;
             }
             if (data.os_info && data.os_version) {
