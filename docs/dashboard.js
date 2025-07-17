@@ -18,19 +18,45 @@ function formatTimestamp(timestamp) {
     return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-function getHealthStatus(heartbeatTs) {
+function getHealthStatus(heartbeatTs, diskUsagePercent, osInfo, osVersion) {
     const now = Math.floor(Date.now() / 1000);
     const hoursSinceHeartbeat = (now - heartbeatTs) / 3600;
+    
     // Handle timezone issues - if heartbeat is in the future, assume it's recent
     if (heartbeatTs > now) {
         return 'healthy';
     }
-    if (hoursSinceHeartbeat <= 24) return 'healthy';
-    return 'critical';
+    
+    // Check for critical state (no heartbeat for 24+ hours)
+    if (hoursSinceHeartbeat > 24) {
+        return 'critical';
+    }
+    
+    // Check for warning states
+    if (hoursSinceHeartbeat <= 24) {
+        // Disk usage warning (over 75%)
+        if (diskUsagePercent && parseFloat(diskUsagePercent) > 75) {
+            return 'warning';
+        }
+        
+        // OS version warning (basic check)
+        if (osInfo && osVersion) {
+            if (osInfo.includes('macOS') && osVersion < '14.0') {
+                return 'warning';
+            }
+            if (osInfo.includes('Ubuntu') && osVersion < '22.04') {
+                return 'warning';
+            }
+        }
+        
+        return 'healthy';
+    }
+    
+    return 'healthy';
 }
 
 function createHostCard(hostname, data) {
-    const healthStatus = getHealthStatus(data.heart_beat_ts);
+    const healthStatus = getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version);
     const statusClass = healthStatus;
     const logUrl = `./${hostname}/node.log`;
     
@@ -120,9 +146,9 @@ function createHostCard(hostname, data) {
 function updateStats(hosts) {
     const stats = {
         total: hosts.length,
-        healthy: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts) === 'healthy').length,
-        warning: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts) === 'warning').length,
-        critical: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts) === 'critical').length
+        healthy: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'healthy').length,
+        warning: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'warning').length,
+        critical: hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'critical').length
     };
 
     document.getElementById('totalHosts').textContent = stats.total;
@@ -134,7 +160,7 @@ function updateStats(hosts) {
     const criticalSection = document.getElementById('criticalSection');
     const criticalHostsList = document.getElementById('criticalHostsList');
     if (stats.critical > 0) {
-        const criticalHosts = hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts) === 'critical');
+        const criticalHosts = hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'critical');
         const criticalHtml = criticalHosts.map(([hostname, data]) => {
             const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
             return `<div class="critical-host-item">
@@ -145,6 +171,33 @@ function updateStats(hosts) {
         criticalSection.style.display = 'block';
     } else {
         criticalSection.style.display = 'none';
+    }
+
+    // Show warning hosts section if there are any
+    const warningSection = document.getElementById('warningSection');
+    const warningHostsList = document.getElementById('warningHostsList');
+    if (stats.warning > 0) {
+        const warningHosts = hosts.filter(([_, data]) => getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version) === 'warning');
+        const warningHtml = warningHosts.map(([hostname, data]) => {
+            let warningReason = '';
+            if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 75) {
+                warningReason += `Disk usage: ${data.disk_usage_percent}%`;
+            }
+            if (data.os_info && data.os_version) {
+                if ((data.os_info.includes('macOS') && data.os_version < '14.0') || 
+                    (data.os_info.includes('Ubuntu') && data.os_version < '22.04')) {
+                    if (warningReason) warningReason += ', ';
+                    warningReason += `OS version: ${data.os_version}`;
+                }
+            }
+            return `<div class="warning-host-item">
+                <strong>${hostname}</strong> - ${warningReason}
+            </div>`;
+        }).join('');
+        warningHostsList.innerHTML = warningHtml;
+        warningSection.style.display = 'block';
+    } else {
+        warningSection.style.display = 'none';
     }
 }
 
@@ -163,13 +216,13 @@ function filterHosts(filter, event) {
     }
     // Filter hosts
     const filteredHosts = allHosts.filter(([_, data]) => {
-        const status = getHealthStatus(data.heart_beat_ts);
+        const status = getHealthStatus(data.heart_beat_ts, data.disk_usage_percent, data.os_info, data.os_version);
         return filter === 'all' || status === filter;
     });
     // Sort: critical first, then warning, then healthy, then by last seen (most recent first)
     filteredHosts.sort(([_, dataA], [__, dataB]) => {
-        const statusA = getHealthStatus(dataA.heart_beat_ts);
-        const statusB = getHealthStatus(dataB.heart_beat_ts);
+        const statusA = getHealthStatus(dataA.heart_beat_ts, dataA.disk_usage_percent, dataA.os_info, dataA.os_version);
+        const statusB = getHealthStatus(dataB.heart_beat_ts, dataB.disk_usage_percent, dataB.os_info, dataB.os_version);
         const priority = { critical: 3, warning: 2, healthy: 1 };
         
         // First sort by health status
