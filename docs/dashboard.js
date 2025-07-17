@@ -18,7 +18,7 @@ function formatTimestamp(timestamp) {
     return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-function getHealthStatus(hostname, data) {
+function getHealthStatus(_hostname, data) {
     // Check if this is a dead machine
     if (data.death_date) {
         return 'dead';
@@ -239,6 +239,12 @@ function updateStats(hosts) {
     const isHealthy = stats.critical === 0;
     const healthStatus = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
     document.title = healthStatus;
+    
+    // Update favicon based on health
+    const favicon = document.querySelector('link[rel="icon"]');
+    if (favicon) {
+        favicon.href = isHealthy ? './medical-check.png' : './unhealthy.png';
+    }
     
     // Update the header title
     const headerTitle = document.querySelector('.header h1');
