@@ -13,8 +13,10 @@ HEALTHY_THRESHOLD_HOURS=24
 # Get current timestamp
 CURRENT_TS=$(date +%s)
 
-# Get hostname
-HOSTNAME=$(hostname)
+# Get hostname (same as other repo)
+HOST=$(uname -n)
+HOST=${HOST%%.*} # Trim everything after the first period
+HOSTNAME=$HOST
 
 # Function to get system information
 get_system_info() {
@@ -82,6 +84,10 @@ get_system_info() {
     # Get CPU load
     if command -v uptime >/dev/null 2>&1; then
         cpu_load=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
+        if [[ -z "$cpu_load" && "$OSTYPE" == "darwin"* ]]; then
+            # Fallback for macOS if blank
+            cpu_load=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}' | tr -d '{}')
+        fi
     else
         cpu_load="unknown"
     fi
@@ -146,9 +152,9 @@ should_update() {
 update_json() {
     local system_info=$(get_system_info)
     
-    # Create backup
+    # Create backup (tmp file, clean up after)
     if [ -f "$JSON_FILE" ]; then
-        cp "$JSON_FILE" "${JSON_FILE}.backup"
+        cp "$JSON_FILE" "${JSON_FILE}.tmp"
     fi
     
     # Update or create JSON file
@@ -158,18 +164,17 @@ update_json() {
            --arg ts "$CURRENT_TS" \
            --argjson info "$system_info" \
            '.[$host] = ($info + {"heart_beat_ts": ($ts | tonumber)})' \
-           "$JSON_FILE" > "${JSON_FILE}.tmp" && mv "${JSON_FILE}.tmp" "$JSON_FILE"
+           "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
         # Create new file without jq
         if [ ! -f "$JSON_FILE" ]; then
             echo "{" > "$JSON_FILE"
         else
             # Remove last closing brace
-            head -n -1 "$JSON_FILE" > "${JSON_FILE}.tmp"
-            mv "${JSON_FILE}.tmp" "$JSON_FILE"
+            head -n -1 "$JSON_FILE" > "${JSON_FILE}.tmp2"
+            mv "${JSON_FILE}.tmp2" "$JSON_FILE"
             echo "," >> "$JSON_FILE"
         fi
-        
         # Add host entry
         cat >> "$JSON_FILE" << EOF
   "$HOSTNAME": $system_info,
@@ -177,6 +182,9 @@ update_json() {
 }
 EOF
     fi
+    # Clean up tmp backup
+    [ -f "${JSON_FILE}.tmp" ] && rm -f "${JSON_FILE}.tmp"
+    [ -f "${JSON_FILE}.tmp2" ] && rm -f "${JSON_FILE}.tmp2"
     
     echo "Updated health information for $HOSTNAME"
 }
@@ -195,6 +203,7 @@ commit_and_push() {
         fi
     else
         echo "Not a git repository, skipping commit/push"
+        exit 1
     fi
 }
 
