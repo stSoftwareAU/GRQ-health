@@ -240,9 +240,22 @@ function updateStats(hosts) {
     document.getElementById('warningHosts').textContent = stats.warning;
     document.getElementById('criticalHosts').textContent = stats.critical;
 
-    // Update page title based on overall health
+    // Update page title and header based on overall health
     const isHealthy = stats.critical === 0;
-    document.title = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
+    const healthStatus = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
+    document.title = healthStatus;
+    
+    // Update the header title
+    const headerTitle = document.querySelector('.header h1');
+    if (headerTitle) {
+        headerTitle.innerHTML = `<i class="bi bi-display"></i> ${healthStatus}`;
+    }
+    
+    // Update the header subtitle
+    const headerSubtitle = document.querySelector('.header p');
+    if (headerSubtitle) {
+        headerSubtitle.textContent = isHealthy ? "All hosts responding normally" : "Some hosts not responding";
+    }
 
     // Show critical hosts section if there are any
     const criticalSection = document.getElementById('criticalSection');
