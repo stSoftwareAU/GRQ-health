@@ -30,9 +30,9 @@ function getHealthStatus(_hostname, data) {
         return 'historical';
     }
     
-    // For active hosts, check heartbeat
+    // For active hosts without heartbeat, mark as critical (unless mobile)
     if (!data.heart_beat_ts) {
-        return 'unknown';
+        return 'critical';
     }
     
     const now = Math.floor(Date.now() / 1000);
