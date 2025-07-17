@@ -317,9 +317,6 @@ commit_and_push() {
 
 # Main execution
 main() {
-    echo "Health check for host: $HOSTNAME"
-    echo "Current timestamp: $CURRENT_TS ($(date -r $CURRENT_TS))"
-    
     if should_update; then
         echo "Updating health information..."
         update_json
@@ -333,7 +330,6 @@ main() {
         fi
         commit_and_push
     else
-        echo "No update needed (last heartbeat was less than $HEARTBEAT_THRESHOLD_HOURS hours ago)"
         exit 0
     fi
 }
