@@ -198,7 +198,7 @@ EOF
 # Function to commit and push changes
 commit_and_push() {
     if [ -d ".git" ]; then
-        git add "$JSON_FILE"
+        git add docs/
         git commit -m "Update health status for $HOSTNAME at $(date -r $CURRENT_TS)" 2>/dev/null || true
         
         # Try to push (might fail if no remote or no changes)
