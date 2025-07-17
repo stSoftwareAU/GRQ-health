@@ -25,11 +25,8 @@ function getHealthStatus(_hostname, data) {
     }
     
     // Check if this is a mobile host (don't mark as unhealthy for being offline)
-    if (data.mobile) {
-        // For mobile hosts, never mark as critical for being offline
-        if (!data.heart_beat_ts) {
-            return 'historical';
-        }
+    if (data.mobile && !data.heart_beat_ts) {
+        // For mobile hosts without heartbeat, mark as historical
         return 'historical';
     }
     
@@ -47,7 +44,8 @@ function getHealthStatus(_hostname, data) {
     }
     
     // Check for critical state (no heartbeat for 24+ hours)
-    if (hoursSinceHeartbeat > 24) {
+    // Mobile hosts are not marked as critical for being offline
+    if (hoursSinceHeartbeat > 24 && !data.mobile) {
         return 'critical';
     }
     
