@@ -269,6 +269,10 @@ should_update() {
 update_json() {
     local system_info=$(get_system_info)
     
+    echo "[DEBUG] System info: $system_info"
+    echo "[DEBUG] Current timestamp: $CURRENT_TS"
+    echo "[DEBUG] Hostname: $HOSTNAME"
+    
     # Create backup (tmp file, clean up after)
     if [ -f "$JSON_FILE" ]; then
         cp "$JSON_FILE" "${JSON_FILE}.tmp"
@@ -277,13 +281,15 @@ update_json() {
     # Update or create JSON file
     if [ -f "$JSON_FILE" ]; then
         # Update existing file - preserve existing attributes
+        echo "[DEBUG] Updating existing JSON file"
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
            --argjson info "$system_info" \
-           '.[$host] = (.[$host] // {} + $info + {"heart_beat_ts": ($ts | tonumber)})' \
+           '.[$host] = ((.[$host] // {}) + $info | .heart_beat_ts = ($ts | tonumber))' \
            "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
         # Create new file
+        echo "[DEBUG] Creating new JSON file"
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
            --argjson info "$system_info" \
