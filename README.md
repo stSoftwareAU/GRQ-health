@@ -1,1 +1,219 @@
-# GRQ-health
+# GRQ Health Monitoring System
+
+A distributed health monitoring system that tracks the status of multiple hosts across different operating systems and timezones. The system provides a beautiful web dashboard to visualize host health status with a focus on identifying unhealthy hosts.
+
+## Features
+
+- **Cross-platform compatibility**: Works on macOS, Ubuntu, and AWS Linux
+- **Automatic health checks**: Monitors uptime, disk space, memory usage, CPU load, and network connectivity
+- **Smart updates**: Only updates when heartbeat is older than 12 hours
+- **Beautiful dashboard**: Modern web interface with real-time health status
+- **GitHub Pages integration**: Automatic deployment of the dashboard
+- **Timezone awareness**: Handles hosts in different timezones correctly
+
+## System Requirements
+
+- Bash shell
+- `jq` (optional, for better JSON handling)
+- `git` (for automatic commits and pushes)
+- Basic Unix tools (`uptime`, `df`, `free`, `ping`, etc.)
+
+## Quick Start
+
+1. **Clone the repository**:
+   ```bash
+   git clone <your-repo-url>
+   cd GRQ-health
+   ```
+
+2. **Make the script executable**:
+   ```bash
+   chmod +x run.sh
+   ```
+
+3. **Run the health check**:
+   ```bash
+   ./run.sh
+   ```
+
+4. **View the dashboard**: The dashboard will be available at your GitHub Pages URL once you push the changes.
+
+## How It Works
+
+### The `run.sh` Script
+
+The script performs the following operations:
+
+1. **System Information Collection**:
+   - Uptime (in seconds)
+   - Free disk space (in GB)
+   - Memory usage percentage
+   - CPU load average
+   - Operating system information
+   - Network connectivity status
+   - Timezone information
+
+2. **Health Check Logic**:
+   - Checks if the last heartbeat was more than 12 hours ago
+   - Only updates if an update is needed (prevents unnecessary writes)
+   - Creates backup of existing JSON file before updates
+
+3. **Data Storage**:
+   - Updates `docs/index.json` with current host information
+   - Uses hostname as the key for each host's data
+   - Maintains timestamp of last heartbeat
+
+4. **Git Integration**:
+   - Automatically commits changes
+   - Pushes to remote repository
+   - Triggers GitHub Pages deployment
+
+### JSON Data Structure
+
+```json
+{
+  "hostname-1": {
+    "uptime": 86400,
+    "free_disk_space": "50",
+    "mem_usage_percent": "65.2",
+    "cpu_load": "1.25",
+    "timezone": "UTC",
+    "os_info": "Ubuntu",
+    "os_version": "20.04.3 LTS",
+    "network_status": "connected",
+    "heart_beat_ts": 1704067200
+  },
+  "hostname-2": {
+    // ... similar structure
+  }
+}
+```
+
+### Health Status Classification
+
+- **Healthy**: Last heartbeat within 24 hours
+- **Warning**: Last heartbeat 24-48 hours ago
+- **Critical**: Last heartbeat more than 48 hours ago
+
+## Dashboard Features
+
+The web dashboard (`docs/index.html`) provides:
+
+- **Real-time statistics**: Total hosts, healthy, warning, and critical counts
+- **Host cards**: Individual cards for each host with detailed information
+- **Filtering**: Filter by health status (all, healthy, warning, critical)
+- **Auto-refresh**: Updates every 5 minutes
+- **Responsive design**: Works on desktop and mobile devices
+- **Visual indicators**: Color-coded status indicators and borders
+
+## Setup Instructions
+
+### 1. Repository Setup
+
+1. Create a new GitHub repository
+2. Clone it to your local machine
+3. Copy the files from this project
+4. Enable GitHub Pages in your repository settings:
+   - Go to Settings → Pages
+   - Source: Deploy from a branch
+   - Branch: main/master
+   - Folder: /docs
+
+### 2. Host Configuration
+
+For each host you want to monitor:
+
+1. Clone the repository to the host
+2. Make the script executable: `chmod +x run.sh`
+3. Set up a cron job for regular execution:
+   ```bash
+   # Edit crontab
+   crontab -e
+   
+   # Add this line to run every 6 hours
+   0 */6 * * * /path/to/GRQ-health/run.sh
+   ```
+
+### 3. Dependencies Installation
+
+#### Ubuntu/Debian:
+```bash
+sudo apt update
+sudo apt install jq bc
+```
+
+#### macOS:
+```bash
+brew install jq bc
+```
+
+#### AWS Linux/Amazon Linux:
+```bash
+sudo yum install jq bc
+# or for newer versions:
+sudo dnf install jq bc
+```
+
+## Configuration
+
+You can modify the following variables in `run.sh`:
+
+- `HEARTBEAT_THRESHOLD_HOURS`: How often to update (default: 12 hours)
+- `HEALTHY_THRESHOLD_HOURS`: What constitutes "healthy" status (default: 24 hours)
+- `JSON_FILE`: Path to the JSON data file (default: docs/index.json)
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Script fails to run**:
+   - Check if bash is available: `which bash`
+   - Ensure script is executable: `chmod +x run.sh`
+   - Check for required commands: `which uptime df ping`
+
+2. **JSON parsing errors**:
+   - Install `jq`: The script will work without it but with limited functionality
+   - Check JSON syntax: `jq . docs/index.json`
+
+3. **Git push fails**:
+   - Ensure you have write access to the repository
+   - Check if remote is configured: `git remote -v`
+   - Verify authentication is set up
+
+4. **Dashboard not updating**:
+   - Check GitHub Pages settings
+   - Verify the workflow ran successfully in Actions tab
+   - Clear browser cache
+
+### Debug Mode
+
+Run the script with debug output:
+```bash
+bash -x run.sh
+```
+
+## Security Considerations
+
+- The script runs with the same permissions as the user executing it
+- No sensitive information is collected or stored
+- Hostnames are used as identifiers (ensure they don't contain sensitive data)
+- Consider using SSH keys for git authentication instead of passwords
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test on different operating systems
+5. Submit a pull request
+
+## License
+
+This project is open source. Feel free to modify and distribute as needed.
+
+## Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review the script output for error messages
+3. Open an issue in the GitHub repository
