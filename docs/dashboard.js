@@ -164,9 +164,12 @@ function createHostCard(hostname, data) {
         memDisplay = `${data.mem_usage_percent}%`;
     }
     
+    // Add mobile class if host is marked as mobile
+    const mobileClass = data.mobile ? ' mobile' : '';
+    
     return `
         <div class="col-lg-6 col-xl-4">
-            <div class="host-card ${statusClass}" data-status="${healthStatus}">
+            <div class="host-card ${statusClass}${mobileClass}" data-status="${healthStatus}">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0">${emoji} ${hostname}</h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
@@ -215,6 +218,7 @@ function createHostCard(hostname, data) {
                         <i class="bi bi-file-text"></i> View Log
                     </a>
                 </div>
+                ${data.mobile ? `<div class="text-center mt-3"><span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> Mobile Device</span></div>` : ''}
             </div>
         </div>
     `;
