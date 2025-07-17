@@ -24,16 +24,11 @@ function getHealthStatus(hostname, data) {
         return 'dead';
     }
     
-    // Check if this is a MacBook Air (don't mark as unhealthy for being offline)
-    if (hostname === "Tina's" || hostname === "Nigel's") {
-        // For MacBook Airs, only mark as critical if offline for more than 7 days
+    // Check if this is a mobile host (don't mark as unhealthy for being offline)
+    if (data.mobile) {
+        // For mobile hosts, never mark as critical for being offline
         if (!data.heart_beat_ts) {
             return 'historical';
-        }
-        const now = Math.floor(Date.now() / 1000);
-        const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
-        if (hoursSinceHeartbeat > 168) { // 7 days
-            return 'critical';
         }
         return 'historical';
     }
@@ -58,7 +53,7 @@ function getHealthStatus(hostname, data) {
     
     // Check for warning states
     if (hoursSinceHeartbeat <= 24) {
-        // Disk usage warning (over 75%)
+        // Disk usage warning (over 75%) - applies to all hosts including mobile
         if (data.disk_usage_percent && parseFloat(data.disk_usage_percent) > 75) {
             return 'warning';
         }
