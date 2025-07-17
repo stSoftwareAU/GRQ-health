@@ -144,9 +144,9 @@ should_update() {
         return 0
     fi
     
-    local last_heartbeat=$(jq -r ".$HOSTNAME.heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
+    local last_heartbeat=$(jq -r ".\"$HOSTNAME\".heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
     local hours_since_last=$(( (CURRENT_TS - last_heartbeat) / 3600 ))
-    
+    echo "[DEBUG] last_heartbeat=$last_heartbeat, hours_since_last=$hours_since_last, current_ts=$CURRENT_TS"
     if [ $hours_since_last -ge $HEARTBEAT_THRESHOLD_HOURS ]; then
         return 0  # Need to update
     else
