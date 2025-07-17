@@ -51,9 +51,9 @@ function getHealthStatus(_hostname, data) {
     
     // Check for warning states
     if (hoursSinceHeartbeat <= 24) {
-        // Disk usage warning (less than 25% free) - applies to all hosts including mobile
-        // Low free disk space is bad - indicates potential storage issues
-        if (data.free_disk_percent && parseFloat(data.free_disk_percent) < 25) {
+        // Disk usage warning (over 75% used) - applies to all hosts including mobile
+        // High disk usage is bad - indicates potential storage issues
+        if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
             return 'warning';
         }
         
@@ -137,9 +137,9 @@ function createHostCard(hostname, data) {
     
     // Active hosts with health data
     // Format disk space display - consistent with memory/CPU format
-    let diskDisplay = data.free_disk_percent;
-    if (data.free_disk_percent && data.free_disk_percent !== 'unknown') {
-        diskDisplay = `${data.free_disk_percent}%`;
+    let diskDisplay = data.used_disk_percent;
+    if (data.used_disk_percent && data.used_disk_percent !== 'unknown') {
+        diskDisplay = `${data.used_disk_percent}% used`;
         // Add total disk info if available
         if (data.total_disk_gb && data.total_disk_gb !== 'unknown' && data.total_disk_gb !== '0' && parseFloat(data.total_disk_gb) > 0) {
             diskDisplay += ` of ${data.total_disk_gb}GB`;
@@ -198,7 +198,7 @@ function createHostCard(hostname, data) {
                 </div>
                 <div class="row mt-2">
                     <div class="col-6">
-                        <small class="text-muted">Free Disk</small>
+                        <small class="text-muted">Disk Usage</small>
                         <div class="fw-bold">${diskDisplay}</div>
                     </div>
                     <div class="col-6">
@@ -301,8 +301,8 @@ function updateStats(hosts) {
         const warningHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning');
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
-            if (data.free_disk_percent && parseFloat(data.free_disk_percent) < 25) {
-                warningReason += `Low free disk space: ${data.free_disk_percent}%`;
+            if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
+                warningReason += `High disk usage: ${data.used_disk_percent}%`;
             }
             if (data.os_info && data.os_version) {
                 if ((data.os_info.includes('macOS') && data.os_version < '14.0') || 
