@@ -67,6 +67,19 @@ function getHealthStatus(_hostname, data) {
             }
         }
         
+        // Recent utilization warning - check 5-minute load average for recent activity
+        if (data.load_averages && data.cpu_cores) {
+            const loadMatch = data.load_averages.match(/(\d+\.?\d*)% \(5m\)/);
+            if (loadMatch) {
+                const load5mPercent = parseFloat(loadMatch[1]);
+                const coreCount = parseInt(data.cpu_cores);
+                // If 5-minute load average is very low on multi-core systems, might indicate recent underutilization
+                if (coreCount > 4 && load5mPercent < 10) {
+                    return 'warning';
+                }
+            }
+        }
+        
         // OS version warning (basic check)
         if (data.os_info && data.os_version) {
             if (data.os_info.includes('macOS') && data.os_version < '14.0') {
@@ -221,6 +234,7 @@ function createHostCard(hostname, data) {
                         <small class="text-muted">CPU Load</small>
                         <div class="fw-bold">${cpuDisplay}</div>
                         ${data.cpu_breakdown ? `<small class="text-muted">${data.cpu_breakdown}</small>` : ''}
+                        ${data.load_averages ? `<small class="text-muted">Recent: ${data.load_averages}</small>` : ''}
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Network</small>
@@ -325,6 +339,17 @@ function updateStats(hosts) {
                 if (coreCount > 4 && cpuPercent < 20) {
                     if (warningReason) warningReason += ', ';
                     warningReason += `Low CPU utilization: ${data.cpu_load} (${coreCount} cores)`;
+                }
+            }
+            if (data.load_averages && data.cpu_cores) {
+                const loadMatch = data.load_averages.match(/(\d+\.?\d*)% \(5m\)/);
+                if (loadMatch) {
+                    const load5mPercent = parseFloat(loadMatch[1]);
+                    const coreCount = parseInt(data.cpu_cores);
+                    if (coreCount > 4 && load5mPercent < 10) {
+                        if (warningReason) warningReason += ', ';
+                        warningReason += `Low recent utilization: ${load5mPercent}% (5m avg)`;
+                    }
                 }
             }
             if (data.os_info && data.os_version) {
