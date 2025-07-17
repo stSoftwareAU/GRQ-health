@@ -261,10 +261,10 @@
         <button class="refresh-btn" onclick="loadData()">🔄 Refresh Data</button>
 
         <div class="filter-controls">
-            <button class="filter-btn active" onclick="filterHosts('all')">All Hosts</button>
-            <button class="filter-btn" onclick="filterHosts('healthy')">Healthy</button>
-            <button class="filter-btn" onclick="filterHosts('warning')">Warning</button>
-            <button class="filter-btn" onclick="filterHosts('critical')">Critical</button>
+            <button class="filter-btn active" onclick="filterHosts('all', event)">All Hosts</button>
+            <button class="filter-btn" onclick="filterHosts('healthy', event)">Healthy</button>
+            <button class="filter-btn" onclick="filterHosts('warning', event)">Warning</button>
+            <button class="filter-btn" onclick="filterHosts('critical', event)">Critical</button>
         </div>
 
         <div class="stats-bar" id="statsBar">
@@ -325,7 +325,8 @@
         function createHostCard(hostname, data) {
             const healthStatus = getHealthStatus(data.heart_beat_ts);
             const statusClass = healthStatus;
-            
+            // Check if log file exists (assume if host is present, log may be present)
+            const logUrl = `./${hostname}/node.log`;
             return `
                 <div class="host-card ${statusClass}" data-status="${healthStatus}">
                     <div class="host-header">
@@ -363,6 +364,9 @@
                         </div>
                     </div>
                     <div class="last-seen">Last seen: ${formatTimestamp(data.heart_beat_ts)}</div>
+                    <div style="margin-top:10px;text-align:right;">
+                        <a href="${logUrl}" target="_blank" style="color:#007bff;text-decoration:underline;">View node.log</a>
+                    </div>
                 </div>
             `;
         }
@@ -381,21 +385,20 @@
             document.getElementById('criticalHosts').textContent = stats.critical;
         }
 
-        function filterHosts(filter) {
+        function filterHosts(filter, event) {
             currentFilter = filter;
-            
             // Update filter buttons
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
-            
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
             // Filter hosts
             const filteredHosts = allHosts.filter(([hostname, data]) => {
                 const status = getHealthStatus(data.heart_beat_ts);
                 return filter === 'all' || status === filter;
             });
-            
             // Sort: critical first, then warning, then healthy
             filteredHosts.sort(([a, dataA], [b, dataB]) => {
                 const statusA = getHealthStatus(dataA.heart_beat_ts);
@@ -403,7 +406,6 @@
                 const priority = { critical: 3, warning: 2, healthy: 1 };
                 return priority[statusB] - priority[statusA];
             });
-            
             displayHosts(filteredHosts);
         }
 

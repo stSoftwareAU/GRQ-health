@@ -20,39 +20,45 @@ HOSTNAME=$HOST
 
 # Function to get system information
 get_system_info() {
-    local uptime_seconds=$(uptime | awk -F'up' '{print $2}' | awk -F',' '{print $1}' | sed 's/ //g')
-    
-    # Convert uptime to seconds
-    if [[ $uptime_seconds =~ ^[0-9]+$ ]]; then
-        # Already in seconds
-        uptime_sec=$uptime_seconds
-    elif [[ $uptime_seconds =~ ^[0-9]+m$ ]]; then
-        # Minutes
-        uptime_sec=$(echo $uptime_seconds | sed 's/m//' | awk '{print $1 * 60}')
-    elif [[ $uptime_seconds =~ ^[0-9]+h$ ]]; then
-        # Hours
-        uptime_sec=$(echo $uptime_seconds | sed 's/h//' | awk '{print $1 * 3600}')
-    elif [[ $uptime_seconds =~ ^[0-9]+d$ ]]; then
-        # Days
-        uptime_sec=$(echo $uptime_seconds | sed 's/d//' | awk '{print $1 * 86400}')
+    # Get uptime in seconds
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS: use sysctl for accurate uptime
+        boot_time=$(sysctl -n kern.boottime | awk -F'[ ,]' '{print $4}')
+        now_time=$(date +%s)
+        if [[ -n "$boot_time" && -n "$now_time" ]]; then
+            uptime_sec=$((now_time - boot_time))
+        else
+            uptime_sec=0
+        fi
     else
-        # Try to parse complex uptime format
-        uptime_sec=$(uptime | awk -F'up' '{print $2}' | awk -F',' '{print $1}' | awk '{
-            days = 0; hours = 0; mins = 0;
-            if ($0 ~ /[0-9]+ days?/) {
-                days = $0; gsub(/.*?([0-9]+) days?.*/, "\\1", days)
-            }
-            if ($0 ~ /[0-9]+:[0-9]+/) {
-                split($0, time, /:/); hours = time[1]; mins = time[2]
-                gsub(/.*?([0-9]+):.*/, "\\1", hours)
-                gsub(/.*:[0-9]+:([0-9]+).*/, "\\1", mins)
-            } else if ($0 ~ /[0-9]+ hours?/) {
-                hours = $0; gsub(/.*?([0-9]+) hours?.*/, "\\1", hours)
-            } else if ($0 ~ /[0-9]+ mins?/) {
-                mins = $0; gsub(/.*?([0-9]+) mins?.*/, "\\1", mins)
-            }
-            print days * 86400 + hours * 3600 + mins * 60
-        }')
+        # Linux and others: parse uptime output
+        local uptime_seconds=$(uptime | awk -F'up' '{print $2}' | awk -F',' '{print $1}' | sed 's/ //g')
+        if [[ $uptime_seconds =~ ^[0-9]+$ ]]; then
+            uptime_sec=$uptime_seconds
+        elif [[ $uptime_seconds =~ ^[0-9]+m$ ]]; then
+            uptime_sec=$(echo $uptime_seconds | sed 's/m//' | awk '{print $1 * 60}')
+        elif [[ $uptime_seconds =~ ^[0-9]+h$ ]]; then
+            uptime_sec=$(echo $uptime_seconds | sed 's/h//' | awk '{print $1 * 3600}')
+        elif [[ $uptime_seconds =~ ^[0-9]+d$ ]]; then
+            uptime_sec=$(echo $uptime_seconds | sed 's/d//' | awk '{print $1 * 86400}')
+        else
+            uptime_sec=$(uptime | awk -F'up' '{print $2}' | awk -F',' '{print $1}' | awk '{
+                days = 0; hours = 0; mins = 0;
+                if ($0 ~ /[0-9]+ days?/) {
+                    days = $0; gsub(/.*?([0-9]+) days?.*/, "\\1", days)
+                }
+                if ($0 ~ /[0-9]+:[0-9]+/) {
+                    split($0, time, /:/); hours = time[1]; mins = time[2]
+                    gsub(/.*?([0-9]+):.*/, "\\1", hours)
+                    gsub(/.*:[0-9]+:([0-9]+).*/, "\\1", mins)
+                } else if ($0 ~ /[0-9]+ hours?/) {
+                    hours = $0; gsub(/.*?([0-9]+) hours?.*/, "\\1", hours)
+                } else if ($0 ~ /[0-9]+ mins?/) {
+                    mins = $0; gsub(/.*?([0-9]+) mins?.*/, "\\1", mins)
+                }
+                print days * 86400 + hours * 3600 + mins * 60
+            }')
+        fi
     fi
     
     # Get disk space (works on macOS, Linux, AWS)
@@ -215,6 +221,14 @@ main() {
     if should_update; then
         echo "Updating health information..."
         update_json
+        # After updating JSON, copy log if present
+        # Copy node.log if present
+        LOG_SRC="$HOME/logs/node.log"
+        LOG_DEST="docs/$HOSTNAME/node.log"
+        if [ -f "$LOG_SRC" ]; then
+            mkdir -p "docs/$HOSTNAME"
+            cp "$LOG_SRC" "$LOG_DEST"
+        fi
         commit_and_push
     else
         echo "No update needed (last heartbeat was less than $HEARTBEAT_THRESHOLD_HOURS hours ago)"
