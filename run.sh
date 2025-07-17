@@ -69,18 +69,21 @@ get_system_info() {
         fi
     fi
     
-    # Get disk space (works on macOS, Linux, AWS)
+    # Get disk space for the current working directory (where the script runs from)
     if command -v df >/dev/null 2>&1; then
+        # Get the current working directory
+        current_dir=$(pwd)
+        
         if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS
-            total_disk=$(df -h / | awk 'NR==2 {print $2}' | sed 's/Gi//')
-            free_disk_space=$(df -h / | awk 'NR==2 {print $4}' | sed 's/Gi//')
-            used_disk=$(df -h / | awk 'NR==2 {print $3}' | sed 's/Gi//')
+            # macOS - use current directory
+            total_disk=$(df -h "$current_dir" | awk 'NR==2 {print $2}' | sed 's/Gi//')
+            free_disk_space=$(df -h "$current_dir" | awk 'NR==2 {print $4}' | sed 's/Gi//')
+            used_disk=$(df -h "$current_dir" | awk 'NR==2 {print $3}' | sed 's/Gi//')
         else
-            # Linux/AWS
-            total_disk=$(df -h / | awk 'NR==2 {print $2}' | sed 's/G//')
-            free_disk_space=$(df -h / | awk 'NR==2 {print $4}' | sed 's/G//')
-            used_disk=$(df -h / | awk 'NR==2 {print $3}' | sed 's/G//')
+            # Linux/AWS - use current directory
+            total_disk=$(df -h "$current_dir" | awk 'NR==2 {print $2}' | sed 's/G//')
+            free_disk_space=$(df -h "$current_dir" | awk 'NR==2 {print $4}' | sed 's/G//')
+            used_disk=$(df -h "$current_dir" | awk 'NR==2 {print $3}' | sed 's/G//')
         fi
         
         # Calculate disk usage percentage
