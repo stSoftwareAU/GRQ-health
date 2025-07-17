@@ -57,6 +57,16 @@ function getHealthStatus(_hostname, data) {
             return 'warning';
         }
         
+        // CPU utilization warning (under 20% for multi-core systems) - indicates potential training issues
+        // Low CPU usage on multi-core systems might indicate single-threaded training or stuck processes
+        if (data.cpu_load && data.cpu_cores) {
+            const cpuPercent = parseFloat(data.cpu_load.replace('%', ''));
+            const coreCount = parseInt(data.cpu_cores);
+            if (coreCount > 4 && cpuPercent < 20) {
+                return 'warning';
+            }
+        }
+        
         // OS version warning (basic check)
         if (data.os_info && data.os_version) {
             if (data.os_info.includes('macOS') && data.os_version < '14.0') {
@@ -210,6 +220,7 @@ function createHostCard(hostname, data) {
                     <div class="col-6">
                         <small class="text-muted">CPU Load</small>
                         <div class="fw-bold">${cpuDisplay}</div>
+                        ${data.cpu_breakdown ? `<small class="text-muted">${data.cpu_breakdown}</small>` : ''}
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Network</small>
@@ -217,9 +228,13 @@ function createHostCard(hostname, data) {
                     </div>
                 </div>
                 <div class="row mt-2">
-                    <div class="col-12">
+                    <div class="col-6">
                         <small class="text-muted">Timezone</small>
                         <div class="fw-bold">${data.timezone}</div>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted">Training</small>
+                        <div class="fw-bold">${data.training_processes === 'active' ? '🟢 Active' : data.training_processes === 'none' ? '🔴 None' : '⚪ Unknown'}</div>
                     </div>
                 </div>
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
@@ -303,6 +318,14 @@ function updateStats(hosts) {
             let warningReason = '';
             if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
                 warningReason += `High disk usage: ${data.used_disk_percent}%`;
+            }
+            if (data.cpu_load && data.cpu_cores) {
+                const cpuPercent = parseFloat(data.cpu_load.replace('%', ''));
+                const coreCount = parseInt(data.cpu_cores);
+                if (coreCount > 4 && cpuPercent < 20) {
+                    if (warningReason) warningReason += ', ';
+                    warningReason += `Low CPU utilization: ${data.cpu_load} (${coreCount} cores)`;
+                }
             }
             if (data.os_info && data.os_version) {
                 if ((data.os_info.includes('macOS') && data.os_version < '14.0') || 
