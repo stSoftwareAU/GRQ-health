@@ -158,10 +158,19 @@ function createHostCard(hostname, data) {
         }
     }
     
+    // Add CPU cores info if available
+    if (data.cpu_cores && data.cpu_cores !== 'unknown') {
+        cpuDisplay += ` (${data.cpu_cores} cores)`;
+    }
+    
     // Format memory display
     let memDisplay = data.mem_usage_percent;
     if (data.mem_usage_percent && data.mem_usage_percent !== 'unknown') {
         memDisplay = `${data.mem_usage_percent}%`;
+        // Add total memory info if available
+        if (data.total_mem_gb && data.total_mem_gb !== 'unknown' && data.total_mem_gb !== '0') {
+            memDisplay += ` of ${data.total_mem_gb}GB`;
+        }
     }
     
     // Add mobile class if host is marked as mobile
