@@ -223,7 +223,7 @@ function createHostCard(hostname, data) {
                     </div>
                 </div>
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
-                <div class="last-seen">Last seen: ${formatTimestamp(data.heart_beat_ts)}</div>
+                <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
                 <div class="text-end mt-2">
                     <a href="${logUrl}" target="_blank" class="btn btn-sm btn-outline-primary">
                         <i class="bi bi-file-text"></i> View Log
@@ -277,10 +277,16 @@ function updateStats(hosts) {
     if (stats.critical > 0) {
         const criticalHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical');
         const criticalHtml = criticalHosts.map(([hostname, data]) => {
-            const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
-            return `<div class="critical-host-item">
-                <strong>${hostname}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
-            </div>`;
+            if (data.heart_beat_ts) {
+                const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
+                return `<div class="critical-host-item">
+                    <strong>${hostname}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
+                </div>`;
+            } else {
+                return `<div class="critical-host-item">
+                    <strong>${hostname}</strong> - No heartbeat data available
+                </div>`;
+            }
         }).join('');
         criticalHostsList.innerHTML = criticalHtml;
         criticalSection.style.display = 'block';
@@ -347,7 +353,10 @@ function filterHosts(filter, event) {
         }
         
         // Then sort by last seen (most recent first)
-        return dataB.heart_beat_ts - dataA.heart_beat_ts;
+        // Handle undefined heart_beat_ts by treating them as very old
+        const tsA = dataA.heart_beat_ts || 0;
+        const tsB = dataB.heart_beat_ts || 0;
+        return tsB - tsA;
     });
     displayHosts(filteredHosts);
 }
