@@ -286,6 +286,13 @@
             </div>
         </div>
 
+        <div id="criticalSection" style="display: none; margin-bottom: 20px;">
+            <div style="background: rgba(220, 69, 0.1); border: 2px solid #dc3545; border-radius:10px; padding: 15px;">
+                <h3 style="color: #dc3545; margin: 0 0 10px 0;">🚨 Critical Hosts - Action Required</h3>
+                <div id="criticalHostsList"></div>
+            </div>
+        </div>
+
         <div id="content">
             <div class="loading">Loading health data...</div>
         </div>
@@ -316,6 +323,11 @@
         function getHealthStatus(heartbeatTs) {
             const now = Math.floor(Date.now() / 1000);
             const hoursSinceHeartbeat = (now - heartbeatTs) / 3600;
+            
+            // Handle timezone issues - if heartbeat is in the future, assume it's recent
+            if (heartbeatTs > now) {
+                return 'healthy';
+            }
             
             if (hoursSinceHeartbeat <= 24) return 'healthy';
             if (hoursSinceHeartbeat <= 48) return 'warning';
@@ -383,6 +395,24 @@
             document.getElementById('healthyHosts').textContent = stats.healthy;
             document.getElementById('warningHosts').textContent = stats.warning;
             document.getElementById('criticalHosts').textContent = stats.critical;
+
+            // Show critical hosts section if there are any
+            const criticalSection = document.getElementById('criticalSection');
+            const criticalHostsList = document.getElementById('criticalHostsList');
+            
+            if (stats.critical > 0) {
+                const criticalHosts = hosts.filter(([hostname, data]) => getHealthStatus(data.heart_beat_ts) === 'critical');
+                const criticalHtml = criticalHosts.map(([hostname, data]) => {
+                    const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
+                    return `<div style="margin:5px 0; padding: 8px; background: rgba(220, 69, 0.1); border-radius: 5px;">
+                        <strong>${hostname}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
+                    </div>`;
+                }).join('');
+                criticalHostsList.innerHTML = criticalHtml;
+                criticalSection.style.display = 'block';
+            } else {
+                criticalSection.style.display = 'none';
+            }
         }
 
         function filterHosts(filter, event) {
