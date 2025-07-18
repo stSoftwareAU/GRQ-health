@@ -207,7 +207,7 @@ function createHostCard(hostname, data) {
     
     return `
         <div class="col-lg-6 col-xl-4">
-            <div class="host-card ${statusClass}${mobileClass}" data-status="${healthStatus}">
+            <div class="host-card ${statusClass}${mobileClass}" data-status="${healthStatus}" data-hostname="${hostname}">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0">${emoji} ${hostname}</h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
@@ -418,6 +418,28 @@ function displayHosts(hosts) {
     content.innerHTML = `<div class="row">${hostsHtml}</div>`;
 }
 
+function updateHostCard(hostname, data) {
+    // Find existing host card
+    const hostCard = document.querySelector(`[data-hostname="${hostname}"]`);
+    if (hostCard) {
+        // Update the card content
+        const newCardHtml = createHostCard(hostname, data);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = newCardHtml;
+        const newCard = tempDiv.firstElementChild;
+        
+        // Add a subtle highlight effect
+        hostCard.style.transition = 'background-color 0.3s ease';
+        hostCard.style.backgroundColor = 'rgba(40, 167, 69, 0.1)';
+        setTimeout(() => {
+            hostCard.style.backgroundColor = '';
+        }, 1000);
+        
+        // Replace the content
+        hostCard.outerHTML = newCard.outerHTML;
+    }
+}
+
 async function loadData() {
     const content = document.getElementById('content');
     content.innerHTML = '<div class="loading">Loading health data...</div>';
@@ -433,6 +455,12 @@ async function loadData() {
         // Convert to array of [hostname, data] pairs
         allHosts = Object.entries(data);
         
+        // Store current data for future comparisons
+        previousHosts.clear();
+        allHosts.forEach(([hostname, hostData]) => {
+            previousHosts.set(hostname, JSON.stringify(hostData));
+        });
+        
         updateStats(allHosts);
         filterHosts(currentFilter);
     } catch (error) {
@@ -447,8 +475,122 @@ async function loadData() {
     }
 }
 
+async function loadDataIncremental() {
+    try {
+        // Add timestamp to force fresh fetch
+        const timestamp = new Date().getTime();
+        const response = await fetch(`./index.json?t=${timestamp}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        // Convert to array of [hostname, data] pairs
+        const newHosts = Object.entries(data);
+        
+        // Check for changes and update incrementally
+        let hasChanges = false;
+        const changedHosts = [];
+        const newHostnames = new Set();
+        
+        newHosts.forEach(([hostname, hostData]) => {
+            newHostnames.add(hostname);
+            const currentDataStr = JSON.stringify(hostData);
+            const previousDataStr = previousHosts.get(hostname);
+            
+            if (previousDataStr !== currentDataStr) {
+                changedHosts.push([hostname, hostData]);
+                hasChanges = true;
+            }
+        });
+        
+        // Check for removed hosts
+        previousHosts.forEach((_, hostname) => {
+            if (!newHostnames.has(hostname)) {
+                hasChanges = true;
+            }
+        });
+        
+        if (hasChanges) {
+            // Update the global hosts array
+            allHosts = newHosts;
+            
+            // Update stored data for next comparison
+            previousHosts.clear();
+            allHosts.forEach(([hostname, hostData]) => {
+                previousHosts.set(hostname, JSON.stringify(hostData));
+            });
+            
+            // Update stats
+            updateStats(allHosts);
+            
+            // Update individual changed cards if they're currently visible
+            changedHosts.forEach(([hostname, hostData]) => {
+                updateHostCard(hostname, hostData);
+            });
+            
+            // Add visual feedback for changes
+            showUpdateIndicator();
+        }
+    } catch (error) {
+        console.error('Error loading incremental data:', error);
+        // Fall back to full reload on error
+        loadData();
+    }
+}
+
+function showUpdateIndicator() {
+    // Create or update a subtle update indicator
+    let indicator = document.getElementById('update-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'update-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(40, 167, 69, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        `;
+        document.body.appendChild(indicator);
+    }
+    
+    indicator.textContent = 'Updated';
+    indicator.style.opacity = '1';
+    
+    // Hide after 2 seconds
+    setTimeout(() => {
+        indicator.style.opacity = '0';
+    }, 2000);
+}
+
+function manualRefresh() {
+    const refreshBtn = document.getElementById('refreshBtn');
+    const icon = refreshBtn.querySelector('i');
+    
+    // Add spinning animation
+    icon.classList.add('bi-spin');
+    refreshBtn.disabled = true;
+    
+    // Load data with full refresh
+    loadData().finally(() => {
+        // Remove spinning animation
+        icon.classList.remove('bi-spin');
+        refreshBtn.disabled = false;
+    });
+}
+
+// Store previous data for comparison
+let previousHosts = new Map();
+
 // Load data on page load
 document.addEventListener('DOMContentLoaded', loadData);
 
-// Auto-refresh every 60 seconds
-setInterval(loadData, 60000); 
+// Auto-refresh every 60 seconds with incremental updates
+setInterval(loadDataIncremental, 60000); 
