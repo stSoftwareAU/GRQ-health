@@ -450,6 +450,10 @@ function updateHostCard(hostname, data) {
             statusElement.textContent = healthStatus;
         }
         
+        // Update the card's CSS classes to reflect the new health status
+        hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}`;
+        hostCard.setAttribute('data-status', healthStatus);
+        
         // Update uptime
         const uptimeElement = hostCard.querySelector('.row:first-child .col-6:last-child .fw-bold');
         if (uptimeElement) {
