@@ -398,11 +398,11 @@ function filterHosts(filter, event) {
         const status = getHealthStatus(hostname, data);
         return filter === 'all' || status === filter;
     });
-    // Sort: critical first, then warning, then healthy, then by last seen (most recent first)
+    // Sort: critical first, then warning, then healthy, then historical, then dead, then by last seen (most recent first)
     filteredHosts.sort(([hostnameA, dataA], [hostnameB, dataB]) => {
         const statusA = getHealthStatus(hostnameA, dataA);
         const statusB = getHealthStatus(hostnameB, dataB);
-        const priority = { critical: 3, warning: 2, healthy: 1 };
+        const priority = { critical: 5, warning: 4, healthy: 3, historical: 2, dead: 1 };
         
         // First sort by health status
         const statusDiff = priority[statusB] - priority[statusA];
