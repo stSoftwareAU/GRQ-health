@@ -192,6 +192,71 @@ get_system_info() {
         cpu_cores="1"
     fi
     
+    # Get CPU speed - cross-platform
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS - use sysctl for CPU frequency
+        cpu_speed_raw=$(sysctl -n hw.cpufrequency 2>/dev/null || echo "0")
+        if [[ "$cpu_speed_raw" =~ ^[0-9]+$ ]] && [[ "$cpu_speed_raw" -gt 0 ]]; then
+            # Convert Hz to GHz
+            cpu_speed=$(echo "scale=2; $cpu_speed_raw / 1000000000" | bc -l 2>/dev/null || echo "0")
+            cpu_speed="${cpu_speed} GHz"
+        else
+            # Try alternative method for Apple Silicon
+            cpu_speed_raw=$(sysctl -n hw.cpufrequency_max 2>/dev/null || echo "0")
+            if [[ "$cpu_speed_raw" =~ ^[0-9]+$ ]] && [[ "$cpu_speed_raw" -gt 0 ]]; then
+                cpu_speed=$(echo "scale=2; $cpu_speed_raw / 1000000000" | bc -l 2>/dev/null || echo "0")
+                cpu_speed="${cpu_speed} GHz"
+            else
+                # For Apple Silicon, get the processor model name
+                cpu_name=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "")
+                if [[ "$cpu_name" == *"Apple"* ]]; then
+                    # Extract the processor model (M1, M2, M3, etc.) with variant
+                    if [[ "$cpu_name" =~ (M[0-9]+[[:space:]]*[A-Za-z]*) ]]; then
+                        cpu_speed="${BASH_REMATCH[1]}"
+                    elif [[ "$cpu_name" =~ (A[0-9]+[[:space:]]*[A-Za-z]*) ]]; then
+                        cpu_speed="${BASH_REMATCH[1]}"
+                    else
+                        cpu_speed="Apple Silicon"
+                    fi
+                else
+                    cpu_speed="unknown"
+                fi
+            fi
+        fi
+    else
+        # Linux - try multiple methods
+        if command -v lscpu >/dev/null 2>&1; then
+            # Use lscpu for CPU frequency
+            cpu_speed_raw=$(lscpu | grep "CPU MHz:" | awk '{print $3}' 2>/dev/null || echo "0")
+            if [[ "$cpu_speed_raw" =~ ^[0-9]*\.?[0-9]+$ ]] && [[ $(echo "$cpu_speed_raw > 0" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
+                # Convert MHz to GHz
+                cpu_speed=$(echo "scale=2; $cpu_speed_raw / 1000" | bc -l 2>/dev/null || echo "0")
+                cpu_speed="${cpu_speed} GHz"
+            else
+                # Try max frequency
+                cpu_speed_raw=$(lscpu | grep "CPU max MHz:" | awk '{print $4}' 2>/dev/null || echo "0")
+                if [[ "$cpu_speed_raw" =~ ^[0-9]*\.?[0-9]+$ ]] && [[ $(echo "$cpu_speed_raw > 0" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
+                    cpu_speed=$(echo "scale=2; $cpu_speed_raw / 1000" | bc -l 2>/dev/null || echo "0")
+                    cpu_speed="${cpu_speed} GHz"
+                else
+                    cpu_speed="unknown"
+                fi
+            fi
+        elif [ -f /proc/cpuinfo ]; then
+            # Use /proc/cpuinfo for CPU frequency
+            cpu_speed_raw=$(grep "cpu MHz" /proc/cpuinfo | head -1 | awk '{print $4}' 2>/dev/null || echo "0")
+            if [[ "$cpu_speed_raw" =~ ^[0-9]*\.?[0-9]+$ ]] && [[ $(echo "$cpu_speed_raw > 0" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
+                # Convert MHz to GHz
+                cpu_speed=$(echo "scale=2; $cpu_speed_raw / 1000" | bc -l 2>/dev/null || echo "0")
+                cpu_speed="${cpu_speed} GHz"
+            else
+                cpu_speed="unknown"
+            fi
+        else
+            cpu_speed="unknown"
+        fi
+    fi
+    
     # Check if bc is available for calculations
     if ! command -v bc >/dev/null 2>&1; then
         echo "Warning: bc not found. Some calculations may be simplified."
@@ -304,7 +369,7 @@ get_system_info() {
         uptime_sec=0
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
 }
 
 # Function to check if we need to update
