@@ -246,10 +246,6 @@ function createHostCard(hostname, data) {
                         <small class="text-muted">Timezone</small>
                         <div class="fw-bold">${data.timezone}</div>
                     </div>
-                    <div class="col-6">
-                        <small class="text-muted">Training</small>
-                        <div class="fw-bold">${data.training_processes === 'active' ? '🟢 Active' : data.training_processes === 'none' ? '🔴 None' : '⚪ Unknown'}</div>
-                    </div>
                 </div>
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
