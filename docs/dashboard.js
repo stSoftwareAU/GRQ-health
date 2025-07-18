@@ -433,12 +433,6 @@ function updateHostCard(hostname, data) {
     // Find existing host card
     const hostCard = document.querySelector(`[data-hostname="${hostname}"]`);
     if (hostCard) {
-        // Update the card content
-        const newCardHtml = createHostCard(hostname, data);
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = newCardHtml;
-        const newCard = tempDiv.firstElementChild;
-        
         // Add a subtle highlight effect
         hostCard.style.transition = 'background-color 0.3s ease';
         hostCard.style.backgroundColor = 'rgba(40, 167, 69, 0.1)';
@@ -446,8 +440,108 @@ function updateHostCard(hostname, data) {
             hostCard.style.backgroundColor = '';
         }, 1000);
         
-        // Replace the content
-        hostCard.outerHTML = newCard.outerHTML;
+        // Update individual elements instead of replacing the entire card
+        const healthStatus = getHealthStatus(hostname, data);
+        
+        // Update health status
+        const statusElement = hostCard.querySelector('.health-status');
+        if (statusElement) {
+            statusElement.className = `health-status ${healthStatus}`;
+            statusElement.textContent = healthStatus;
+        }
+        
+        // Update uptime
+        const uptimeElement = hostCard.querySelector('.row:first-child .col-6:last-child .fw-bold');
+        if (uptimeElement) {
+            uptimeElement.textContent = formatUptime(data.uptime);
+        }
+        
+        // Update disk usage
+        const diskElement = hostCard.querySelector('.row:nth-child(2) .col-6:first-child .fw-bold');
+        if (diskElement) {
+            let diskDisplay = data.used_disk_percent;
+            if (data.used_disk_percent && data.used_disk_percent !== 'unknown') {
+                diskDisplay = `${data.used_disk_percent}% used`;
+                if (data.total_disk_gb && data.total_disk_gb !== 'unknown' && data.total_disk_gb !== '0' && parseFloat(data.total_disk_gb) > 0) {
+                    diskDisplay += ` of ${data.total_disk_gb}GB`;
+                }
+            }
+            diskElement.textContent = diskDisplay;
+        }
+        
+        // Update memory
+        const memElement = hostCard.querySelector('.row:nth-child(2) .col-6:last-child .fw-bold');
+        if (memElement) {
+            let memDisplay = data.mem_usage_percent;
+            if (data.mem_usage_percent && data.mem_usage_percent !== 'unknown') {
+                memDisplay = `${data.mem_usage_percent}%`;
+                if (data.total_mem_gb && data.total_mem_gb !== 'unknown' && data.total_mem_gb !== '0' && parseFloat(data.total_mem_gb) > 0) {
+                    memDisplay += ` of ${data.total_mem_gb}GB`;
+                }
+            }
+            memElement.textContent = memDisplay;
+        }
+        
+        // Update CPU load
+        const cpuElement = hostCard.querySelector('.row:nth-child(3) .col-6:first-child .fw-bold');
+        if (cpuElement) {
+            let cpuDisplay = data.cpu_load;
+            if (data.cpu_load && data.cpu_load !== 'unknown') {
+                if (data.cpu_load.includes('%')) {
+                    cpuDisplay = data.cpu_load;
+                } else {
+                    const loadValue = parseFloat(data.cpu_load);
+                    if (!isNaN(loadValue)) {
+                        cpuDisplay = `${loadValue}%`;
+                    }
+                }
+            }
+            
+            if (data.cpu_cores && data.cpu_cores !== 'unknown' && data.cpu_cores !== '0') {
+                cpuDisplay += ` (${data.cpu_cores} cores`;
+                if (data.cpu_model && data.cpu_model !== 'unknown') {
+                    cpuDisplay += `, ${data.cpu_model}`;
+                }
+                cpuDisplay += ')';
+            }
+            cpuElement.textContent = cpuDisplay;
+        }
+        
+        // Update network status
+        const networkElement = hostCard.querySelector('.row:nth-child(3) .col-6:last-child .fw-bold');
+        if (networkElement) {
+            networkElement.textContent = data.network_status;
+        }
+        
+        // Update timezone
+        const timezoneElement = hostCard.querySelector('.row:nth-child(4) .col-6:first-child .fw-bold');
+        if (timezoneElement) {
+            timezoneElement.textContent = data.timezone;
+        }
+        
+        // Update last seen
+        const lastSeenElement = hostCard.querySelector('.last-seen');
+        if (lastSeenElement) {
+            lastSeenElement.textContent = `Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}`;
+        }
+        
+        // Update the View Log button
+        const logButton = hostCard.querySelector('a[href*="node.log"]');
+        if (logButton) {
+            const hasExceptions = data.exception_count && parseInt(data.exception_count) > 0;
+            logButton.className = `btn btn-sm ${hasExceptions ? 'btn-danger' : 'btn-outline-primary'}`;
+            logButton.innerHTML = `<i class="bi ${hasExceptions ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> ${hasExceptions ? 'View Log ⚠️' : 'View Log'}`;
+            
+            if (hasExceptions) {
+                logButton.setAttribute('title', data.exception_summary);
+                logButton.setAttribute('data-bs-toggle', 'tooltip');
+                logButton.setAttribute('data-bs-placement', 'top');
+            } else {
+                logButton.removeAttribute('title');
+                logButton.removeAttribute('data-bs-toggle');
+                logButton.removeAttribute('data-bs-placement');
+            }
+        }
         
         // Reinitialize tooltips for the updated card
         initializeTooltips();
