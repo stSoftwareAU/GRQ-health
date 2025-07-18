@@ -90,6 +90,11 @@ function getHealthStatus(_hostname, data) {
             }
         }
         
+        // Exception warning (if there are exceptions in the log)
+        if (data.exception_count && parseInt(data.exception_count) > 0) {
+            return 'warning';
+        }
+        
         return 'healthy';
     }
     
@@ -250,6 +255,10 @@ function createHostCard(hostname, data) {
                         <small class="text-muted">Timezone</small>
                         <div class="fw-bold">${data.timezone}</div>
                     </div>
+                    <div class="col-6">
+                        <small class="text-muted">Exceptions</small>
+                        <div class="fw-bold ${data.exception_count && parseInt(data.exception_count) > 0 ? 'text-danger' : 'text-success'}">${data.exception_summary || 'No data'}</div>
+                    </div>
                 </div>
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
@@ -357,6 +366,10 @@ function updateStats(hosts) {
                     if (warningReason) warningReason += ', ';
                     warningReason += `OS version: ${data.os_version}`;
                 }
+            }
+            if (data.exception_count && parseInt(data.exception_count) > 0) {
+                if (warningReason) warningReason += ', ';
+                warningReason += `Exceptions: ${data.exception_summary}`;
             }
             return `<div class="warning-host-item">
                 <strong>${hostname}</strong> - ${warningReason}
