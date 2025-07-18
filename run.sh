@@ -366,14 +366,14 @@ get_system_info() {
     exception_count=0
     log_file="$HOME/logs/node.log"
     if [ -f "$log_file" ]; then
-        # Count stack traces (lines starting with "\t at ") which indicate actual errors
-        stack_trace_count=$(grep -c "^[[:space:]]*at " "$log_file" 2>/dev/null | tr -d '\n' || echo "0")
+        # Count stack traces (lines with at least one space/tab before "at ") which indicate actual errors
+        stack_trace_count=$(grep -c "^[[:space:]]\+at " "$log_file" 2>/dev/null | tr -d '\n' || echo "0")
         
         # If we found stack traces, get more details
         if [ "$stack_trace_count" -gt 0 ]; then
             # Count unique error types by looking at the line before each stack trace
             # Extract just the error type (Exception, Error, MEMETIC, etc.)
-            error_types=$(grep -B1 "^[[:space:]]*at " "$log_file" | grep -v "^[[:space:]]*at " | grep -v "^--$" | grep -o -E "(Exception|Error|MEMETIC)" | sort | uniq -c | tr '\n' ' ' | sed 's/ *$//' 2>/dev/null | tr -d '\n' || echo "")
+            error_types=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -o -E "(Exception|Error|MEMETIC)" | sort | uniq -c | tr '\n' ' ' | sed 's/ *$//' 2>/dev/null | tr -d '\n' || echo "")
             exception_summary="${stack_trace_count} stack traces found"
             if [ -n "$error_types" ]; then
                 exception_summary="${exception_summary} (${error_types})"
