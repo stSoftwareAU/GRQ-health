@@ -570,24 +570,10 @@ function showUpdateIndicator() {
     }, 2000);
 }
 
-function manualRefresh() {
-    const refreshBtn = document.getElementById('refreshBtn');
-    const icon = refreshBtn.querySelector('i');
-    
-    // Add spinning animation
-    icon.classList.add('bi-spin');
-    refreshBtn.disabled = true;
-    
-    // Load data with full refresh
-    loadData().finally(() => {
-        // Remove spinning animation
-        icon.classList.remove('bi-spin');
-        refreshBtn.disabled = false;
-    });
-}
+
 
 // Store previous data for comparison
-let previousHosts = new Map();
+const previousHosts = new Map();
 
 // Load data on page load
 document.addEventListener('DOMContentLoaded', loadData);
