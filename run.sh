@@ -201,7 +201,20 @@ get_system_info() {
         echo "  Amazon Linux: sudo yum install bc"
     fi
     
-    # Get CPU usage percentage - cross-platform
+    # Get load averages (1, 5, 15 minute averages) for detailed breakdown
+    # Handle both formats: "load average:" and "load averages:"
+    load_avg_1=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $1}' | sed 's/,//')
+    load_avg_5=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $2}' | sed 's/,//')
+    load_avg_15=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $3}' | sed 's/,//')
+    
+    # Calculate load average percentages (load per core)
+    load_1_percent=$(echo "scale=1; $load_avg_1 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
+    load_5_percent=$(echo "scale=1; $load_avg_5 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
+    load_15_percent=$(echo "scale=1; $load_avg_15 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
+    
+    load_averages="${load_1_percent}% (1m), ${load_5_percent}% (5m), ${load_15_percent}% (15m)"
+    
+    # Get CPU breakdown for detailed analysis (cross-platform)
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS - use top command to get detailed CPU usage
         cpu_info=$(top -l 1 | grep "CPU usage")
@@ -210,88 +223,37 @@ get_system_info() {
             cpu_user=$(echo "$cpu_info" | awk '{print $3}' | sed 's/%//')
             cpu_sys=$(echo "$cpu_info" | awk '{print $5}' | sed 's/%//')
             cpu_idle=$(echo "$cpu_info" | awk '{print $7}' | sed 's/%//')
-            
-            # Calculate total CPU usage (user + system)
-            cpu_load_percent=$(echo "scale=1; $cpu_user + $cpu_sys" | bc -l 2>/dev/null || echo "0")
-            
-            # Store detailed breakdown for utilization analysis
             cpu_breakdown="${cpu_user}% user, ${cpu_sys}% sys, ${cpu_idle}% idle"
         else
-            # Fallback to load average if top doesn't work
-            cpu_load_raw=$(uptime | awk -F'load averages:' '{print $2}' | awk '{print $2}' | sed 's/,//')
-            if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
-                cpu_load_percent=$(echo "scale=1; $cpu_load_raw * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-            else
-                cpu_load_percent="0"
-            fi
             cpu_breakdown="unknown"
         fi
-        
-        # Get load averages (1, 5, 15 minute averages)
-        # Handle both formats: "load average:" and "load averages:"
-        load_avg_1=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $1}' | sed 's/,//')
-        load_avg_5=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $2}' | sed 's/,//')
-        load_avg_15=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $3}' | sed 's/,//')
-        
-        # Calculate load average percentages (load per core)
-        load_1_percent=$(echo "scale=1; $load_avg_1 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-        load_5_percent=$(echo "scale=1; $load_avg_5 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-        load_15_percent=$(echo "scale=1; $load_avg_15 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-        
-        load_averages="${load_1_percent}% (1m), ${load_5_percent}% (5m), ${load_15_percent}% (15m)"
     else
-        # Linux (Ubuntu/AWS) - try multiple methods
+        # Linux - try multiple methods for current CPU usage breakdown
         if command -v mpstat >/dev/null 2>&1; then
-            # Use mpstat if available (most accurate)
             cpu_load_raw=$(mpstat 1 1 | awk 'END {print 100-$NF}' | sed 's/,/./')
             if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
-                cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+                cpu_breakdown="mpstat: ${cpu_load_raw}%"
             else
-                cpu_load_percent="0"
+                cpu_breakdown="unknown"
             fi
-            cpu_breakdown="mpstat: ${cpu_load_percent}%"
         elif command -v top >/dev/null 2>&1; then
-            # Use top command - try multiple formats
             cpu_load_raw=$(top -bn1 | grep -E "Cpu\(s\)|%Cpu" | head -1 | awk '{print $2}' | sed 's/%us,//; s/,/./')
             if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
-                cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
+                cpu_breakdown="top: ${cpu_load_raw}%"
             else
-                # Try alternative top format
-                cpu_load_raw=$(top -bn1 | grep -E "Cpu\(s\)|%Cpu" | head -1 | awk '{print $2}' | sed 's/%us//; s/,/./')
-                if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
-                    cpu_load_percent=$(echo "scale=1; $cpu_load_raw" | bc -l 2>/dev/null || echo "0")
-                else
-                    cpu_load_percent="0"
-                fi
+                cpu_breakdown="unknown"
             fi
-            cpu_breakdown="top: ${cpu_load_percent}%"
         else
-            # Fallback to load average
-            cpu_load_raw=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $2}' | sed 's/,//')
-            if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
-                cpu_load_percent=$(echo "scale=1; $cpu_load_raw * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-            else
-                cpu_load_percent="0"
-            fi
-            cpu_breakdown="load avg: ${cpu_load_percent}%"
+            cpu_breakdown="unknown"
         fi
-        
-        # Get load averages (1, 5, 15 minute averages) - Linux uses "load average:"
-        # Handle both formats: "load average:" and "load averages:"
-        load_avg_1=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $1}' | sed 's/,//')
-        load_avg_5=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $2}' | sed 's/,//')
-        load_avg_15=$(uptime | sed -E 's/.*load average[s]?: //' | awk '{print $3}' | sed 's/,//')
-        
-        # Calculate load average percentages (load per core)
-        load_1_percent=$(echo "scale=1; $load_avg_1 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-        load_5_percent=$(echo "scale=1; $load_avg_5 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-        load_15_percent=$(echo "scale=1; $load_avg_15 * 100 / $cpu_cores" | bc -l 2>/dev/null || echo "0")
-        
-        load_averages="${load_1_percent}% (1m), ${load_5_percent}% (5m), ${load_15_percent}% (15m)"
     fi
     
-    # Ensure CPU usage is reasonable (0-100%)
-    if [[ ! "$cpu_load_percent" =~ ^[0-9]*\.?[0-9]+$ ]] || [[ $(echo "$cpu_load_percent > 100" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
+    # Use 15-minute load average as the primary CPU load metric
+    # This gives a better picture of system load over time rather than instantaneous usage
+    cpu_load_percent=$load_15_percent
+    
+    # Ensure CPU usage is a valid number (load averages can exceed 100% under heavy load)
+    if [[ ! "$cpu_load_percent" =~ ^[0-9]*\.?[0-9]+$ ]]; then
         cpu_load_percent="0"
     fi
     
@@ -335,25 +297,14 @@ get_system_info() {
         fi
     fi
     
-    # Check for key training processes
-    training_processes=""
-    if command -v ps >/dev/null 2>&1; then
-        # Check for common ML training processes
-        if ps aux | grep -v grep | grep -q "python.*train\|python.*training\|python.*main\|jupyter\|tensorboard\|wandb"; then
-            training_processes="active"
-        else
-            training_processes="none"
-        fi
-    else
-        training_processes="unknown"
-    fi
+
     
     # Ensure uptime_sec is a number
     if [[ ! "$uptime_sec" =~ ^[0-9]+$ ]]; then
         uptime_sec=0
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"training_processes\": \"$training_processes\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\"}"
 }
 
 # Function to check if we need to update
