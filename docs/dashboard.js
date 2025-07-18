@@ -488,25 +488,33 @@ async function loadDataIncremental() {
         // Convert to array of [hostname, data] pairs
         const newHosts = Object.entries(data);
         
-        // Check for changes and update incrementally
+        // Check for structural changes that require full refresh
+        const currentHostnames = new Set(allHosts.map(([hostname]) => hostname));
+        const newHostnames = new Set(newHosts.map(([hostname]) => hostname));
+        
+        // Check if hosts were added or removed
+        const hostsAdded = newHosts.length > allHosts.length;
+        const hostsRemoved = newHosts.length < allHosts.length;
+        const hostnamesChanged = newHosts.some(([hostname]) => !currentHostnames.has(hostname)) ||
+                                allHosts.some(([hostname]) => !newHostnames.has(hostname));
+        
+        // If structural changes detected, do full refresh
+        if (hostsAdded || hostsRemoved || hostnamesChanged) {
+            console.log('Structural changes detected, doing full refresh');
+            loadData();
+            return;
+        }
+        
+        // Check for data changes in existing hosts
         let hasChanges = false;
         const changedHosts = [];
-        const newHostnames = new Set();
         
         newHosts.forEach(([hostname, hostData]) => {
-            newHostnames.add(hostname);
             const currentDataStr = JSON.stringify(hostData);
             const previousDataStr = previousHosts.get(hostname);
             
             if (previousDataStr !== currentDataStr) {
                 changedHosts.push([hostname, hostData]);
-                hasChanges = true;
-            }
-        });
-        
-        // Check for removed hosts
-        previousHosts.forEach((_, hostname) => {
-            if (!newHostnames.has(hostname)) {
                 hasChanges = true;
             }
         });
