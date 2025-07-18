@@ -258,11 +258,11 @@ function createHostCard(hostname, data) {
                         <i class="bi bi-file-text"></i> View Log
                     </a>
                 </div>
-                // ${data.mobile ? `<div class="text-center mt-3"><span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> Mobile Device</span></div>` : ''}
             </div>
         </div>
     `;
-}
+                // ${data.mobile ? `<div class="text-center mt-3"><span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> Mobile Device</span></div>` : ''}
+    }
 
 function updateStats(hosts) {
     const stats = {
