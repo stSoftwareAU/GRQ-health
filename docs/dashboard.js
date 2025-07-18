@@ -73,7 +73,7 @@ function getHealthStatus(_hostname, data) {
             if (loadMatch) {
                 const load5mPercent = parseFloat(loadMatch[1]);
                 const coreCount = parseInt(data.cpu_cores);
-                // If 5-minute load average is very low on multi-core systems, might indicate recent underutilization
+                // If 5-minute load average is very low on multi-core systems, might indicate recent under utilization
                 if (coreCount > 4 && load5mPercent < 10) {
                     return 'warning';
                 }
@@ -258,7 +258,7 @@ function createHostCard(hostname, data) {
                         <i class="bi bi-file-text"></i> View Log
                     </a>
                 </div>
-                ${data.mobile ? `<div class="text-center mt-3"><span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> Mobile Device</span></div>` : ''}
+                // ${data.mobile ? `<div class="text-center mt-3"><span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> Mobile Device</span></div>` : ''}
             </div>
         </div>
     `;
