@@ -263,8 +263,10 @@ function createHostCard(hostname, data) {
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
                 <div class="text-end mt-2">
-                    <a href="${logUrl}" target="_blank" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-file-text"></i> View Log
+                    <a href="${logUrl}" target="_blank" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}" 
+                       ${data.exception_count && parseInt(data.exception_count) > 0 ? `title="${data.exception_summary}" data-bs-toggle="tooltip" data-bs-placement="top"` : ''}>
+                        <i class="bi ${data.exception_count && parseInt(data.exception_count) > 0 ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> 
+                        ${data.exception_count && parseInt(data.exception_count) > 0 ? 'View Log ⚠️' : 'View Log'}
                     </a>
                 </div>
             </div>
@@ -450,6 +452,9 @@ function updateHostCard(hostname, data) {
         
         // Replace the content
         hostCard.outerHTML = newCard.outerHTML;
+        
+        // Reinitialize tooltips for the updated card
+        initializeTooltips();
     }
 }
 
@@ -479,6 +484,7 @@ async function loadData() {
         
         updateStats(allHosts);
         filterHosts(currentFilter);
+        initializeTooltips();
     } catch (error) {
         console.error('Error loading data:', error);
         content.innerHTML = `
@@ -572,6 +578,25 @@ async function loadDataIncremental() {
         // Fall back to full reload on error
         loadData();
     }
+}
+
+function initializeTooltips() {
+    // Initialize Bootstrap tooltips for mobile-friendly behavior
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        // Destroy existing tooltip if it exists
+        const existingTooltip = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
+        if (existingTooltip) {
+            existingTooltip.dispose();
+        }
+        
+        // Create new tooltip with mobile-friendly settings
+        new bootstrap.Tooltip(tooltipTriggerEl, {
+            trigger: 'hover focus', // Show on hover and focus (for mobile)
+            delay: { show: 500, hide: 100 }, // Slight delay for mobile
+            container: 'body' // Ensure tooltip is positioned correctly
+        });
+    });
 }
 
 function showUpdateIndicator() {
