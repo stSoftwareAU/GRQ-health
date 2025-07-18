@@ -183,11 +183,11 @@ function createHostCard(hostname, data) {
         }
     }
     
-    // Add CPU cores and speed info if available
+    // Add CPU cores and model info if available
     if (data.cpu_cores && data.cpu_cores !== 'unknown' && data.cpu_cores !== '0') {
         cpuDisplay += ` (${data.cpu_cores} cores`;
-        if (data.cpu_speed && data.cpu_speed !== 'unknown') {
-            cpuDisplay += `, ${data.cpu_speed}`;
+        if (data.cpu_model && data.cpu_model !== 'unknown') {
+            cpuDisplay += `, ${data.cpu_model}`;
         }
         cpuDisplay += ')';
     }
