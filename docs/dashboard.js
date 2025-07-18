@@ -461,6 +461,9 @@ async function loadData() {
             previousHosts.set(hostname, JSON.stringify(hostData));
         });
         
+        // Reset the full refresh timer
+        lastFullRefresh = Date.now();
+        
         updateStats(allHosts);
         filterHosts(currentFilter);
     } catch (error) {
@@ -497,6 +500,17 @@ async function loadDataIncremental() {
         const hostsRemoved = newHosts.length < allHosts.length;
         const hostnamesChanged = newHosts.some(([hostname]) => !currentHostnames.has(hostname)) ||
                                 allHosts.some(([hostname]) => !newHostnames.has(hostname));
+        
+        // Debug logging
+        console.log('Incremental update check:', {
+            currentHosts: allHosts.length,
+            newHosts: newHosts.length,
+            hostsAdded,
+            hostsRemoved,
+            hostnamesChanged,
+            currentHostnames: Array.from(currentHostnames),
+            newHostnames: Array.from(newHostnames)
+        });
         
         // If structural changes detected, do full refresh
         if (hostsAdded || hostsRemoved || hostnamesChanged) {
@@ -582,9 +596,19 @@ function showUpdateIndicator() {
 
 // Store previous data for comparison
 const previousHosts = new Map();
+let lastFullRefresh = Date.now();
 
 // Load data on page load
 document.addEventListener('DOMContentLoaded', loadData);
 
 // Auto-refresh every 60 seconds with incremental updates
-setInterval(loadDataIncremental, 60000); 
+setInterval(() => {
+    // Force full refresh if no updates for 5 minutes
+    const timeSinceLastRefresh = Date.now() - lastFullRefresh;
+    if (timeSinceLastRefresh > 5 * 60 * 1000) { // 5 minutes
+        console.log('No updates detected for 5 minutes, forcing full refresh');
+        loadData();
+        return;
+    }
+    loadDataIncremental();
+}, 60000); 
