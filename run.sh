@@ -366,20 +366,21 @@ get_system_info() {
     exception_count=0
     log_file="$HOME/logs/node.log"
     if [ -f "$log_file" ]; then
-        # Count stack traces (lines with at least one space/tab before "at ") which indicate actual errors
-        stack_trace_count=$(grep -c "^[[:space:]]\+at " "$log_file" 2>/dev/null | tr -d '\n' || echo "0")
+        # Count actual exceptions by looking for error messages that precede stack traces
+        # Each exception starts with an error message, followed by stack trace lines
+        exception_count=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
         
-        # If we found stack traces, get more details
-        if [ "$stack_trace_count" -gt 0 ]; then
+        # If we found exceptions, get more details
+        if [ "$exception_count" -gt 0 ]; then
             # Count unique error types by looking at the line before each stack trace
             # Extract just the error type (Exception, Error, MEMETIC, etc.)
             error_types=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -o -E "(Exception|Error|MEMETIC)" | sort | uniq -c | tr '\n' ' ' | sed 's/ *$//' 2>/dev/null | tr -d '\n' || echo "")
-            exception_summary="${stack_trace_count} stack traces found"
+            exception_summary="${exception_count} exceptions found"
             if [ -n "$error_types" ]; then
                 exception_summary="${exception_summary} (${error_types})"
             fi
         else
-            exception_summary="No stack traces found"
+            exception_summary="No exceptions found"
         fi
     else
         exception_summary="No log file found"
@@ -390,7 +391,7 @@ get_system_info() {
         uptime_sec=0
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"exception_count\": \"$stack_trace_count\", \"exception_summary\": \"$exception_summary\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"exception_count\": \"$exception_count\", \"exception_summary\": \"$exception_summary\"}"
 }
 
 # Function to check if we need to update
