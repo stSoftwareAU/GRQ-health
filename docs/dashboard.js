@@ -256,7 +256,7 @@ function createHostCard(hostname, data) {
                         <div class="fw-bold">${data.timezone}</div>
                     </div>
                     <div class="col-6">
-                        <small class="text-muted">Exceptions</small>
+                        <small class="text-muted">Stack Traces</small>
                         <div class="fw-bold ${data.exception_count && parseInt(data.exception_count) > 0 ? 'text-danger' : 'text-success'}">${data.exception_summary || 'No data'}</div>
                     </div>
                 </div>
@@ -369,7 +369,7 @@ function updateStats(hosts) {
             }
             if (data.exception_count && parseInt(data.exception_count) > 0) {
                 if (warningReason) warningReason += ', ';
-                warningReason += `Exceptions: ${data.exception_summary}`;
+                warningReason += `Stack traces: ${data.exception_summary}`;
             }
             return `<div class="warning-host-item">
                 <strong>${hostname}</strong> - ${warningReason}
