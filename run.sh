@@ -467,7 +467,15 @@ update_json() {
 commit_and_push() {
     if [ -d ".git" ]; then
         git add docs/
-        git commit -m "Update health status for $HOSTNAME at $(date -r $CURRENT_TS)" 2>/dev/null || true
+        # Cross-platform date formatting
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS - use -r flag
+            commit_date=$(date -r $CURRENT_TS 2>/dev/null || date)
+        else
+            # Linux - use @timestamp format
+            commit_date=$(date -d "@$CURRENT_TS" 2>/dev/null || date)
+        fi
+        git commit -m "Update health status for $HOSTNAME at $commit_date" 2>/dev/null || true
         
         # Try to push (might fail if no remote or no changes)
         if git push 2>/dev/null; then
