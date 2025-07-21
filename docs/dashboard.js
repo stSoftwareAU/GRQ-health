@@ -24,7 +24,7 @@ function getHealthStatus(_hostname, data) {
         return 'dead';
     }
     
-    // Check if this is a mobile host (don't mark as unhealthy for being offline)
+    // Check if this is a mobile host without heartbeat
     if (data.mobile && !data.heart_beat_ts) {
         // For mobile hosts without heartbeat, mark as historical
         return 'historical';
@@ -37,14 +37,22 @@ function getHealthStatus(_hostname, data) {
     
     const now = Math.floor(Date.now() / 1000);
     const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
+    console.log(`[DEBUG] ${_hostname}: now=${now}, heartbeat=${data.heart_beat_ts}, hours=${hoursSinceHeartbeat}, mobile=${data.mobile}`);
     
     // Handle timezone issues - if heartbeat is in the future, assume it's recent
     if (data.heart_beat_ts > now) {
+        console.log(`[DEBUG] ${_hostname} heartbeat in future: ${data.heart_beat_ts} > ${now}`);
         return 'healthy';
     }
     
+    // Check for MIA state (mobile hosts not seen for 24+ hours)
+    if (hoursSinceHeartbeat > 24 && data.mobile) {
+        console.log(`[DEBUG] ${_hostname} is MIA: ${hoursSinceHeartbeat} hours since heartbeat, mobile: ${data.mobile}`);
+        return 'mia';
+    }
+    
     // Check for critical state (no heartbeat for 24+ hours)
-    // Mobile hosts are not marked as critical for being offline
+    // Mobile hosts are now marked as MIA instead of critical
     if (hoursSinceHeartbeat > 24 && !data.mobile) {
         return 'critical';
     }
@@ -163,6 +171,36 @@ function createHostCard(hostname, data) {
         `;
     }
     
+    if (healthStatus === 'mia') {
+        // Mobile devices that are Off the Grid (not seen for 24+ hours)
+        const miaEmoji = '🌐'; // Globe emoji for Off the Grid
+        return `
+            <div class="col-lg-6 col-xl-4">
+                <div class="host-card mia" data-status="mia">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">${miaEmoji} ${hostname}</h5>
+                        <span class="health-status mia">Off the Grid</span>
+                    </div>
+                    ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted">OS</small>
+                            <div class="fw-bold">${data.os_info} ${data.os_version}</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">Last Seen</small>
+                            <div class="fw-bold">${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
+                        </div>
+                    </div>
+                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
+                    <div class="text-center mt-3">
+                        <span class="badge bg-info">Off the Grid</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
     // Active hosts with health data
     // Format disk space display - consistent with memory/CPU format
     let diskDisplay = data.used_disk_percent;
@@ -275,7 +313,8 @@ function updateStats(hosts) {
         total: hosts.length,
         healthy: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'healthy').length,
         warning: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning').length,
-        critical: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical').length
+        critical: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical').length,
+        mia: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'mia').length
     };
 
     document.getElementById('totalHosts').textContent = stats.total;
@@ -284,8 +323,10 @@ function updateStats(hosts) {
     document.getElementById('criticalHosts').textContent = stats.critical;
 
     // Update page title and header based on overall health
+    // Only count critical devices as unhealthy - MIA devices are just missing, not unhealthy
     const isHealthy = stats.critical === 0;
     const healthStatus = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
+    console.log(`[DEBUG] Overall health: critical=${stats.critical}, mia=${stats.mia}, isHealthy=${isHealthy}`);
     document.title = healthStatus;
     
     // Update favicon based on health
@@ -303,7 +344,13 @@ function updateStats(hosts) {
     // Update the header subtitle
     const headerSubtitle = document.querySelector('.header p');
     if (headerSubtitle) {
-        headerSubtitle.textContent = isHealthy ? "All hosts responding normally" : "Some hosts not responding";
+        if (stats.critical > 0) {
+            headerSubtitle.textContent = "Some hosts not responding";
+        } else if (stats.mia > 0) {
+            headerSubtitle.textContent = `All hosts responding normally (${stats.mia} mobile device${stats.mia > 1 ? 's' : ''} off the grid)`;
+        } else {
+            headerSubtitle.textContent = "All hosts responding normally";
+        }
     }
 
     // Show critical hosts section if there are any
@@ -327,6 +374,31 @@ function updateStats(hosts) {
         criticalSection.style.display = 'block';
     } else {
         criticalSection.style.display = 'none';
+    }
+
+    // Show MIA hosts section if there are any
+    const miaSection = document.getElementById('miaSection');
+    const miaHostsList = document.getElementById('miaHostsList');
+    console.log(`[DEBUG] MIA stats: ${stats.mia} MIA hosts found`);
+    if (stats.mia > 0) {
+        const miaHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'mia');
+        console.log(`[DEBUG] MIA hosts: ${miaHosts.map(([hostname]) => hostname).join(', ')}`);
+        const miaHtml = miaHosts.map(([hostname, data]) => {
+            if (data.heart_beat_ts) {
+                const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
+                return `<div class="mia-host-item">
+                    <strong>${hostname}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
+                </div>`;
+            } else {
+                return `<div class="mia-host-item">
+                    <strong>${hostname}</strong> - No heartbeat data available
+                </div>`;
+            }
+        }).join('');
+        miaHostsList.innerHTML = miaHtml;
+        miaSection.style.display = 'block';
+    } else {
+        miaSection.style.display = 'none';
     }
 
     // Show warning hosts section if there are any
@@ -402,7 +474,7 @@ function filterHosts(filter, event) {
     filteredHosts.sort(([hostnameA, dataA], [hostnameB, dataB]) => {
         const statusA = getHealthStatus(hostnameA, dataA);
         const statusB = getHealthStatus(hostnameB, dataB);
-        const priority = { critical: 5, warning: 4, healthy: 3, historical: 2, dead: 1 };
+        const priority = { critical: 6, mia: 5, warning: 4, healthy: 3, historical: 2, dead: 1 };
         
         // First sort by health status
         const statusDiff = priority[statusB] - priority[statusA];
