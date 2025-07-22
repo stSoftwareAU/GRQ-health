@@ -2,31 +2,34 @@
 Version 1.3.2
 Disk usage:
 Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
-/dev/disk3s1s1   460Gi    10Gi   239Gi     5%    426k  2.5G    0%   /
+/dev/disk3s1s1   460Gi    10Gi   298Gi     4%    426k  3.1G    0%   /
 devfs            204Ki   204Ki     0Bi   100%     706     0  100%   /dev
-/dev/disk3s6     460Gi    61Gi   239Gi    21%      61  2.5G    0%   /System/Volumes/VM
-/dev/disk3s2     460Gi   6.6Gi   239Gi     3%    1.2k  2.5G    0%   /System/Volumes/Preboot
-/dev/disk3s4     460Gi   2.2Mi   239Gi     1%      56  2.5G    0%   /System/Volumes/Update
+/dev/disk3s6     460Gi   2.0Gi   298Gi     1%       2  3.1G    0%   /System/Volumes/VM
+/dev/disk3s2     460Gi   6.6Gi   298Gi     3%    1.2k  3.1G    0%   /System/Volumes/Preboot
+/dev/disk3s4     460Gi   2.7Mi   298Gi     1%      56  3.1G    0%   /System/Volumes/Update
 /dev/disk1s2     500Mi   6.0Mi   483Mi     2%       1  4.9M    0%   /System/Volumes/xarts
 /dev/disk1s1     500Mi   5.4Mi   483Mi     2%      32  4.9M    0%   /System/Volumes/iSCPreboot
 /dev/disk1s3     500Mi   1.1Mi   483Mi     1%      60  4.9M    0%   /System/Volumes/Hardware
-/dev/disk3s5     460Gi   142Gi   239Gi    38%    589k  2.5G    0%   /System/Volumes/Data
+/dev/disk3s5     460Gi   143Gi   298Gi    33%    590k  3.1G    0%   /System/Volumes/Data
 map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
-/dev/disk7s1     1.8Ti   740Gi   1.1Ti    40%     25M   12G    0%   /Volumes/DataGRQ
-Uptime: 13:37  up 50 days,  4:29, 5 users, load averages: 14.60 17.75 17.39
+/dev/disk7s1     1.8Ti   745Gi   1.1Ti    41%     24M   12G    0%   /Volumes/DataGRQ
+Uptime: 22:10  up 50 days, 13:02, 5 users, load averages: 12.39 13.74 14.28
 USER    PID  PPID COMMAND
-nigel  5118     1 /bin/bash /Users/nigel/src/GRQ/run.sh
-nigel 15694 15693 /bin/bash -c mkdir -p ~/logs; /Volumes/DataGRQ/train/GRQ/run.sh --run-once > ~/logs/run-train.log 2>&1
-nigel 15696 15694 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
-nigel 15714 15696 /bin/bash worker/node.sh
-nigel 16830 16829 /bin/bash -c /Volumes/DataGRQ/market/GRQ-sentiment/run_sentiment.sh > ~/logs/sentiment.err 2>&1
-nigel 16833 16830 /bin/bash /Volumes/DataGRQ/market/GRQ-sentiment/run_sentiment.sh
-nigel 17205 16833 /bin/bash ./sentiment.sh
-nigel 18859 17205 deno run --v8-flags=--max-old-space-size=8192 --allow-read --allow-write --allow-env --allow-net src/Sentiment.ts --mode=LOAD
-nigel 27674 15714 /bin/bash ./trainDataLocation.sh
-nigel 28051 27674 deno run --v8-flags=--max-old-space-size=8192 --allow-read --allow-write src/location/TrainingData.ts
-nigel 30390  5118 /bin/bash worker/node.sh
-root  30400 30390 ps -U nigel -o user,pid,ppid,command
+nigel 26543     1 cloudphotod
+nigel 27107 32632 find .cache -depth 1 ( -type l -o -type f ) -name train*80*.tgz -exec rm -f {} +
+nigel 27818 46409 /bin/bash worker/node.sh
+root  27828 27818 ps -U nigel -o user,pid,ppid,command
+nigel 32581 32580 /bin/bash -c mkdir -p ~/logs; /Volumes/DataGRQ/train/GRQ/run.sh --run-once > ~/logs/run-train.log 2>&1
+nigel 32583 32581 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
+nigel 32601 32583 /bin/bash worker/node.sh
+nigel 32632 32601 /bin/bash ./cleanup_cache.sh
+nigel 32638 32601 /bin/bash ./trainDataStocks.sh
+nigel 33082 32638 deno run --v8-flags=--max-old-space-size=8192 --allow-read --allow-write --allow-env --allow-net src/train/ParallelTrainData.ts
+nigel 40149 40148 /bin/bash -c /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh > ~/logs/market.err 2>&1
+nigel 40150 40149 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh
+nigel 40168 40150 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/fetch.sh
+nigel 40218 40168 deno run --allow-read --allow-write --allow-env --allow-net src/Fetch.ts --sharesRepo=GRQ-shareprices2025Q1 --reportRepo=GRQ-companyreports
+nigel 46409     1 /bin/bash /Users/nigel/src/GRQ/run.sh
 root   1142  1083 login -pfl nigel /bin/bash -c exec -la zsh /bin/zsh
 nigel  1143  1142 -zsh
 nigel 21303  1143 tail -F /Users/nigel/logs/node.log
@@ -51,7 +54,7 @@ v8 13.7.152.14-rusty
 typescript 5.8.3
 aws-cli/2.18.15 Python/3.12.7 Darwin/24.5.0 source/arm64
 Option: sampler
-Starting... Tue Jul 22 13:37:44 AEST 2025
+Starting... Tue Jul 22 22:10:29 AEST 2025
 🔁 Attempting pull with rebase and conflict cleanup (attempt 1 of 6)...
 ✅ Git pull succeeded.
 Already up to date.
@@ -61,122 +64,18 @@ Already up to date.
 ✅ Git pull succeeded.
 🔁 Attempting pull with rebase and conflict cleanup (attempt 1 of 6)...
 ✅ Git pull succeeded.
-Starting sampler... Tue Jul 22 13:37:58 AEST 2025
+Starting sampler... Tue Jul 22 22:10:42 AEST 2025
 Sampler mode
 Falling back to tertiary URL...
 Loop 1 of 4
 Already up to date.
-1) Sample rate: 0.01, batch Size: 10000, timeout: 8
-Total time taken: 8s 108ms
-Lily Johnson (Observations: 1,461, Neurons: 501, Synapses: 15,489 & Score: 0.472)
-8 mutations, mutation rate 11.5%, elitism 1, mutation FFW, selection POWER, timeout 8, PopSize 50 SAMPLER
-Initialized in 1s 892ms
-Remove neuron 796b5e0e-b497-4982-85d8-e18f3149d909 as no longer connected
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+1) Sample rate: 0.01, batch Size: 10000, timeout: 7
+Total time taken: 10s 180ms
+Gunnar Tillman (Observations: 1,461, Neurons: 501, Synapses: 15,497 & Score: 0.472)
+9 mutations, mutation rate 5.0%, elitism 1, mutation FFW, selection POWER, timeout 7, PopSize 50 SAMPLER
+Initialized in 2s 485ms
+Constant neuron d5e35469-893e-4dad-bec4-d1cf315abaf8 convert hidden to constant
+Adjust neuron d5e35469-893e-4dad-bec4-d1cf315abaf8 bias 0.007624368241865603 to 0.9999709346452564
 Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
 Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
@@ -243,33 +142,8 @@ Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
 Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
 Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
 Replacing HYPOTv2 neuron e5072503-9f99-4e6a-90db-b49a89cf7848
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOTv2 neuron e5072503-9f99-4e6a-90db-b49a89cf7848
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+UUID didn't change after MOD_SQUASH mutation, changed: false
 Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
 Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
@@ -290,12 +164,12 @@ Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
 Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
 Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Discovery e08a9b17 scheduled
-Training e08a9b17 scheduled
-Training e08a9b17 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
-Discovery e08a9b17 with 1 binary files, sample rate: 2.5%, batch size: 20
-Discovery e08a9b17 initialize time 150ms
-Discovery e08a9b17 processing .trainData-binary_87-sampler/sample-1.bin
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Can't deDuplicate creature at 46 of 50
 Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
 Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
@@ -306,95 +180,141 @@ Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
 Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
 Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Generation 1 score 0.4684343975782144 (avg: 0.3669) error 0.5315645777268083 time 36s 474ms
-Fine tuning increased fitness by 1.7097218862893726e-8 to 0.4684344146754333 adjusted 1 weight 
-Generation 2 score 0.4684344146754333 (avg: 0.4680) error 0.5315645606295895 time 36s 761ms
-Training e08a9b17 samples 210 of 21,021 1.0%( rate 30.0% ) error 0.592 time average: 286ms 300µs total: 1m 123ms
-Fine tuning increased fitness by 5.221436172320182e-9 to 0.46843441989686946 adjusted 1 weight 
-Generation 3 score 0.46843441989686946 (avg: 0.4684) error 0.5315645554081533 time 38s 863ms
-Training e08a9b17 samples 406 of 21,021 1.9%( rate 30.0% ) error 0.581 time average: 295ms 928µs 571ns total: 2m 147ms
-Generation 4 score 0.46843441989686946 (avg: 0.4512) error 0.5315645554081533 time 36s 245ms
-Training e08a9b17 samples 582 of 21,021 2.8%( rate 30.0% ) error 0.533 time average: 309ms 900µs 343ns total: 3m 362ms
-Generation 5 score 0.46843441989686946 (avg: 0.4684) error 0.5315645554081533 time 55s 345ms
-Generation 6 score 0.46843441989686946 (avg: 0.4684) error 0.5315645554081533 time 41s 278ms
-Training e08a9b17 samples 768 of 21,021 3.7%( rate 30.0% ) error 0.525 time average: 313ms 170µs 572ns total: 4m 515ms
-Generation 7 score 0.46843441989686946 (avg: 0.4534) error 0.5315645554081533 time 41s 876ms
-Training e08a9b17 samples 928 of 21,021 4.4%( rate 30.0% ) error 0.528 time average: 324ms 1µs 77ns total: 5m 673ms
-Generation 8 score 0.46843441989686946 (avg: 0.4680) error 0.5315645554081533 time 48s 766ms
-Training e08a9b17 samples 1,103 of 21,021 5.2%( rate 30.0% ) error 0.525 time average: 327ms 658µs 204ns total: 6m 1s 407ms
-Generation 9 score 0.46843441989686946 (avg: 0.4684) error 0.5315645554081533 time 43s 81ms
-Generation 10 score 0.46843441989686946 (avg: 0.4684) error 0.5315645554081533 time 39s 861ms
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
+Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
+Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
+Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
+Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
+Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
+Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
+Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
+Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Discovery a2f1c5ce scheduled
+Training a2f1c5ce scheduled
+Training a2f1c5ce with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
+Discovery a2f1c5ce with 1 binary files, sample rate: 2.5%, batch size: 20
+Discovery a2f1c5ce initialize time 190ms
+Discovery a2f1c5ce processing .trainData-binary_87-sampler/sample-1.bin
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Generation 1 score 0.47043086380083526 (avg: 0.4552) error 0.5295681112541875 time 43s 596ms
+Training a2f1c5ce samples 128 of 20,717 0.6%( rate 30.0% ) error 0.624 time average: 468ms 898µs 437ns total: 1m 19ms
+Fine tuning increased fitness by 0.000003615417050295555 to 0.47043447921788556 adjusted 1 weight 
+Generation 2 score 0.47043447921788556 (avg: 0.4702) error 0.5295644958371372 time 45s 964ms
+Fine tuning increased fitness by 0.000018395958316430594 to 0.470452875176202 adjusted 1 weight 
+Training a2f1c5ce samples 211 of 20,717 1.0%( rate 30.0% ) error 0.629 time average: 570ms 417µs 61ns total: 2m 358ms
+Generation 3 score 0.470452875176202 (avg: 0.4702) error 0.5295460998788207 time 56s 449ms
+Fine tuning increased fitness by 0.000007207255530827794 to 0.4704600824317328 adjusted 1 weight 
+Generation 4 score 0.4704600824317328 (avg: 0.4704) error 0.5295388926232899 time 48s 74ms
+Training a2f1c5ce samples 327 of 20,717 1.6%( rate 30.0% ) error 0.602 time average: 552ms 819µs 571ns total: 3m 772ms
+Fine tuning increased fitness by 0.000027329225815497793 to 0.4704874116575483 adjusted 1 weight 
+Generation 5 score 0.4704874116575483 (avg: 0.4705) error 0.5295115633974744 time 50s 385ms
+Training a2f1c5ce samples 431 of 20,717 2.1%( rate 30.0% ) error 0.566 time average: 559ms 329µs 466ns total: 4m 1s 71ms
+Generation 6 score 0.4704874116575483 (avg: 0.4704) error 0.5295115633974744 time 51s 152ms
+Training a2f1c5ce samples 537 of 20,717 2.6%( rate 30.0% ) error 0.543 time average: 560ms 668µs 528ns total: 5m 1s 79ms
+Training a2f1c5ce timed out after 5m 1s 79ms
+Fine tuning increased fitness by 6.518364783492103e-7 to 0.47048806349402666 adjusted 1 weight 
+Generation 7 score 0.47048806349402666 (avg: 0.4641) error 0.5295109115609961 time 52s 364ms
 Set training/discovery clean up count to 2
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 284MB used, 402MB total
-Training e08a9b17 samples 1,274 of 21,021 6.1%( rate 30.0% ) error 0.515 time average: 330ms 795µs 918ns total: 7m 1s 434ms
-Training e08a9b17 timed out after 7m 1s 434ms
-Discovery e08a9b17 read time  for .trainData-binary_87-sampler/sample-1.bin with 80 records
-Discovery e08a9b17 scanning time 7m 16s 852ms
-Discovery e08a9b17 recorded time 7m 18s 673ms
-Generation 11 score 0.46843441989686946 (avg: 0.4684) error 0.5315645554081533 time 43s 965ms
+Memory usage (Discovery in progress): 495MB used, 609MB total
+Training a2f1c5ce caused a higher error of 0.5425253112060994 from 0.5295681112541875
+Fine tuning increased fitness by 0.0000024408451287927235 to 0.47049050433915546 adjusted 1 weight 
+Training a2f1c5ce completed after 5m 1s 331ms
+Training a2f1c5ce compacted
+Generation 8 score 0.47049050433915546 (avg: 0.4700) error 0.5295084707158673 time 49s 598ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 574MB used, 672MB total
-Training e08a9b17 completed after 7m 1s 564ms
-Training e08a9b17 compacted
-Generation 12 score 0.46843441989686946 (avg: 0.4677) error 0.5315645554081533 time 51s 364ms
+Memory usage (Discovery in progress): 271MB used, 375MB total
+Discovery a2f1c5ce read time  for .trainData-binary_87-sampler/sample-1.bin with 60 records
+Discovery a2f1c5ce scanning time 6m 40s 933ms
+Trained a2f1c5ce Score: 0.4704120524702682, Error: 0.5295681112541875 -> 0.5295869228847545, 👿 -0.0000188
+Compact a2f1c5ce Score: 0.47021180883033853, Error: 0.5295681112541875 -> 0.5297871668246842, 👿 -0.000219
+Discovery a2f1c5ce recorded time 6m 43s 683ms
+Generation 9 score 0.47049050433915546 (avg: 0.4705) error 0.5295084707158673 time 52s 475ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 263MB used, 364MB total
-Discovered beneficial synapse from input-193 to insider-combined-positive-check-7 with weight -1.0000, helping 76.3% more records than it harms (70/80)
-Discovery e08a9b17 analyze time 1m 3s 95ms found 1 candidates
-Compact e08a9b17 Score: 0.46842352901971673, Error: 0.5315645777268083 -> 0.531575448985306, 👿 -0.0000109
-Trained e08a9b17 Score: 0.4684087367857835, Error: 0.5315645777268083 -> 0.5315902385192393, 👿 -0.0000257
-Fine tuning increased fitness by 0.0000027927122632220858 to 0.4684372126091327 adjusted 4559 weights, 31 biases 
-Discovered harmful synapse from input-14 to insider-combined-positive-check-7, harming 76.3% more records than it helps (9/80)
-Discovery e08a9b17 analyze harmful time 51s 767ms found 1 candidates
-Generation 13 score 0.4684372126091327 (avg: 0.4684) error 0.5315617626958901 time 56s 830ms
+Memory usage (Discovery in progress): 441MB used, 551MB total
+Discovered beneficial synapse from b8c1edc4-b204-4841-9fcf-211897e84caa to insider-combined-positive-check-7 with weight 1.0000, helping 95.0% more records than it harms (58/60)
+Discovery a2f1c5ce analyze time 59s 97ms found 1 candidates
+Generation 10 score 0.47049050433915546 (avg: 0.4705) error 0.5295084707158673 time 52s 671ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 515MB used, 611MB total
-Discovery e08a9b17 analyze squashes time 31s 703ms found 1 candidate, Summary: insider-combined-positive-check-7 ArcTan -> COMPLEMENT improved: 100.0% error: 3.5265218190930517e+31 -> 3.6070054275368404e+23
-Fine tuning increased fitness by 0.0000012104318892758315 to 0.46843842304102196 adjusted 4548 weights, 31 biases 
-Generation 14 score 0.46843842304102196 (avg: 0.4684) error 0.5315605522640008 time 39s 449ms
+Memory usage (Discovery in progress): 642MB used, 711MB total
+Discovered harmful synapse from input-14 to insider-combined-positive-check-7, harming 91.7% more records than it helps (2/60)
+Discovery a2f1c5ce analyze harmful time 51s 895ms found 1 candidates
+Fine tuning increased fitness by 1.3028085565913727e-7 to 0.4704906346200111 adjusted 1 weight 
+Generation 11 score 0.4704906346200111 (avg: 0.4705) error 0.5295083404350116 time 51s 660ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 777MB used, 860MB total
-Fine tuning increased fitness by 0.000003302753116107837 to 0.46844172579413806 adjusted 4370 weights, 31 biases 
-Generation 15 score 0.46844172579413806 (avg: 0.4684) error 0.5315572495108847 time 39s 581ms
+Memory usage (Discovery in progress): 334MB used, 425MB total
+Discovery a2f1c5ce analyze squashes time 36s 508ms found 1 candidate, Summary: insider-combined-positive-check-7 ArcTan -> COMPLEMENT improved: 100.0% error: 4.467617804552622e+31 -> 5.050163055536458e+23
+Fine tuning increased fitness by 0.000001114784639488775 to 0.4704917494046506 adjusted 1 weight 
+Can't deDuplicate creature at 15 of 39
+Generation 12 score 0.4704917494046506 (avg: 0.4705) error 0.5295072256503721 time 1m 11s 591ms
+Waiting for discovery to complete
+Memory usage (Discovery in progress): 426MB used, 542MB total
+Fine tuning increased fitness by 3.3638470897656703e-9 to 0.4704917527684977 adjusted 1 weight 
+Generation 13 score 0.4704917527684977 (avg: 0.4705) error 0.529507222286525 time 1m 4s 915ms
 Waiting for training/discovery clean up 2
-Discovery e08a9b17 beneficial increased fitness by 0.000012401547256568612 to 0.46845412734139463
-Generation 16 score 0.46845412734139463 (avg: 0.4037) error 0.5315448479136281 time 38s 117ms
+Fine tuning increased fitness by 3.7075017500498575e-9 to 0.47049175647599945 adjusted 1 weight 
+Generation 14 score 0.47049175647599945 (avg: 0.4225) error 0.5295072185790233 time 1m 2s 613ms
 Waiting for training/discovery clean up 1
-Backtracking increased fitness by 0.000046497320627003624 to 0.46850062466202164 adjusted 4267 weights, 31 biases
-Generation 17 score 0.46850062466202164 (avg: 0.4685) error 0.5314983506430011 time 39s 929ms
-Evolution of 17 generations in 13m 17s, averaging 46s 893ms
+Generation 15 score 0.47049175647599945 (avg: 0.4675) error 0.5295072185790233 time 40s 248ms
+Evolution of 15 generations in 14m 52s, averaging 59s 490ms
 Loop 2 of 4
 From github.com:stSoftwareAU/GRQ-sampler
-   8b0c58c..1a0c19d  main       -> origin/main
-Updating 8b0c58c..1a0c19d
+   9dcc9ac..597be46  main       -> origin/main
+Updating 9dcc9ac..597be46
 Fast-forward
- samples/GRQ-16-1.json | 85238 ------------------------------------------------
- samples/GRQ-21-1.json |    33 +-
- samples/GRQ-3-1.json  |   122 +-
- 3 files changed, 68 insertions(+), 85325 deletions(-)
- delete mode 100644 samples/GRQ-16-1.json
+ TacitKnowledge/hive.json |    11 +-
+ samples/GRQ-22-1.json    | 85184 ---------------------------------------------
+ samples/GRQ-23-1.json    |    26 +-
+ samples/Mac-1.json       | 11548 +-----
+ 4 files changed, 1738 insertions(+), 95031 deletions(-)
+ delete mode 100644 samples/GRQ-22-1.json
 2) Sample rate: 0.05, batch Size: 10000, timeout: 10
-Total time taken: 8s 679ms
-Rickie Botsford (Observations: 1,461, Neurons: 501, Synapses: 15,491 & Score: 0.469)
-9 mutations, mutation rate 11.9%, elitism 1, mutation FFW, selection POWER, timeout 10, PopSize 50 SAMPLER
-Initialized in 2s 900ms
-Constant neuron 0d94bb2c-7d0a-4792-a56d-d353d3c5f2b3 convert hidden to constant
-Adjust neuron 0d94bb2c-7d0a-4792-a56d-d353d3c5f2b3 bias -0.5346134698563219 to -0.005346134698563218
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
-Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
-Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
-Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
-Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Total time taken: 10s 864ms
+Freida Cruickshank (Observations: 1,461, Neurons: 501, Synapses: 15,497 & Score: 0.47)
+2 mutations, mutation rate 42.3%, elitism 1, mutation FFW, selection FITNESS_PROPORTIONATE, timeout 10, PopSize 50 SAMPLER
+Initialized in 2s 985ms
+Remove neuron 3b8b89e7-5ceb-4383-a419-0f11c5541ddb as no longer connected
+Discovery 48cb81bc scheduled
+Training 48cb81bc scheduled
+Training 48cb81bc with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
+Discovery 48cb81bc with 1 binary files, sample rate: 2.5%, batch size: 20
+Discovery 48cb81bc initialize time 175ms
+Discovery 48cb81bc processing .trainData-binary_87-sampler/sample-5.bin
+Fine tuning increased fitness by 0.0027306455894270942 to 0.4743073042352468 adjusted 1 weight Restored: 1
 Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
 Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
@@ -426,15 +346,17 @@ Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
 Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
 Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOTv2 neuron e5072503-9f99-4e6a-90db-b49a89cf7848
 Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
 Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
@@ -450,103 +372,142 @@ Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
 Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
 Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
 Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
 Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
 Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
 Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Discovery c5f131da scheduled
-Training c5f131da scheduled
-Training c5f131da with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
-Discovery c5f131da with 1 binary files, sample rate: 2.5%, batch size: 20
-Discovery c5f131da initialize time 153ms
-Discovery c5f131da processing .trainData-binary_87-sampler/sample-5.bin
-Fine tuning increased fitness by 0 to 0.47050814062169993 adjusted 4254 weights, 31 biases Restored: 12
-Training c5f131da samples 800 of 103,982 0.8%( rate 30.0% ) error 0.478 time average: 75ms 25µs total: 1m 20ms
-Training c5f131da samples 1,334 of 103,982 1.3%( rate 30.0% ) error 0.498 time average: 89ms 983µs 508ns total: 2m 38ms
-Training c5f131da samples 2,080 of 103,982 2.0%( rate 30.0% ) error 0.500 time average: 86ms 573µs 76ns total: 3m 72ms
-Training c5f131da samples 2,668 of 103,982 2.6%( rate 30.0% ) error 0.508 time average: 89ms 991µs 4ns total: 4m 96ms
-Training c5f131da samples 3,343 of 103,982 3.2%( rate 30.0% ) error 0.508 time average: 89ms 776µs 248ns total: 5m 122ms
-Fine tuning increased fitness by 2.5066879683066645e-9 to 0.4705081431283879 adjusted 1 weight Restored: 10
-Training c5f131da samples 4,020 of 103,982 3.9%( rate 30.0% ) error 0.512 time average: 89ms 628µs 855ns total: 6m 308ms
-Fine tuning increased fitness by 2.746808336340223e-9 to 0.47050814587519624 adjusted 1 weight Restored: 10
-Training c5f131da samples 4,673 of 103,982 4.5%( rate 30.0% ) error 0.514 time average: 89ms 964µs 262ns total: 7m 403ms
-Fine tuning increased fitness by 1.597208809656081e-9 to 0.47050814747240505 adjusted 1 weight Restored: 10
-Training c5f131da samples 5,377 of 103,982 5.2%( rate 30.0% ) error 0.512 time average: 89ms 366µs 747ns total: 8m 525ms
-Training c5f131da timed out after 8m 525ms
-Fine tuning increased fitness by 5.696259908205548e-9 to 0.47050815316866496 adjusted 1 weight Restored: 10
-Discovery c5f131da read time  for .trainData-binary_87-sampler/sample-5.bin with 100 records
-Discovery c5f131da scanning time 8m 38s 40ms
-Discovery c5f131da recorded time 8m 40s 247ms
-Training c5f131da completed after 8m 798ms
-Training c5f131da compacted
-Generation 9 score 0.47050815316866496 (avg: 0.4705) error 0.5294897972413805 avg time 57s 865ms
+Replacing HYPOTv2 neuron e5072503-9f99-4e6a-90db-b49a89cf7848
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOTv2 neuron e5072503-9f99-4e6a-90db-b49a89cf7848
+Training 48cb81bc samples 1,392 of 103,888 1.3%( rate 30.0% ) error 0.520 time average: 43ms 115µs 660ns total: 1m 17ms
+Fine tuning increased fitness by 1.9147962437848776e-8 to 0.47430732338320925 adjusted 1 weight 
+Training 48cb81bc samples 2,374 of 103,888 2.3%( rate 30.0% ) error 0.516 time average: 50ms 604µs 43ns total: 2m 134ms
+Fine tuning increased fitness by 3.978770423129774e-7 to 0.47430772126025156 adjusted 1 weight 
+Training 48cb81bc samples 3,408 of 103,888 3.3%( rate 30.0% ) error 0.520 time average: 52ms 878µs 227ns total: 3m 209ms
+Training 48cb81bc samples 4,625 of 103,888 4.5%( rate 30.0% ) error 0.528 time average: 51ms 953µs 513ns total: 4m 285ms
+Training 48cb81bc samples 5,510 of 103,888 5.3%( rate 30.0% ) error 0.528 time average: 54ms 507µs 259ns total: 5m 335ms
+Fine tuning increased fitness by 4.406526832312352e-8 to 0.4743077653255199 adjusted 1 weight 
+Training 48cb81bc samples 6,660 of 103,888 6.4%( rate 30.0% ) error 0.525 time average: 54ms 109µs 609ns total: 6m 370ms
+Fine tuning increased fitness by 5.570546779409824e-8 to 0.4743078210309877 adjusted 1 weight 
+Training 48cb81bc samples 7,663 of 103,888 7.4%( rate 30.0% ) error 0.527 time average: 54ms 858µs 541ns total: 7m 381ms
+Fine tuning increased fitness by 8.476884083563618e-8 to 0.4743079057998285 adjusted 1 weight 
+Training 48cb81bc samples 8,845 of 103,888 8.5%( rate 30.0% ) error 0.527 time average: 54ms 319µs 502ns total: 8m 456ms
+Fine tuning increased fitness by 8.645259874651146e-8 to 0.47430799225242726 adjusted 1 weight 
+Training 48cb81bc samples 9,967 of 103,888 9.6%( rate 30.0% ) error 0.530 time average: 54ms 224µs 741ns total: 9m 458ms
+Training 48cb81bc timed out after 9m 458ms
+compactUnused hidden neuron 989f7271 has no outward connections
+Training 48cb81bc caused a higher error of 0.5296537143298752 from 0.5256906458747986
+Training 48cb81bc completed after 9m 691ms
+Training 48cb81bc compacted
+Generation 9 score 0.47430830201004687 (avg: 0.4743) error 0.5256896476999986 avg time 1m 7s 995ms
 Set training/discovery clean up count to 2
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 563MB used, 633MB total
-Trained c5f131da Score: 0.47049943048272097, Error: 0.5294898098883455 -> 0.5294985200273244, 👿 -0.00000871
-Compact c5f131da Score: 0.4703646173015243, Error: 0.5294898098883455 -> 0.5296333441085211, 👿 -0.000144
-Fine tuning increased fitness by 0.000008053011645192676 to 0.47051620618031015 adjusted 3206 weights, 27 biases Restored: 10
-Discovered beneficial synapse from input-288 to insider-combined-positive-check-7 with weight -1.0000, helping 76.0% more records than it harms (87/100)
-Discovery c5f131da analyze time 1m 3s 678ms found 1 candidates
-Generation 10 score 0.47051620618031015 (avg: 0.4705) error 0.5294817443297353 avg time 5s 291ms
+Memory usage (Discovery in progress): 371MB used, 453MB total
+Compact 48cb81bc Score: 0.4742698053867909, Error: 0.5256906458747986 -> 0.5257281502532545, 👿 -0.0000375
+Trained 48cb81bc Score: 0.446117017277033, Error: 0.5256906458747986 -> 0.5538809328330124, 👿 -0.0282
+Discovery 48cb81bc read time 1ms for .trainData-binary_87-sampler/sample-5.bin with 80 records
+Discovery 48cb81bc scanning time 11m 7s 279ms
+Discovery 48cb81bc recorded time 11m 12s 306ms
+Fine tuning increased fitness by 5.584685675019685e-7 to 0.47430886047861437 adjusted 3 weights 
+Generation 10 score 0.47430886047861437 (avg: 0.4691) error 0.5256890892314311 avg time 7s 170ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 782MB used, 866MB total
-Fine tuning increased fitness by 0.0000022703341939767085 to 0.4705184765145041 adjusted 3188 weights, 27 biases Restored: 10
-Discovered harmful synapse from input-14 to insider-combined-positive-check-7, harming 76.0% more records than it helps (11/100)
-Discovery c5f131da analyze harmful time 55s 671ms found 1 candidates
-Generation 11 score 0.4705184765145041 (avg: 0.4705) error 0.5294794738955413 avg time 6s 632ms
+Memory usage (Discovery in progress): 301MB used, 375MB total
+Discovered beneficial synapse from input-626 to insider-combined-positive-check-7 with weight -1.0000, helping 78.8% more records than it harms (71/80)
+Discovery 48cb81bc analyze time 1m 29s 807ms found 1 candidates
+Fine tuning increased fitness by 4.37926750418427e-9 to 0.4743088648578819 adjusted 3 weights 
+Generation 11 score 0.4743088648578819 (avg: 0.4743) error 0.5256890848521636 avg time 8s 445ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 537MB used, 640MB total
-Discovery c5f131da analyze squashes time 43s 414ms found 1 candidate, Summary: insider-combined-positive-check-7 ArcTan -> COMPLEMENT improved: 100.0% error: 4.195668565464475e+31 -> 4.182089319886327e+23
-Fine tuning increased fitness by 5.23859903234225e-7 to 0.47051900037440736 adjusted 3188 weights, 27 biases Restored: 10
-Generation 12 score 0.47051900037440736 (avg: 0.4705) error 0.529478950035638 avg time 5s 522ms
+Memory usage (Discovery in progress): 283MB used, 398MB total
+Discovered harmful synapse from input-14 to insider-combined-positive-check-7, harming 76.3% more records than it helps (9/80)
+Discovery 48cb81bc analyze harmful time 1m 6s 166ms found 1 candidates
+Fine tuning increased fitness by 2.085014716435296e-9 to 0.4743088669428966 adjusted 3 weights 
+Generation 12 score 0.4743088669428966 (avg: 0.4743) error 0.5256890827671489 avg time 7s 61ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 421MB used, 523MB total
-Fine tuning increased fitness by 0.0000021949175591506886 to 0.4705211952919665 adjusted 3188 weights, 27 biases Restored: 10
-Generation 13 score 0.4705211952919665 (avg: 0.4705) error 0.5294767551180789 avg time 6s 471ms
+Memory usage (Discovery in progress): 219MB used, 405MB total
+Discovery 48cb81bc analyze squashes time 1m 4s 330ms found 1 candidate, Summary: insider-combined-positive-check-7 ArcTan -> COMPLEMENT improved: 100.0% error: 3.3456478181577375e+31 -> 3.685699370860949e+23
+Fine tuning increased fitness by 6.934253171664295e-11 to 0.4743088670122391 adjusted 3 weights 
+Generation 13 score 0.4743088670122391 (avg: 0.4743) error 0.5256890826978063 avg time 8s 470ms
 Waiting for training/discovery clean up 2
-Fine tuning increased fitness by 0.000003340338234791851 to 0.4705245356302013 adjusted 3188 weights, 27 biases Restored: 10
-Generation 14 score 0.4705245356302013 (avg: 0.4172) error 0.5294734147798441 avg time 6s 111ms
+Fine tuning increased fitness by 3.8498582100032763e-10 to 0.47430886739722494 adjusted 3 weights 
+Generation 14 score 0.47430886739722494 (avg: 0.4450) error 0.5256890823128205 avg time 6s 454ms
 Waiting for training/discovery clean up 1
-Fine tuning increased fitness by 0.0000013922909952723828 to 0.4705259279211966 adjusted 3188 weights, 27 biases Restored: 10
-Generation 15 score 0.4705259279211966 (avg: 0.4705) error 0.5294720224888488 avg time 5s 877ms
-Evolution of 15 generations in 16m 31s, averaging 1m 6s 88ms
+Fine tuning increased fitness by 6.288671805521062e-10 to 0.4743088680260921 adjusted 3 weights 
+Generation 15 score 0.4743088680260921 (avg: 0.4743) error 0.5256890816839533 avg time 5s 923ms
+Evolution of 15 generations in 18m 42s, averaging 1m 14s 774ms
 Loop 3 of 4
 From github.com:stSoftwareAU/GRQ-sampler
-   1a0c19d..3afc6f1  main       -> origin/main
-Updating 1a0c19d..3afc6f1
+   597be46..c9e28c4  main       -> origin/main
+Updating 597be46..c9e28c4
 Fast-forward
- samples/GRQ-18-1.json | 200 +++++++++++++++++++++++---------------------------
- samples/GRQ-22-1.json |  81 +++++++-------------
- 2 files changed, 120 insertions(+), 161 deletions(-)
-3) Sample rate: 0.38, batch Size: 10000, timeout: 59
-Total time taken: 12s 189ms
-Kacie Mueller (Observations: 1,461, Neurons: 501, Synapses: 15,494 & Score: 0.471)
-7 mutations, mutation rate 6.0%, elitism 1, mutation FFW, selection TOURNAMENT, timeout 59, PopSize 30 SAMPLER
-Initialized in 3s 431ms
-Over populated 49, expected 30.
-Culling duplicate creature at 7 of 49
-Culling duplicate creature at 11 of 48
-Culling duplicate creature at 11 of 47
-Culling duplicate creature at 20 of 46
-DeDuplication of 4 creatures to 45 in 2ms (previous experiment 1ms)
-Discovery 89a28e0c scheduled
-Training 89a28e0c scheduled
-Training 89a28e0c with 1 binary file, target error: 0.002, iterations: 1, sample rate: 15.0%, sparse: 7.5%
-Discovery 89a28e0c with 1 binary files, sample rate: 2.5%, batch size: 20
-Discovery 89a28e0c initialize time 150ms
-Discovery 89a28e0c processing .trainData-binary_87-sampler/sample-38.bin
-Fine tuning increased fitness by 0.0006737625748852727 to 0.47222652858210473 adjusted 2 weights Restored: 7
+ samples/GRQ-12-1.json       |    14 +-
+ samples/GRQ-19-1.json       |  7953 +---
+ samples/GRQ-21-1.json       |    90 +-
+ samples/GRQ-22-1.json       | 85203 ++++++++++++++++++++++++++++++++++++++++++
+ samples/Mac-Ultra-M2-1.json |    80 +-
+ 5 files changed, 85403 insertions(+), 7937 deletions(-)
+ create mode 100644 samples/GRQ-22-1.json
+3) Sample rate: 0.32, batch Size: 10000, timeout: 41
+Total time taken: 14s 530ms
+Tod Shanahan (Observations: 1,461, Neurons: 501, Synapses: 15,501 & Score: 0.474)
+3 mutations, mutation rate 9.4%, elitism 1, mutation ALL, selection POWER, timeout 41, PopSize 30 SAMPLER
+Initialized in 3s 478ms
+Over populated 50, expected 30.
+Culling duplicate creature at 12 of 50
+Culling duplicate creature at 12 of 49
+Culling duplicate creature at 28 of 48
+DeDuplication of 3 creatures to 47 in 2ms (previous experiment 2ms)
+Discovery 4ccdd9de scheduled
+Training 4ccdd9de scheduled
+Training 4ccdd9de with 1 binary file, target error: 0.002, iterations: 1, sample rate: 15.0%, sparse: 7.5%
+Discovery 4ccdd9de with 1 binary files, sample rate: 2.5%, batch size: 20
+Discovery 4ccdd9de initialize time 198ms
+Discovery 4ccdd9de processing .trainData-binary_87-sampler/sample-32.bin
+Fine tuning increased fitness by 0 to 0.4707401322367856 adjusted 2 weights, 1 bias Restored: 2
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
 Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
 Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
@@ -566,247 +527,219 @@ Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
 Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
 Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
 Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Generation 1 score 0.47222652858210473 (avg: 0.4635) error 0.5277529785183496 time 3m 26s 58ms
-Training 89a28e0c samples 110 of 790,093 0.0%( rate 15.0% ) error 0.497 time average: 547ms 463µs 636ns total: 1m 221ms
-Generation 2 score 0.47222652858210473 (avg: 0.4715) error 0.5277529785183496 time 1m 10s 218ms
-Training 89a28e0c samples 227 of 790,093 0.0%( rate 15.0% ) error 0.511 time average: 532ms 784µs 141ns total: 2m 942ms
-Training 89a28e0c samples 333 of 790,093 0.0%( rate 15.0% ) error 0.512 time average: 544ms 150µs 150ns total: 3m 1s 202ms
-Generation 3 score 0.47222652858210473 (avg: 0.4616) error 0.5277529785183496 time 2m 37s 226ms
-Training 89a28e0c samples 474 of 790,093 0.1%( rate 15.0% ) error 0.513 time average: 510ms 588µs 607ns total: 4m 2s 19ms
-Training 89a28e0c samples 578 of 790,093 0.1%( rate 15.0% ) error 0.504 time average: 522ms 887µs 543ns total: 5m 2s 229ms
-Generation 4 score 0.47222652858210473 (avg: 0.4722) error 0.5277529785183496 time 1m 40s 931ms
-Training 89a28e0c samples 712 of 790,093 0.1%( rate 15.0% ) error 0.525 time average: 509ms 181µs 179ns total: 6m 2s 537ms
-Training 89a28e0c samples 814 of 790,093 0.1%( rate 15.0% ) error 0.536 time average: 519ms 445µs 945ns total: 7m 2s 829ms
-Training 89a28e0c samples 939 of 790,093 0.1%( rate 15.0% ) error 0.538 time average: 514ms 804µs 46ns total: 8m 3s 401ms
-Generation 5 score 0.47222652858210473 (avg: 0.4722) error 0.5277529785183496 time 2m 35s 774ms
-Training 89a28e0c samples 1,061 of 790,093 0.1%( rate 15.0% ) error 0.536 time average: 512ms 629µs 594ns total: 9m 3s 900ms
-Generation 6 score 0.47222652858210473 (avg: 0.4722) error 0.5277529785183496 time 1m 41s 191ms
-Training 89a28e0c samples 1,238 of 790,093 0.2%( rate 15.0% ) error 0.531 time average: 487ms 830µs 371ns total: 10m 3s 934ms
-Training 89a28e0c samples 1,352 of 790,093 0.2%( rate 15.0% ) error 0.529 time average: 491ms 461µs 538ns total: 11m 4s 456ms
-Training 89a28e0c samples 1,466 of 790,093 0.2%( rate 15.0% ) error 0.523 time average: 494ms 593µs 451ns total: 12m 5s 74ms
-Fine tuning increased fitness by 2.1810147021739112e-8 to 0.47222655039225175 adjusted 2 weights 
-Generation 7 score 0.47222655039225175 (avg: 0.4721) error 0.5277529567082025 time 2m 41s 508ms
-Training 89a28e0c samples 1,616 of 790,093 0.2%( rate 15.0% ) error 0.516 time average: 486ms 108µs 292ns total: 13m 5s 551ms
-Training 89a28e0c samples 1,761 of 790,093 0.2%( rate 15.0% ) error 0.522 time average: 480ms 334µs 469ns total: 14m 5s 869ms
-Generation 8 score 0.47222655039225175 (avg: 0.4716) error 0.5277529567082025 time 1m 44s 162ms
-Training 89a28e0c samples 1,888 of 790,093 0.2%( rate 15.0% ) error 0.525 time average: 479ms 962µs 394ns total: 15m 6s 169ms
-Training 89a28e0c samples 2,027 of 790,093 0.3%( rate 15.0% ) error 0.518 time average: 476ms 703µs 502ns total: 16m 6s 278ms
-Generation 9 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 2m 20s
-Training 89a28e0c samples 2,213 of 790,093 0.3%( rate 15.0% ) error 0.519 time average: 463ms 766µs 832ns total: 17m 6s 316ms
-Training 89a28e0c samples 2,355 of 790,093 0.3%( rate 15.0% ) error 0.515 time average: 461ms 314µs 649ns total: 18m 6s 396ms
-Generation 10 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 1m 35s 72ms
-Training 89a28e0c samples 2,446 of 790,093 0.3%( rate 15.0% ) error 0.513 time average: 468ms 794µs 767ns total: 19m 6s 672ms
-Training 89a28e0c samples 2,492 of 790,093 0.3%( rate 15.0% ) error 0.511 time average: 484ms 271µs 268ns total: 20m 6s 804ms
-Training 89a28e0c samples 2,546 of 790,093 0.3%( rate 15.0% ) error 0.509 time average: 498ms 119µs 403ns total: 21m 8s 212ms
-Training 89a28e0c samples 2,629 of 790,093 0.3%( rate 15.0% ) error 0.511 time average: 505ms 394µs 446ns total: 22m 8s 682ms
-Generation 11 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 4m 12s 558ms
-Training 89a28e0c samples 2,702 of 790,093 0.3%( rate 15.0% ) error 0.515 time average: 514ms 569µs 578ns total: 23m 10s 367ms
-Training 89a28e0c samples 2,737 of 790,093 0.3%( rate 15.0% ) error 0.515 time average: 530ms 145µs 414ns total: 24m 11s 8ms
-Training 89a28e0c samples 2,803 of 790,093 0.4%( rate 15.0% ) error 0.516 time average: 539ms 155µs 547ns total: 25m 11s 253ms
-Training 89a28e0c samples 2,856 of 790,093 0.4%( rate 15.0% ) error 0.513 time average: 550ms 260µs 504ns total: 26m 11s 544ms
-Training 89a28e0c samples 2,933 of 790,093 0.4%( rate 15.0% ) error 0.511 time average: 556ms 307µs 534ns total: 27m 11s 650ms
-Generation 12 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 5m 13s 984ms
-Training 89a28e0c samples 2,991 of 790,093 0.4%( rate 15.0% ) error 0.511 time average: 565ms 660µs 648ns total: 28m 11s 891ms
-Training 89a28e0c samples 3,013 of 790,093 0.4%( rate 15.0% ) error 0.511 time average: 582ms 254µs 563ns total: 29m 14s 333ms
-Training 89a28e0c samples 3,054 of 790,093 0.4%( rate 15.0% ) error 0.510 time average: 594ms 353µs 307ns total: 30m 15s 155ms
-Training 89a28e0c samples 3,102 of 790,093 0.4%( rate 15.0% ) error 0.510 time average: 604ms 720µs 825ns total: 31m 15s 844ms
-Training 89a28e0c samples 3,137 of 790,093 0.4%( rate 15.0% ) error 0.512 time average: 617ms 201µs 785ns total: 32m 16s 162ms
-Training 89a28e0c samples 3,180 of 790,093 0.4%( rate 15.0% ) error 0.513 time average: 627ms 761µs 320ns total: 33m 16s 281ms
-Training 89a28e0c samples 3,235 of 790,093 0.4%( rate 15.0% ) error 0.514 time average: 635ms 805µs 873ns total: 34m 16s 832ms
-Training 89a28e0c samples 3,298 of 790,093 0.4%( rate 15.0% ) error 0.513 time average: 642ms 357µs 489ns total: 35m 18s 495ms
-Generation 13 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 8m 6s 523ms
-Training 89a28e0c samples 3,373 of 790,093 0.4%( rate 15.0% ) error 0.515 time average: 645ms 919µs 656ns total: 36m 18s 687ms
-Training 89a28e0c samples 3,478 of 790,093 0.4%( rate 15.0% ) error 0.513 time average: 643ms 803µs 47ns total: 37m 19s 147ms
-Generation 14 score 0.47222655039225175 (avg: 0.4721) error 0.5277529567082025 time 2m 8s 230ms
-Training 89a28e0c samples 3,589 of 790,093 0.5%( rate 15.0% ) error 0.514 time average: 640ms 665µs 923ns total: 38m 19s 350ms
-Training 89a28e0c samples 3,668 of 790,093 0.5%( rate 15.0% ) error 0.516 time average: 643ms 341µs 57ns total: 39m 19s 775ms
-Training 89a28e0c samples 3,754 of 790,093 0.5%( rate 15.0% ) error 0.515 time average: 644ms 641µs 182ns total: 40m 19s 983ms
-Training 89a28e0c samples 3,862 of 790,093 0.5%( rate 15.0% ) error 0.513 time average: 642ms 634µs 904ns total: 41m 21s 856ms
-Generation 15 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 3m 25s 556ms
-Training 89a28e0c samples 3,944 of 790,093 0.5%( rate 15.0% ) error 0.513 time average: 644ms 629µs 563ns total: 42m 22s 419ms
-Training 89a28e0c samples 4,039 of 790,093 0.5%( rate 15.0% ) error 0.512 time average: 644ms 399µs 356ns total: 43m 22s 729ms
-Generation 16 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 2m 21s 809ms
-Training 89a28e0c samples 4,124 of 790,093 0.5%( rate 15.0% ) error 0.512 time average: 645ms 926µs 770ns total: 44m 23s 802ms
-Training 89a28e0c samples 4,173 of 790,093 0.5%( rate 15.0% ) error 0.512 time average: 652ms 729µs 211ns total: 45m 23s 839ms
-Training 89a28e0c samples 4,265 of 790,093 0.5%( rate 15.0% ) error 0.511 time average: 652ms 754µs 44ns total: 46m 23s 996ms
-Training 89a28e0c samples 4,399 of 790,093 0.6%( rate 15.0% ) error 0.510 time average: 646ms 540µs 350ns total: 47m 24s 131ms
-Generation 17 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 3m 49s 783ms
-Training 89a28e0c samples 4,482 of 790,093 0.6%( rate 15.0% ) error 0.510 time average: 647ms 955µs 600ns total: 48m 24s 137ms
-Training 89a28e0c samples 4,571 of 790,093 0.6%( rate 15.0% ) error 0.511 time average: 648ms 521µs 986ns total: 49m 24s 394ms
-Generation 18 score 0.47222655039225175 (avg: 0.4722) error 0.5277529567082025 time 2m 29s 110ms
-Training 89a28e0c samples 4,666 of 790,093 0.6%( rate 15.0% ) error 0.513 time average: 648ms 618µs 302ns total: 50m 26s 453ms
-Training 89a28e0c samples 4,731 of 790,093 0.6%( rate 15.0% ) error 0.511 time average: 652ms 444µs 937ns total: 51m 26s 717ms
-Training 89a28e0c samples 4,792 of 790,093 0.6%( rate 15.0% ) error 0.511 time average: 656ms 678µs 631ns total: 52m 26s 804ms
-Training 89a28e0c samples 4,886 of 790,093 0.6%( rate 15.0% ) error 0.511 time average: 656ms 334µs 424ns total: 53m 26s 850ms
-Fine tuning increased fitness by 4.899564676197343e-8 to 0.4722265993878985 adjusted 2 weights 
-Generation 19 score 0.4722265993878985 (avg: 0.4722) error 0.5277529067125558 time 3m 46s 817ms
-Training 89a28e0c samples 4,982 of 790,093 0.6%( rate 15.0% ) error 0.509 time average: 655ms 748µs 293ns total: 54m 26s 938ms
-Training 89a28e0c samples 5,068 of 790,093 0.6%( rate 15.0% ) error 0.510 time average: 656ms 553µs 472ns total: 55m 27s 413ms
-Fine tuning increased fitness by 2.023898734160312e-7 to 0.47222680177777193 adjusted 1 weight 
-Training 89a28e0c samples 5,171 of 790,093 0.7%( rate 15.0% ) error 0.510 time average: 655ms 136µs 917ns total: 56m 27s 713ms
-Training 89a28e0c timed out after 56m 27s 713ms
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Replacing HYPOT neuron 748d5ac0-0e3e-4704-88a9-ffa7e7f5c58d
+Replacing HYPOT neuron 57882a2a-fbb1-44fd-8807-865cec35a49a
+Replacing HYPOT neuron 5864e02c-b8ce-48f7-96a3-7642323be9da
+Replacing HYPOTv2 neuron f9f14ab6-c166-440b-87a3-09c43321761b
+Replacing HYPOTv2 neuron f9a0bca8-fc00-4cc6-b264-a77f19328198
+Generation 1 score 0.4707401322367856 (avg: 0.4624) error 0.5292393458636689 time 4m 8s 52ms
+Training 4ccdd9de samples 693 of 664,242 0.1%( rate 15.0% ) error 0.502 time average: 86ms 595µs 959ns total: 1m 11ms
+Fine tuning increased fitness by 1.0792110538559996e-7 to 0.470740240157891 adjusted 2 weights, 1 bias 
+Generation 2 score 0.470740240157891 (avg: 0.4472) error 0.5292392379425636 time 1m 22s 322ms
+Training 4ccdd9de samples 1,372 of 664,242 0.2%( rate 15.0% ) error 0.494 time average: 87ms 491µs 982ns total: 2m 39ms
+Training 4ccdd9de samples 1,881 of 664,242 0.3%( rate 15.0% ) error 0.493 time average: 95ms 811µs 802ns total: 3m 222ms
+Training 4ccdd9de samples 2,228 of 664,242 0.3%( rate 15.0% ) error 0.514 time average: 107ms 876µs 122ns total: 4m 348ms
+Training 4ccdd9de samples 2,786 of 664,242 0.4%( rate 15.0% ) error 0.515 time average: 107ms 827µs 351ns total: 5m 407ms
+Fine tuning increased fitness by 1.581531569039285e-7 to 0.4707403983110479 adjusted 2 weights, 1 bias 
+Generation 3 score 0.4707403983110479 (avg: 0.4704) error 0.5292390797894067 time 3m 53s 948ms
+Training 4ccdd9de samples 3,419 of 664,242 0.5%( rate 15.0% ) error 0.522 time average: 105ms 431µs 412ns total: 6m 470ms
+Training 4ccdd9de samples 3,911 of 664,242 0.6%( rate 15.0% ) error 0.515 time average: 107ms 513µs 423ns total: 7m 485ms
+Fine tuning increased fitness by 8.08198540314109e-8 to 0.47074047913090195 adjusted 2 weights, 1 bias 
+Generation 4 score 0.47074047913090195 (avg: 0.4704) error 0.5292389989695526 time 2m 20s 897ms
+Training 4ccdd9de samples 4,812 of 664,242 0.7%( rate 15.0% ) error 0.513 time average: 99ms 865µs 544ns total: 8m 553ms
+Training 4ccdd9de samples 5,259 of 664,242 0.8%( rate 15.0% ) error 0.508 time average: 102ms 811µs 751ns total: 9m 687ms
+Training 4ccdd9de samples 5,663 of 664,242 0.9%( rate 15.0% ) error 0.509 time average: 106ms 96µs 415ns total: 10m 824ms
+Training 4ccdd9de samples 6,132 of 664,242 0.9%( rate 15.0% ) error 0.509 time average: 107ms 770µs 384ns total: 11m 848ms
+Fine tuning increased fitness by 1.5048277346441097e-7 to 0.4707406296136754 adjusted 2 weights, 1 bias 
+Generation 5 score 0.4707406296136754 (avg: 0.4704) error 0.5292388484867792 time 4m 4s 671ms
+Training 4ccdd9de samples 6,798 of 664,242 1.0%( rate 15.0% ) error 0.511 time average: 106ms 42µs 365ns total: 12m 876ms
+Training 4ccdd9de samples 7,256 of 664,242 1.1%( rate 15.0% ) error 0.508 time average: 107ms 644µs 156ns total: 13m 1s 66ms
+Training 4ccdd9de samples 7,903 of 664,242 1.2%( rate 15.0% ) error 0.513 time average: 106ms 430µs 596ns total: 14m 1s 121ms
+Fine tuning increased fitness by 3.3486566064500067e-7 to 0.47074096447933605 adjusted 2 weights, 1 bias 
+Generation 6 score 0.47074096447933605 (avg: 0.4707) error 0.5292385136211185 time 2m 24s 800ms
+Training 4ccdd9de samples 8,554 of 664,242 1.3%( rate 15.0% ) error 0.517 time average: 105ms 354µs 103ns total: 15m 1s 199ms
+Training 4ccdd9de samples 8,957 of 664,242 1.3%( rate 15.0% ) error 0.519 time average: 107ms 320µs 196ns total: 16m 1s 267ms
+Training 4ccdd9de samples 9,405 of 664,242 1.4%( rate 15.0% ) error 0.519 time average: 108ms 590µs 218ns total: 17m 1s 291ms
+Training 4ccdd9de samples 9,741 of 664,242 1.5%( rate 15.0% ) error 0.522 time average: 111ms 5µs 748ns total: 18m 1s 307ms
+Fine tuning increased fitness by 1.0555914353727047e-7 to 0.4707410700384796 adjusted 2 weights, 1 bias 
+Generation 7 score 0.4707410700384796 (avg: 0.4707) error 0.529238408061975 time 4m 14s 399ms
+Training 4ccdd9de samples 10,307 of 664,242 1.6%( rate 15.0% ) error 0.524 time average: 110ms 762µs 879ns total: 19m 1s 633ms
+Training 4ccdd9de samples 10,719 of 664,242 1.6%( rate 15.0% ) error 0.525 time average: 112ms 103µs 181ns total: 20m 1s 634ms
+Fine tuning increased fitness by 1.0034724984286925e-7 to 0.47074117038572943 adjusted 2 weights, 1 bias 
+Training 4ccdd9de samples 11,522 of 664,242 1.7%( rate 15.0% ) error 0.527 time average: 109ms 499µs 132ns total: 21m 1s 649ms
+Generation 8 score 0.47074117038572943 (avg: 0.4707) error 0.5292383077147251 time 2m 31s 201ms
+Training 4ccdd9de samples 11,956 of 664,242 1.8%( rate 15.0% ) error 0.527 time average: 110ms 558µs 46ns total: 22m 1s 832ms
+Training 4ccdd9de samples 12,297 of 664,242 1.9%( rate 15.0% ) error 0.529 time average: 112ms 375µs 538ns total: 23m 1s 882ms
+Training 4ccdd9de samples 12,794 of 664,242 1.9%( rate 15.0% ) error 0.530 time average: 112ms 701µs 188ns total: 24m 1s 899ms
+Fine tuning increased fitness by 1.637685720368154e-8 to 0.47074118676258664 adjusted 2 weights, 1 bias 
+Training 4ccdd9de samples 13,472 of 664,242 2.0%( rate 15.0% ) error 0.528 time average: 111ms 487µs 900ns total: 25m 1s 965ms
+Generation 9 score 0.47074118676258664 (avg: 0.4707) error 0.5292382913378679 time 4m 705ms
+Training 4ccdd9de samples 14,067 of 664,242 2.1%( rate 15.0% ) error 0.531 time average: 111ms 37µs 890ns total: 26m 1s 970ms
+Training 4ccdd9de samples 14,921 of 664,242 2.2%( rate 15.0% ) error 0.530 time average: 108ms 705µs 180ns total: 27m 1s 990ms
+Fine tuning increased fitness by 9.955463453614755e-9 to 0.4707411967180501 adjusted 2 weights, 1 bias 
+Generation 10 score 0.4707411967180501 (avg: 0.4707) error 0.5292382813824045 time 2m 17s 607ms
+Training 4ccdd9de samples 15,554 of 664,242 2.3%( rate 15.0% ) error 0.529 time average: 108ms 142µs 214ns total: 28m 2s 44ms
+Training 4ccdd9de samples 16,022 of 664,242 2.4%( rate 15.0% ) error 0.529 time average: 108ms 730µs 745ns total: 29m 2s 84ms
+Training 4ccdd9de samples 16,487 of 664,242 2.5%( rate 15.0% ) error 0.528 time average: 109ms 307µs 90ns total: 30m 2s 146ms
+Training 4ccdd9de samples 16,985 of 664,242 2.6%( rate 15.0% ) error 0.528 time average: 109ms 641µs 507ns total: 31m 2s 261ms
+Generation 11 score 0.4707411967180501 (avg: 0.4707) error 0.5292382813824045 time 3m 49s 715ms
+Training 4ccdd9de samples 17,480 of 664,242 2.6%( rate 15.0% ) error 0.531 time average: 109ms 974µs 885ns total: 32m 2s 361ms
+Generation 12 score 0.4707411967180501 (avg: 0.4707) error 0.5292382813824045 time 1m 43s 907ms
+Training 4ccdd9de samples 18,139 of 664,242 2.7%( rate 15.0% ) error 0.530 time average: 109ms 292µs 518ns total: 33m 2s 457ms
+Training 4ccdd9de samples 18,544 of 664,242 2.8%( rate 15.0% ) error 0.530 time average: 110ms 148µs 295ns total: 34m 2s 590ms
+Training 4ccdd9de samples 18,884 of 664,242 2.8%( rate 15.0% ) error 0.530 time average: 111ms 347µs 278ns total: 35m 2s 682ms
+Training 4ccdd9de samples 19,293 of 664,242 2.9%( rate 15.0% ) error 0.531 time average: 112ms 107µs 448ns total: 36m 2s 889ms
+Training 4ccdd9de samples 19,880 of 664,242 3.0%( rate 15.0% ) error 0.533 time average: 111ms 818µs 913ns total: 37m 2s 960ms
+Training 4ccdd9de timed out after 37m 2s 960ms
 compactUnused hidden neuron 1346f3b1 has no outward connections
-Generation 20 score 0.47222680177777193 (avg: 0.4722) error 0.5277527043226824 time 2m 43s 321ms
+Generation 13 score 0.4707411967180501 (avg: 0.4707) error 0.5292382813824045 time 4m 13s 670ms
 Set training/discovery clean up count to 2
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 382MB used, 472MB total
-Discovery 89a28e0c read time 23ms for .trainData-binary_87-sampler/sample-38.bin with 420 records
-Discovery 89a28e0c scanning time 58m 37s 635ms
-Discovery 89a28e0c recorded time 59m 31s 106ms
-Training 89a28e0c completed after 56m 27s 933ms
-Training 89a28e0c compacted
-Generation 21 score 0.47222680177777193 (avg: 0.4405) error 0.5277527043226824 time 4m 36s 34ms
+Memory usage (Discovery in progress): 203MB used, 337MB total
+Training 4ccdd9de caused a higher error of 0.532843776393506 from 0.5292393458636689
+Training 4ccdd9de completed after 37m 3s 481ms
+Training 4ccdd9de compacted
+Generation 14 score 0.4707411967180501 (avg: 0.4707) error 0.5292382813824045 time 1m 38s 768ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 991MB used, 1113MB total
-Compact 89a28e0c Score: 0.47222431672032317, Error: 0.5277529785183496 -> 0.5277552843801311, 👿 -0.00000231
-Trained 89a28e0c Score: 0.4722231405636533, Error: 0.5277529785183496 -> 0.527756366536801, 👿 -0.00000339
-Fine tuning increased fitness by 3.372648371691156e-8 to 0.47222683550425565 adjusted 1 weight 
-Generation 22 score 0.47222683550425565 (avg: 0.4629) error 0.5277526705961987 time 2m 50s 365ms
+Memory usage (Discovery in progress): 243MB used, 370MB total
+Discovery 4ccdd9de read time 36ms for .trainData-binary_87-sampler/sample-32.bin with 220 records
+Discovery 4ccdd9de scanning time 39m 17s 138ms
+Discovery 4ccdd9de recorded time 39m 53s 500ms
+Compact 4ccdd9de Score: 0.4707417511239938, Error: 0.5292393458636689 -> 0.5292378209764608, 👌 0.00000152
+Trained 4ccdd9de Score: 0.4707217005284696, Error: 0.5292393458636689 -> 0.5292577875719847, 👿 -0.0000184
+Compacting increased fitness by 5.544059437090354e-7 to 0.4707417511239938 neurons: 499 was: 502 synapses: 15436 was: 15500
+Generation 15 score 0.4707417511239938 (avg: 0.4707) error 0.5292378209764608 time 3m 51s 967ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 406MB used, 513MB total
-Can't deDuplicate creature at 3 of 14
-Generation 23 score 0.47222683550425565 (avg: 0.4677) error 0.5277526705961987 time 3m 57s 217ms
+Memory usage (Discovery in progress): 216MB used, 362MB total
+Fine tuning increased fitness by 3.7790312645835655e-7 to 0.47074212902712026 adjusted 2 weights, 2 biases 
+Generation 16 score 0.47074212902712026 (avg: 0.4707) error 0.5292374430733343 time 1m 31s 320ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 1025MB used, 1146MB total
-Can't deDuplicate creature at 7 of 18
-Generation 24 score 0.47222683550425565 (avg: 0.4482) error 0.5277526705961987 time 3m 41s 848ms
+Memory usage (Discovery in progress): 285MB used, 367MB total
+Discovered beneficial synapse from input-626 to insider-combined-positive-check-7 with weight -1.0000, helping 74.1% more records than it harms (189/220)
+Discovery 4ccdd9de analyze time 5m 15s 94ms found 1 candidates
+Fine tuning increased fitness by 0.000002272223675214846 to 0.4707444012507955 adjusted 2 weights, 2 biases 
+Generation 17 score 0.4707444012507955 (avg: 0.4707) error 0.5292351708496591 time 3m 42s 893ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 981MB used, 1079MB total
-Remove neuron 8406c27e-ec6d-4b91-8cfc-427788115b0a as no longer connected
-Generation 25 score 0.47222683550425565 (avg: 0.3196) error 0.5277526705961987 time 3m 28s 387ms
+Memory usage (Discovery in progress): 248MB used, 350MB total
+Discovered harmful synapse from input-568 to insider-combined-positive-check-7, harming 74.1% more records than it helps (26/220)
+Discovery 4ccdd9de analyze harmful time 4m 4s 689ms found 1 candidates
+Generation 18 score 0.4707444012507955 (avg: 0.4707) error 0.5292351708496591 time 1m 33s 974ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 538MB used, 651MB total
-Generation 26 score 0.47222683550425565 (avg: 0.3183) error 0.5277526705961987 time 3m 39s 192ms
+Memory usage (Discovery in progress): 203MB used, 359MB total
+Discovery 4ccdd9de analyze squashes time 3m 39s 656ms found 1 candidate, Summary: insider-combined-positive-check-7 ArcTan -> COMPLEMENT improved: 100.0% error: 3.5198088091776846e+31 -> 3.890731021029467e+23
+Generation 19 score 0.4707444012507955 (avg: 0.4707) error 0.5292351708496591 time 3m 38s 958ms
 Waiting for discovery to complete
-Memory usage (Discovery in progress): 763MB used, 851MB total
-Remove neuron logical-and-node-exclusion-DJIA-Exclusion-v3 as no longer connected
-Generation 27 score 0.47222683550425565 (avg: 0.3706) error 0.5277526705961987 time 3m 7s 86ms
-Waiting for discovery to complete
-Memory usage (Discovery in progress): 581MB used, 670MB total
-Remove neuron ab7af1ed-df5c-4e02-b915-3af74640e141 as no longer connected
-Generation 28 score 0.47222683550425565 (avg: 0.3408) error 0.5277526705961987 time 3m 37s 515ms
-Waiting for discovery to complete
-Memory usage (Discovery in progress): 458MB used, 603MB total
-Discovered beneficial synapse from input-13 to e264f91b-b8d6-457c-a8c3-64faf66df7f5 with weight -1.0000, helping 98.3% more records than it harms (413/420)
-Discovery 89a28e0c analyze time 26m 17s 331ms found 1 candidates
-Generation 29 score 0.47222683550425565 (avg: 0.2251) error 0.5277526705961987 time 3m 34s 135ms
-Waiting for discovery to complete
-Memory usage (Discovery in progress): 964MB used, 1039MB total
-Discovered harmful synapse from input-14 to insider-combined-positive-check-7, harming 73.1% more records than it helps (53/420)
-Discovery 89a28e0c analyze harmful time 3m 23s 83ms found 1 candidates
-UUID didn't change after SWAP_NODES mutation, changed: false
-Discovery 89a28e0c analyze squashes time 2m 56s 446ms found 1 candidate, Summary: insider-combined-positive-check-7 ArcTan -> COMPLEMENT improved: 100.0% error: 3.6858421475017993e+31 -> 4.031396769092033e+23
-Constant neuron 881497ce-14f4-41e5-bc6a-46e3b75edf42 convert hidden to constant
-Adjust neuron 881497ce-14f4-41e5-bc6a-46e3b75edf42 bias -0.03722953142355388 to -0.0365450332225985
-Generation 30 score 0.47222683550425565 (avg: 0.4103) error 0.5277526705961987 time 3m 49s 903ms
-Waiting for discovery to complete
-Memory usage (Discovery in progress): 507MB used, 630MB total
-Can't deDuplicate creature at 12 of 19
-Generation 31 score 0.47222683550425565 (avg: 0.4344) error 0.5277526705961987 time 4m 8s 727ms
+Memory usage (Discovery in progress): 237MB used, 349MB total
+Generation 20 score 0.4707444012507955 (avg: 0.4707) error 0.5292351708496591 time 1m 23s 930ms
 Waiting for training/discovery clean up 2
-Fine tuning increased fitness by 2.903314392233014e-7 to 0.47222712583569487 adjusted 1 weight 
-Generation 32 score 0.47222712583569487 (avg: 0.2768) error 0.5277523792647595 time 2m 50s 449ms
+Fine tuning increased fitness by 1.604537903654446e-7 to 0.47074456170458584 adjusted 2 weights, 2 biases 
+Generation 21 score 0.47074456170458584 (avg: 0.4413) error 0.5292350093958688 time 3m 389ms
 Waiting for training/discovery clean up 1
-Fine tuning increased fitness by 5.713207684721056e-13 to 0.4722271258362662 adjusted 1 weight 
-Generation 33 score 0.4722271258362662 (avg: 0.4698) error 0.5277523792641882 time 2m 12s 209ms
-Evolution of 33 generations in 1h 45m 23s, averaging 3m 11s 617ms
+Fine tuning increased fitness by 3.5417025201489594e-8 to 0.47074459712161104 adjusted 1 weight 
+Generation 22 score 0.47074459712161104 (avg: 0.4707) error 0.5292349739788436 time 1m 10s 644ms
+Evolution of 22 generations in 1h 2m 39s, averaging 2m 50s 876ms
 Loop 4 of 4
 From github.com:stSoftwareAU/GRQ-sampler
-   3afc6f1..2d5e461  main       -> origin/main
-Updating 3afc6f1..2d5e461
+   c9e28c4..99d204a  main       -> origin/main
+Updating c9e28c4..99d204a
 Fast-forward
- TacitKnowledge/hive.json                 |    23 +-
- samples/GRQ-10-1.json                    |   158 +-
- samples/GRQ-12-1.json                    |   186 +-
- samples/GRQ-13-1.json                    |   204 +-
- samples/GRQ-15-1.json                    | 85174 -----------------------------
- samples/{GRQ-11-1.json => GRQ-16-1.json} |   113 +-
- samples/GRQ-18-1.json                    |   149 +-
- samples/GRQ-19-1.json                    |   185 +-
- samples/GRQ-21-1.json                    |   166 +-
- samples/GRQ-22-1.json                    |   165 +-
- samples/GRQ-3-1.json                     |   103 +-
- samples/Mac-1.json                       |    18 +-
- samples/Mac-Ultra-M2-1.json              |   210 +-
- 13 files changed, 994 insertions(+), 85860 deletions(-)
- delete mode 100644 samples/GRQ-15-1.json
- rename samples/{GRQ-11-1.json => GRQ-16-1.json} (99%)
-4) Sample rate: 1, batch Size: 10000, timeout: 16
-Total time taken: 19s 4ms
-Elisha Blanda (Observations: 1,461, Neurons: 501, Synapses: 15,493 & Score: 0.472)
-3 mutations, mutation rate 5.0%, elitism 1, mutation FFW, selection TOURNAMENT, timeout 16, PopSize 20 SAMPLER
-Initialized in 2s 44ms
+ TacitKnowledge/hive.json    |    12 +-
+ samples/GRQ-10-1.json       | 11609 +-----
+ samples/GRQ-13-1.json       | 10555 +++++-
+ samples/GRQ-16-1.json       | 85173 ------------------------------------------
+ samples/GRQ-18-1.json       |  6323 ++--
+ samples/GRQ-19-1.json       |  3166 +-
+ samples/GRQ-23-1.json       |   156 +-
+ samples/GRQ-3-1.json        | 10885 +-----
+ samples/Mac-Ultra-M2-1.json |    63 +-
+ 9 files changed, 17173 insertions(+), 110769 deletions(-)
+ delete mode 100644 samples/GRQ-16-1.json
+4) Sample rate: 1, batch Size: 10000, timeout: 27
+Total time taken: 25s 131ms
+Destin Koss (Observations: 1,461, Neurons: 500, Synapses: 15,437 & Score: 0.471)
+5 mutations, mutation rate 5.0%, elitism 1, mutation ALL, selection POWER, timeout 27, PopSize 20 SAMPLER
+Initialized in 1s 982ms
 Over populated 23, expected 20.
 Culling duplicate creature at 6 of 23
 Culling duplicate creature at 6 of 22
-Culling duplicate creature at 18 of 21
-DeDuplication of 3 creatures to 20 in 2ms (previous experiment 2ms)
-Training 1a6729f0 scheduled
-Training 1a6729f0 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 10.0%, sparse: 7.5%
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Generation 1 score 0.471564992712243 (avg: 0.4683) error 0.5282300882922993 time 5m 33s 982ms
-Training 1a6729f0 samples 153 of 2,077,946 0.0%( rate 10.0% ) error 0.618 time average: 396ms 104µs 575ns total: 1m 604ms
-Training 1a6729f0 samples 285 of 2,077,946 0.0%( rate 10.0% ) error 0.588 time average: 423ms 298µs 245ns total: 2m 640ms
-Generation 2 score 0.471564992712243 (avg: 0.4716) error 0.5282300882922993 time 2m 10s 899ms
-Training 1a6729f0 samples 461 of 2,077,946 0.0%( rate 10.0% ) error 0.596 time average: 392ms 8µs 676ns total: 3m 716ms
-Training 1a6729f0 samples 591 of 2,077,946 0.0%( rate 10.0% ) error 0.578 time average: 407ms 473µs 773ns total: 4m 817ms
-Training 1a6729f0 samples 724 of 2,077,946 0.0%( rate 10.0% ) error 0.566 time average: 415ms 523µs 480ns total: 5m 839ms
-Training 1a6729f0 samples 894 of 2,077,946 0.0%( rate 10.0% ) error 0.556 time average: 403ms 717µs 2ns total: 6m 923ms
-Training 1a6729f0 samples 1,035 of 2,077,946 0.0%( rate 10.0% ) error 0.558 time average: 406ms 810µs 628ns total: 7m 1s 49ms
-Generation 3 score 0.471564992712243 (avg: 0.4715) error 0.5282300882922993 time 4m 50s 509ms
-Training 1a6729f0 samples 1,171 of 2,077,946 0.1%( rate 10.0% ) error 0.552 time average: 410ms 958µs 155ns total: 8m 1s 232ms
-Training 1a6729f0 samples 1,342 of 2,077,946 0.1%( rate 10.0% ) error 0.553 time average: 403ms 435µs 916ns total: 9m 1s 411ms
-Generation 4 score 0.471564992712243 (avg: 0.4715) error 0.5282300882922993 time 2m 27s 377ms
-Training 1a6729f0 samples 1,496 of 2,077,946 0.1%( rate 10.0% ) error 0.553 time average: 402ms 56µs 149ns total: 10m 1s 476ms
-Training 1a6729f0 samples 1,591 of 2,077,946 0.1%( rate 10.0% ) error 0.547 time average: 415ms 873µs 35ns total: 11m 1s 654ms
-Training 1a6729f0 timed out after 11m 1s 654ms
-Training 1a6729f0 caused a higher error of 0.5465042491652595 from 0.5282300882922993
-Training 1a6729f0 completed after 11m 2s
-Training 1a6729f0 compacted
-Generation 5 score 0.471564992712243 (avg: 0.4715) error 0.5282300882922993 time 4m 52s 970ms
+DeDuplication of 2 creatures to 21 in 1ms (previous experiment 1ms)
+Training 362132d2 scheduled
+Training 362132d2 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 10.0%, sparse: 7.5%
+Fine tuning increased fitness by 0.0000012301864188435374 to 0.47158458855575425 adjusted 1471 weights, 17 biases 
+Generation 1 score 0.47158458855575425 (avg: 0.4685) error 0.5282101724487919 time 7m 33s 104ms
+Training 362132d2 samples 286 of 2,077,946 0.0%( rate 10.0% ) error 0.470 time average: 211ms 545µs 454ns total: 1m 502ms
+Training 362132d2 samples 595 of 2,077,946 0.0%( rate 10.0% ) error 0.535 time average: 202ms 574µs 789ns total: 2m 532ms
+Generation 2 score 0.47158458855575425 (avg: 0.4716) error 0.5282101724487919 time 2m 45s 739ms
+Training 362132d2 samples 897 of 2,077,946 0.0%( rate 10.0% ) error 0.526 time average: 201ms 287µs 625ns total: 3m 555ms
+Training 362132d2 samples 1,086 of 2,077,946 0.1%( rate 10.0% ) error 0.524 time average: 221ms 525µs 782ns total: 4m 577ms
+Training 362132d2 samples 1,294 of 2,077,946 0.1%( rate 10.0% ) error 0.528 time average: 232ms 788µs 253ns total: 5m 1s 228ms
+Training 362132d2 samples 1,486 of 2,077,946 0.1%( rate 10.0% ) error 0.523 time average: 243ms 133µs 243ns total: 6m 1s 296ms
+Training 362132d2 samples 1,784 of 2,077,946 0.1%( rate 10.0% ) error 0.513 time average: 236ms 193µs 946ns total: 7m 1s 370ms
+Training 362132d2 samples 2,154 of 2,077,946 0.1%( rate 10.0% ) error 0.490 time average: 223ms 491µs 179ns total: 8m 1s 400ms
+Fine tuning increased fitness by 2.6688509513483893e-8 to 0.47158461524426376 adjusted 1471 weights, 17 biases 
+Generation 3 score 0.47158461524426376 (avg: 0.4716) error 0.5282101357602826 time 6m 1s 19ms
+Training 362132d2 samples 2,474 of 2,077,946 0.1%( rate 10.0% ) error 0.499 time average: 218ms 888µs 844ns total: 9m 1s 531ms
+Training 362132d2 samples 2,773 of 2,077,946 0.1%( rate 10.0% ) error 0.507 time average: 216ms 957µs 446ns total: 10m 1s 623ms
+Training 362132d2 samples 3,081 of 2,077,946 0.1%( rate 10.0% ) error 0.510 time average: 214ms 843µs 881ns total: 11m 1s 934ms
+Generation 4 score 0.47158461524426376 (avg: 0.4716) error 0.5282101357602826 time 3m 796ms
+Training 362132d2 samples 3,364 of 2,077,946 0.2%( rate 10.0% ) error 0.520 time average: 214ms 714µs 625ns total: 12m 2s 300ms
+Training 362132d2 samples 3,569 of 2,077,946 0.2%( rate 10.0% ) error 0.521 time average: 219ms 244µs 886ns total: 13m 2s 485ms
+Training 362132d2 samples 3,838 of 2,077,946 0.2%( rate 10.0% ) error 0.512 time average: 219ms 563µs 574ns total: 14m 2s 685ms
+Training 362132d2 samples 4,114 of 2,077,946 0.2%( rate 10.0% ) error 0.509 time average: 219ms 442µs 148ns total: 15m 2s 785ms
+Training 362132d2 samples 4,456 of 2,077,946 0.2%( rate 10.0% ) error 0.504 time average: 216ms 74µs 506ns total: 16m 2s 828ms
+Training 362132d2 samples 4,787 of 2,077,946 0.2%( rate 10.0% ) error 0.508 time average: 213ms 677µs 42ns total: 17m 2s 872ms
+Generation 5 score 0.47158461524426376 (avg: 0.4716) error 0.5282101357602826 time 5m 49s 602ms
+Training 362132d2 samples 5,099 of 2,077,946 0.2%( rate 10.0% ) error 0.513 time average: 212ms 412µs 41ns total: 18m 3s 89ms
+Training 362132d2 samples 5,403 of 2,077,946 0.3%( rate 10.0% ) error 0.514 time average: 211ms 568µs 943ns total: 19m 3s 107ms
+Training 362132d2 samples 5,695 of 2,077,946 0.3%( rate 10.0% ) error 0.512 time average: 211ms 283µs 582ns total: 20m 3s 260ms
+Training 362132d2 timed out after 20m 3s 260ms
+compactUnused hidden neuron 42b3b6fd has no outward connections
+Training 362132d2 completed after 20m 3s 623ms
+Training 362132d2 compacted
+Generation 6 score 0.47158461524426376 (avg: 0.4716) error 0.5282101357602826 time 2m 54s 801ms
 Waiting for additional generation
-Compact 1a6729f0 Score: 0.47153032862275035, Error: 0.5282300882922993 -> 0.5282648423817908, 👿 -0.0000348
-Trained 1a6729f0 Score: 0.4714163304050625, Error: 0.5282300882922993 -> 0.5283787506015931, 👿 -0.000149
-Generation 6 score 0.471564992712243 (avg: 0.4715) error 0.5282300882922993 time 2m 47s 445ms
-Evolution of 6 generations in 22m 44s, averaging 3m 47s 251ms
-[16:17:40] 📦 checkin-sample.sh on host GRQ-11
+Trained 362132d2 Score: 0.4715360432311011, Error: 0.5282101724487919 -> 0.528258717773445, 👿 -0.0000485
+Compact 362132d2 Score: 0.4700123405296058, Error: 0.5282101724487919 -> 0.5297834004749352, 👿 -0.00157
+Generation 7 score 0.47158461524426376 (avg: 0.4715) error 0.5282101357602826 time 5m 44s 33ms
+Evolution of 7 generations in 33m 49s, averaging 4m 49s 920ms
+[00:22:48] 📦 checkin-sample.sh on host GRQ-11
 From github.com:stSoftwareAU/GRQ-sampler
-   2d5e461..95c7fd0  main       -> origin/main
-Updating 2d5e461..95c7fd0
+   99d204a..1cebde5  main       -> origin/main
+Updating 99d204a..1cebde5
 Fast-forward
- TacitKnowledge/hive.json |   19 +-
- samples/GRQ-16-1.json    | 3944 +++++++++++++++++++++++++++++++++++++++-------
- samples/GRQ-19-1.json    |  145 +-
- 3 files changed, 3514 insertions(+), 594 deletions(-)
-[16:17:44] ✅ Committing 🦠 GRQ-11 🎯, Score: 0.471565
-[main e63de0f] 🦠 GRQ-11 🎯, Score: 0.471565, Neurons: 501 & Synapses: 15,490
- 1 file changed, 85253 insertions(+)
+ TacitKnowledge/hive.json    |     8 +-
+ samples/GRQ-11-1.json       | 85225 --------------------------------------
+ samples/GRQ-12-1.json       | 10915 +----
+ samples/GRQ-13-1.json       |  7484 +---
+ samples/GRQ-15-1.json       | 93111 ------------------------------------------
+ samples/GRQ-19-1.json       |   118 +-
+ samples/GRQ-21-1.json       | 85280 --------------------------------------
+ samples/GRQ-22-1.json       | 85203 --------------------------------------
+ samples/Mac-1.json          | 85238 --------------------------------------
+ samples/Mac-Ultra-M2-1.json |    10 +-
+ 10 files changed, 1641 insertions(+), 450951 deletions(-)
+ delete mode 100644 samples/GRQ-11-1.json
+ delete mode 100644 samples/GRQ-15-1.json
+ delete mode 100644 samples/GRQ-21-1.json
+ delete mode 100644 samples/GRQ-22-1.json
+ delete mode 100644 samples/Mac-1.json
+[00:22:51] ✅ Committing 🦠 GRQ-11 🎯, Score: 0.471585
+[main 2a51d2d] 🦠 GRQ-11 🎯, Score: 0.471585, Neurons: 503 & Synapses: 15,503
+ 1 file changed, 85265 insertions(+)
  create mode 100644 samples/GRQ-11-1.json
 To github.com:stSoftwareAU/GRQ-sampler.git
-   95c7fd0..e63de0f  main -> main
+   1cebde5..2a51d2d  main -> main
 🔁 Attempting pull with rebase and conflict cleanup (attempt 1 of 6)...
 ✅ Git pull succeeded.
-[DEBUG] last_heartbeat=1753132776, hours_since_last=8, current_ts=1753165070
+[DEBUG] last_heartbeat=1753165070, hours_since_last=8, current_ts=1753194177
 Updating health information...
-[DEBUG] System info: {"uptime": 4345758, "free_disk_space": "298", "used_disk_percent": "32.2", "total_disk_gb": "460", "mem_usage_percent": "18.6", "total_mem_gb": "32", "cpu_load": "126.7%", "cpu_cores": "10", "cpu_model": "M1 Max", "cpu_breakdown": "17.22% user, 25.73% sys, 57.4% idle", "load_averages": "113.8% (1m), 126.8% (5m), 126.7% (15m)", "timezone": "AEST", "os_info": "macOS", "os_version": "15.5", "network_status": "connected", "exception_count": 0, "exception_summary": "No exceptions found"}
-[DEBUG] Current timestamp: 1753165070
+[DEBUG] System info: {"uptime": 4374865, "free_disk_space": "298", "used_disk_percent": "32.4", "total_disk_gb": "460", "mem_usage_percent": "17.4", "total_mem_gb": "32", "cpu_load": "151.2%", "cpu_cores": "10", "cpu_model": "M1 Max", "cpu_breakdown": "20.24% user, 27.57% sys, 52.18% idle", "load_averages": "173.3% (1m), 151.8% (5m), 151.2% (15m)", "timezone": "AEST", "os_info": "macOS", "os_version": "15.5", "network_status": "connected", "exception_count": 0, "exception_summary": "No exceptions found"}
+[DEBUG] Current timestamp: 1753194177
 [DEBUG] Hostname: GRQ-11
 [DEBUG] Updating existing JSON file
 Updated health information for GRQ-11
