@@ -417,7 +417,6 @@ should_update() {
     
     local last_heartbeat=$(jq -r ".\"$HOSTNAME\".heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
     local hours_since_last=$(( (CURRENT_TS - last_heartbeat) / 3600 ))
-    echo "[DEBUG] last_heartbeat=$last_heartbeat, hours_since_last=$hours_since_last, current_ts=$CURRENT_TS"
     if [ $hours_since_last -ge $HEARTBEAT_THRESHOLD_HOURS ]; then
         return 0  # Need to update
     else
@@ -429,10 +428,6 @@ should_update() {
 update_json() {
     local system_info=$(get_system_info)
     
-    echo "[DEBUG] System info: $system_info"
-    echo "[DEBUG] Current timestamp: $CURRENT_TS"
-    echo "[DEBUG] Hostname: $HOSTNAME"
-    
     # Create backup (tmp file, clean up after)
     if [ -f "$JSON_FILE" ]; then
         cp "$JSON_FILE" "${JSON_FILE}.tmp"
@@ -441,7 +436,7 @@ update_json() {
     # Update or create JSON file
     if [ -f "$JSON_FILE" ]; then
         # Update existing file - preserve existing attributes
-        echo "[DEBUG] Updating existing JSON file"
+
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
            --argjson info "$system_info" \
@@ -449,7 +444,6 @@ update_json() {
            "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
         # Create new file
-        echo "[DEBUG] Creating new JSON file"
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
            --argjson info "$system_info" \
