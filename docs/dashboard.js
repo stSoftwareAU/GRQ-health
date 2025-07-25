@@ -37,17 +37,14 @@ function getHealthStatus(_hostname, data) {
     
     const now = Math.floor(Date.now() / 1000);
     const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
-    console.log(`[DEBUG] ${_hostname}: now=${now}, heartbeat=${data.heart_beat_ts}, hours=${hoursSinceHeartbeat}, mobile=${data.mobile}`);
     
     // Handle timezone issues - if heartbeat is in the future, assume it's recent
     if (data.heart_beat_ts > now) {
-        console.log(`[DEBUG] ${_hostname} heartbeat in future: ${data.heart_beat_ts} > ${now}`);
         return 'healthy';
     }
     
     // Check for MIA state (mobile hosts not seen for 24+ hours)
     if (hoursSinceHeartbeat > 24 && data.mobile) {
-        console.log(`[DEBUG] ${_hostname} is MIA: ${hoursSinceHeartbeat} hours since heartbeat, mobile: ${data.mobile}`);
         return 'mia';
     }
     
@@ -326,7 +323,6 @@ function updateStats(hosts) {
     // Only count critical devices as unhealthy - MIA devices are just missing, not unhealthy
     const isHealthy = stats.critical === 0;
     const healthStatus = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
-    console.log(`[DEBUG] Overall health: critical=${stats.critical}, mia=${stats.mia}, isHealthy=${isHealthy}`);
     document.title = healthStatus;
     
     // Update favicon based on health
@@ -379,10 +375,9 @@ function updateStats(hosts) {
     // Show MIA hosts section if there are any
     const miaSection = document.getElementById('miaSection');
     const miaHostsList = document.getElementById('miaHostsList');
-    console.log(`[DEBUG] MIA stats: ${stats.mia} MIA hosts found`);
+
     if (stats.mia > 0) {
         const miaHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'mia');
-        console.log(`[DEBUG] MIA hosts: ${miaHosts.map(([hostname]) => hostname).join(', ')}`);
         const miaHtml = miaHosts.map(([hostname, data]) => {
             if (data.heart_beat_ts) {
                 const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
