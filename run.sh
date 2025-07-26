@@ -93,20 +93,27 @@ get_system_info() {
         fi
     fi
     
-    # Get disk space for the current working directory (where the script runs from)
+    # Get disk space - cross-platform approach
     if command -v df >/dev/null 2>&1; then
-        # Get the current working directory
-        current_dir=$(pwd)
-        
-        # Use df with human-readable output and get the second line (first filesystem)
-        df_output=$(df -h "$current_dir" | awk 'NR==2')
-        
         if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS - check the main data volume (/System/Volumes/Data) which contains user data
+            # This is more accurate than checking the current directory which might be on system volume
+            df_output=$(df -h "/System/Volumes/Data" 2>/dev/null | awk 'NR==2')
+            if [[ -z "$df_output" ]]; then
+                # Fallback to current directory if data volume not accessible
+                current_dir=$(pwd)
+                df_output=$(df -h "$current_dir" | awk 'NR==2')
+            fi
+            
             # macOS - handle Gi suffix
             total_disk=$(echo "$df_output" | awk '{print $2}' | sed 's/Gi//')
             free_disk_space=$(echo "$df_output" | awk '{print $4}' | sed 's/Gi//')
             used_disk=$(echo "$df_output" | awk '{print $3}' | sed 's/Gi//')
         else
+            # Linux/AWS - check current directory
+            current_dir=$(pwd)
+            df_output=$(df -h "$current_dir" | awk 'NR==2')
+            
             # Linux/AWS - handle G suffix and other variations
             total_disk=$(echo "$df_output" | awk '{print $2}' | sed 's/G//; s/Ti//; s/Mi//')
             free_disk_space=$(echo "$df_output" | awk '{print $4}' | sed 's/G//; s/Ti//; s/Mi//')
@@ -124,7 +131,7 @@ get_system_info() {
         fi
     else
         free_disk_space="unknown"
-        disk_usage_percent="0"
+        used_disk_percent="0"
         total_disk_gb="0"
     fi
     
