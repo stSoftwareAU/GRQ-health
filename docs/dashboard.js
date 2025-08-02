@@ -170,7 +170,7 @@ function createHostCard(hostname, data) {
     
     if (healthStatus === 'mia') {
         // Mobile devices that are Off the Grid (not seen for 24+ hours)
-        const miaEmoji = '🌐'; // Globe emoji for Off the Grid
+        const miaEmoji = '🗺️'; // Globe emoji for Off the Grid
         return `
             <div class="col-lg-6 col-xl-4">
                 <div class="host-card mia" data-status="mia">
