@@ -359,11 +359,74 @@ get_system_info() {
         fi
     fi
     
-    # Get network connectivity
+    # Get network connectivity and IP addresses
     network_status="unknown"
+    ip_addresses=""
+    
     if command -v ping >/dev/null 2>&1; then
         if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
             network_status="connected"
+            
+            # Get IP addresses for different interfaces
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                # macOS: use ifconfig to get IP addresses
+                wifi_ip=$(ifconfig en0 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
+                ethernet_ip=$(ifconfig en1 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
+                
+                # Also check for other common interface names
+                if [[ -z "$wifi_ip" ]]; then
+                    wifi_ip=$(ifconfig en2 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
+                fi
+                if [[ -z "$ethernet_ip" ]]; then
+                    ethernet_ip=$(ifconfig en3 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
+                fi
+                
+                # Build IP address string
+                if [[ -n "$wifi_ip" && -n "$ethernet_ip" ]]; then
+                    ip_addresses="WiFi: $wifi_ip, Eth: $ethernet_ip"
+                elif [[ -n "$wifi_ip" ]]; then
+                    ip_addresses="WiFi: $wifi_ip"
+                elif [[ -n "$ethernet_ip" ]]; then
+                    ip_addresses="Eth: $ethernet_ip"
+                fi
+            else
+                # Linux: use ip command or ifconfig
+                if command -v ip >/dev/null 2>&1; then
+                    # Modern Linux with ip command
+                    wifi_ip=$(ip addr show 2>/dev/null | grep -E "inet .* wlan|inet .* wifi" | awk '{print $2}' | cut -d'/' -f1 | head -1)
+                    ethernet_ip=$(ip addr show 2>/dev/null | grep -E "inet .* eth|inet .* enp|inet .* ens" | awk '{print $2}' | cut -d'/' -f1 | head -1)
+                    
+                    # If no specific interface found, get any non-loopback IP
+                    if [[ -z "$wifi_ip" && -z "$ethernet_ip" ]]; then
+                        all_ips=$(ip addr show 2>/dev/null | grep "inet " | grep -v "127.0.0.1" | awk '{print $2}' | cut -d'/' -f1 | tr '\n' ' ' | sed 's/ *$//')
+                        if [[ -n "$all_ips" ]]; then
+                            ip_addresses="$all_ips"
+                        fi
+                    else
+                        # Build IP address string
+                        if [[ -n "$wifi_ip" && -n "$ethernet_ip" ]]; then
+                            ip_addresses="WiFi: $wifi_ip, Eth: $ethernet_ip"
+                        elif [[ -n "$wifi_ip" ]]; then
+                            ip_addresses="WiFi: $wifi_ip"
+                        elif [[ -n "$ethernet_ip" ]]; then
+                            ip_addresses="Eth: $ethernet_ip"
+                        fi
+                    fi
+                else
+                    # Fallback to ifconfig for older Linux systems
+                    wifi_ip=$(ifconfig 2>/dev/null | grep -E "inet .* wlan|inet .* wifi" | awk '{print $2}' | head -1)
+                    ethernet_ip=$(ifconfig 2>/dev/null | grep -E "inet .* eth|inet .* enp|inet .* ens" | awk '{print $2}' | head -1)
+                    
+                    # Build IP address string
+                    if [[ -n "$wifi_ip" && -n "$ethernet_ip" ]]; then
+                        ip_addresses="WiFi: $wifi_ip, Eth: $ethernet_ip"
+                    elif [[ -n "$wifi_ip" ]]; then
+                        ip_addresses="WiFi: $wifi_ip"
+                    elif [[ -n "$ethernet_ip" ]]; then
+                        ip_addresses="Eth: $ethernet_ip"
+                    fi
+                fi
+            fi
         else
             network_status="disconnected"
         fi
@@ -398,7 +461,7 @@ get_system_info() {
         uptime_sec=0
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\"}"
 }
 
 # Function to check if we need to update
