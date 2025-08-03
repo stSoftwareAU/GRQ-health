@@ -283,6 +283,7 @@ function createHostCard(hostname, data) {
                     <div class="col-6">
                         <small class="text-muted">Network</small>
                         <div class="fw-bold">${data.network_status}</div>
+                        ${data.ip_addresses ? `<small class="text-muted">${data.ip_addresses}</small>` : ''}
                     </div>
                 </div>
                 <div class="row mt-2">
@@ -578,10 +579,28 @@ function updateHostCard(hostname, data) {
             cpuElement.textContent = cpuDisplay;
         }
         
-        // Update network status
+        // Update network status and IP addresses
         const networkElement = hostCard.querySelector('.row:nth-child(3) .col-6:last-child .fw-bold');
         if (networkElement) {
             networkElement.textContent = data.network_status;
+        }
+        
+        // Update IP addresses
+        const networkContainer = hostCard.querySelector('.row:nth-child(3) .col-6:last-child');
+        if (networkContainer) {
+            // Remove existing IP address display
+            const existingIpDisplay = networkContainer.querySelector('small.text-muted:last-child');
+            if (existingIpDisplay && existingIpDisplay.textContent.includes('WiFi:') || existingIpDisplay.textContent.includes('Eth:')) {
+                existingIpDisplay.remove();
+            }
+            
+            // Add new IP address display if available
+            if (data.ip_addresses) {
+                const ipDisplay = document.createElement('small');
+                ipDisplay.className = 'text-muted';
+                ipDisplay.textContent = data.ip_addresses;
+                networkContainer.appendChild(ipDisplay);
+            }
         }
         
         // Update timezone
