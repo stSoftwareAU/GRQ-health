@@ -226,7 +226,9 @@ get_system_info() {
             machine_type=$(echo "$machine_type" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sed 's/^Dell Inc\. //; s/^HP //; s/^Lenovo //; s/^ASUSTeK //; s/^GIGABYTE //; s/^MSI //')
         fi
     fi
-        
+    
+    # Get CPU speed - cross-platform
+    if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS - use sysctl for CPU frequency
         cpu_speed_raw=$(sysctl -n hw.cpufrequency 2>/dev/null || echo "0")
         if [[ "$cpu_speed_raw" =~ ^[0-9]+$ ]] && [[ "$cpu_speed_raw" -gt 0 ]]; then
