@@ -236,6 +236,11 @@ function createHostCard(hostname, data) {
         cpuDisplay += ')';
     }
     
+    // Add machine type if available
+    if (data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '') {
+        cpuDisplay += ` | ${data.machine_type}`;
+    }
+    
     // Format memory display
     let memDisplay = data.mem_usage_percent;
     if (data.mem_usage_percent && data.mem_usage_percent !== 'unknown') {
@@ -619,6 +624,11 @@ function updateHostCard(hostname, data) {
                     cpuDisplay += `, ${data.cpu_model}`;
                 }
                 cpuDisplay += ')';
+            }
+            
+            // Add machine type if available
+            if (data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '') {
+                cpuDisplay += ` | ${data.machine_type}`;
             }
             cpuElement.textContent = cpuDisplay;
         }
