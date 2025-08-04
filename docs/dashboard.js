@@ -95,6 +95,10 @@ function getHealthStatus(_hostname, data) {
             }
         }
         
+        // macOS version update check - compare against latest known version
+        // Note: This is informational only, not a warning status
+        // The visual indicator is handled in createHostCard function
+        
         // Exception warning (if there are exceptions in the log)
         if (data.exception_count && parseInt(data.exception_count) > 0) {
             return 'warning';
@@ -245,9 +249,23 @@ function createHostCard(hostname, data) {
     // Add mobile class if host is marked as mobile
     const mobileClass = data.mobile ? ' mobile' : '';
     
+    // Check if macOS version is outdated
+    let outdatedMacClass = '';
+    if (data.os_info && data.os_info.includes('macOS') && data.os_version) {
+        const latestMacOSVersion = allHosts
+            .filter(([_, hostData]) => hostData.os_info && hostData.os_info.includes('macOS') && hostData.os_version)
+            .map(([_, hostData]) => hostData.os_version)
+            .sort()
+            .pop();
+        
+        if (latestMacOSVersion && data.os_version < latestMacOSVersion) {
+            outdatedMacClass = ' outdated-macos';
+        }
+    }
+    
     return `
         <div class="col-lg-6 col-xl-4">
-            <div class="host-card ${statusClass}${mobileClass}" data-status="${healthStatus}" data-hostname="${hostname}">
+            <div class="host-card ${statusClass}${mobileClass}${outdatedMacClass}" data-status="${healthStatus}" data-hostname="${hostname}">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0">${emoji} ${hostname}</h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
@@ -256,7 +274,10 @@ function createHostCard(hostname, data) {
                 <div class="row">
                     <div class="col-6">
                         <small class="text-muted">OS</small>
-                        <div class="fw-bold">${data.os_info} ${data.os_version}</div>
+                        <div class="fw-bold">
+                            ${data.os_info} ${data.os_version}
+                            ${outdatedMacClass ? '<span class="badge bg-warning text-white ms-2" title="Update available"><i class="bi bi-arrow-up-circle"></i> Update</span>' : ''}
+                        </div>
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Uptime</small>
@@ -433,6 +454,9 @@ function updateStats(hosts) {
                     warningReason += `OS version: ${data.os_version}`;
                 }
             }
+            
+            // macOS version updates are now informational only, not warnings
+            // The visual indicators are handled in the card display
             if (data.exception_count && parseInt(data.exception_count) > 0) {
                 if (warningReason) warningReason += ', ';
                 warningReason += `Stack traces: ${data.exception_summary}`;
@@ -518,9 +542,29 @@ function updateHostCard(hostname, data) {
             statusElement.textContent = healthStatus;
         }
         
+        // Check if macOS version is outdated for the updated card
+        let outdatedMacClass = '';
+        if (data.os_info && data.os_info.includes('macOS') && data.os_version) {
+            const latestMacOSVersion = allHosts
+                .filter(([_, hostData]) => hostData.os_info && hostData.os_info.includes('macOS') && hostData.os_version)
+                .map(([_, hostData]) => hostData.os_version)
+                .sort()
+                .pop();
+            
+            if (latestMacOSVersion && data.os_version < latestMacOSVersion) {
+                outdatedMacClass = ' outdated-macos';
+            }
+        }
+        
         // Update the card's CSS classes to reflect the new health status
-        hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}`;
+        hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}${outdatedMacClass}`;
         hostCard.setAttribute('data-status', healthStatus);
+        
+        // Update OS version display with update badge if needed
+        const osElement = hostCard.querySelector('.row:first-child .col-6:first-child .fw-bold');
+        if (osElement) {
+            osElement.innerHTML = `${data.os_info} ${data.os_version}${outdatedMacClass ? '<span class="badge bg-warning text-white ms-2" title="Update available"><i class="bi bi-arrow-up-circle"></i> Update</span>' : ''}`;
+        }
         
         // Update uptime
         const uptimeElement = hostCard.querySelector('.row:first-child .col-6:last-child .fw-bold');
