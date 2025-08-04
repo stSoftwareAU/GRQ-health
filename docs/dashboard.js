@@ -236,10 +236,7 @@ function createHostCard(hostname, data) {
         cpuDisplay += ')';
     }
     
-    // Add machine type if available
-    if (data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '') {
-        cpuDisplay += ` | ${data.machine_type}`;
-    }
+    // Machine type is now displayed in the header
     
     // Format memory display
     let memDisplay = data.mem_usage_percent;
@@ -272,7 +269,10 @@ function createHostCard(hostname, data) {
         <div class="col-lg-6 col-xl-4">
             <div class="host-card ${statusClass}${mobileClass}${outdatedMacClass}" data-status="${healthStatus}" data-hostname="${hostname}">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">${emoji} ${hostname}</h5>
+                    <h5 class="mb-0 d-flex align-items-center">
+                        ${emoji} ${hostname}
+                        ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}
+                    </h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
                 </div>
                 ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
@@ -565,6 +565,14 @@ function updateHostCard(hostname, data) {
         hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}${outdatedMacClass}`;
         hostCard.setAttribute('data-status', healthStatus);
         
+        // Update hostname with machine type badge if needed
+        const hostnameElement = hostCard.querySelector('h5.mb-0');
+        if (hostnameElement) {
+            const emoji = hostCard.querySelector('h5.mb-0').textContent.match(/^[^\s]+/)?.[0] || '';
+            hostnameElement.className = 'mb-0 d-flex align-items-center';
+            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}`;
+        }
+        
         // Update OS version display with update badge if needed
         const osElement = hostCard.querySelector('.row:first-child .col-6:first-child .fw-bold');
         if (osElement) {
@@ -626,10 +634,6 @@ function updateHostCard(hostname, data) {
                 cpuDisplay += ')';
             }
             
-            // Add machine type if available
-            if (data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '') {
-                cpuDisplay += ` | ${data.machine_type}`;
-            }
             cpuElement.textContent = cpuDisplay;
         }
         
