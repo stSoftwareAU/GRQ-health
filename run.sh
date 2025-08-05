@@ -3,6 +3,7 @@
 # Health monitoring script for GRQ-health
 # This script checks system health and updates docs/index.json
 # Compatible with macOS, Ubuntu, and AWS Linux
+# Automatically skips execution on spot instances to avoid dead entries
 
 set -e
 
@@ -28,6 +29,9 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --force, -f    Force update regardless of last heartbeat time"
             echo "  --help, -h     Show this help message"
+            echo ""
+            echo "Note: This script automatically skips execution on spot instances"
+            echo "      to avoid creating dead entries in the health dashboard."
             exit 0
             ;;
         *)
@@ -45,6 +49,38 @@ CURRENT_TS=$(date +%s)
 HOST=$(uname -n)
 HOST=${HOST%%.*} # Trim everything after the first period
 HOSTNAME=$HOST
+
+# Function to detect if this is a spot instance
+is_spot_instance() {
+    # Check AWS EC2 metadata for spot instance
+    if command -v curl >/dev/null 2>&1; then
+        # Try to get instance metadata (only works on EC2)
+        if curl -s --max-time 2 http://169.254.169.254/latest/meta-data/instance-life-cycle >/dev/null 2>&1; then
+            instance_lifecycle=$(curl -s --max-time 2 http://169.254.169.254/latest/meta-data/instance-life-cycle 2>/dev/null || echo "")
+            if [[ "$instance_lifecycle" == "spot" ]]; then
+                return 0  # This is a spot instance
+            fi
+        fi
+    fi
+    
+    # Check for spot instance indicators in hostname or other metadata
+    if [[ "$HOSTNAME" =~ spot|Spot ]]; then
+        return 0  # Hostname contains "spot" - likely a spot instance
+    fi
+    
+    # Check for spot instance tags or environment variables
+    if [[ -n "$SPOT_INSTANCE" ]] || [[ -n "$AWS_SPOT_INSTANCE" ]]; then
+        return 0  # Environment variable indicates spot instance
+    fi
+    
+    return 1  # Not a spot instance
+}
+
+# Check if this is a spot instance and exit if so
+if is_spot_instance; then
+    echo "Skipping health monitoring - this appears to be a spot instance"
+    exit 0
+fi
 
 # Function to get system information
 get_system_info() {
