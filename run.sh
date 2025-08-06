@@ -3,7 +3,8 @@
 # Health monitoring script for GRQ-health
 # This script checks system health and updates docs/index.json
 # Compatible with macOS, Ubuntu, and AWS Linux
-# Automatically skips execution on spot instances to avoid dead entries
+# Automatically skips execution on AWS instances to avoid dead entries
+# All AWS instances in this context are spot/temporary and would create dead entries
 
 set -e
 
@@ -50,35 +51,23 @@ HOST=$(uname -n)
 HOST=${HOST%%.*} # Trim everything after the first period
 HOSTNAME=$HOST
 
-# Function to detect if this is a spot instance
-is_spot_instance() {
-    # Check AWS EC2 metadata for spot instance
+# Function to detect if this is an AWS instance (all AWS instances are spot/temporary)
+is_aws_instance() {
+    # Check if we can reach AWS metadata service (only works on AWS EC2)
     if command -v curl >/dev/null 2>&1; then
-        # Try to get instance metadata (only works on EC2)
-        if curl -s --max-time 2 http://169.254.169.254/latest/meta-data/instance-life-cycle >/dev/null 2>&1; then
-            instance_lifecycle=$(curl -s --max-time 2 http://169.254.169.254/latest/meta-data/instance-life-cycle 2>/dev/null || echo "")
-            if [[ "$instance_lifecycle" == "spot" ]]; then
-                return 0  # This is a spot instance
-            fi
+        if curl -s --max-time 2 http://169.254.169.254/latest/meta-data/instance-id >/dev/null 2>&1; then
+            return 0  # We're on an AWS instance
         fi
     fi
     
-    # Check for spot instance indicators in hostname or other metadata
-    if [[ "$HOSTNAME" =~ spot|Spot ]]; then
-        return 0  # Hostname contains "spot" - likely a spot instance
-    fi
-    
-    # Check for spot instance tags or environment variables
-    if [[ -n "$SPOT_INSTANCE" ]] || [[ -n "$AWS_SPOT_INSTANCE" ]]; then
-        return 0  # Environment variable indicates spot instance
-    fi
-    
-    return 1  # Not a spot instance
+    return 1  # Not an AWS instance
 }
 
-# Check if this is a spot instance and exit if so
-if is_spot_instance; then
-    echo "Skipping health monitoring - this appears to be a spot instance"
+# Check if this is an AWS instance and exit if so
+# All AWS instances in this context are spot/temporary and should be skipped
+# This prevents creating dead entries in the health dashboard from ephemeral instances
+if is_aws_instance; then
+    echo "Skipping health monitoring - this is an AWS instance (spot/temporary)"
     exit 0
 fi
 
