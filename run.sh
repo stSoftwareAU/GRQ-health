@@ -5,6 +5,7 @@
 # Compatible with macOS, Ubuntu, and AWS Linux
 # Automatically skips execution on AWS instances to avoid dead entries
 # All AWS instances in this context are spot/temporary and would create dead entries
+# Fixed machine type detection to handle corrupted output and encoding issues
 
 set -e
 
@@ -233,22 +234,36 @@ get_system_info() {
         # Linux/Ubuntu - try multiple methods to get machine type
         if [ -f /sys/class/dmi/id/product_name ]; then
             # Modern Linux systems with DMI
-            machine_type=$(cat /sys/class/dmi/id/product_name 2>/dev/null | tr -d '\n' || echo "")
+            machine_type=$(cat /sys/class/dmi/id/product_name 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
         elif [ -f /proc/device-tree/model ]; then
             # ARM-based systems (like Raspberry Pi)
-            machine_type=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\n' || echo "")
+            machine_type=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
         elif command -v dmidecode >/dev/null 2>&1; then
             # Use dmidecode if available
-            machine_type=$(dmidecode -s system-product-name 2>/dev/null | tr -d '\n' || echo "")
+            machine_type=$(dmidecode -s system-product-name 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
         elif [ -f /etc/machine-info ]; then
             # Some systems store machine info here
-            machine_type=$(grep "PRETTY_HOSTNAME" /etc/machine-info 2>/dev/null | sed 's/PRETTY_HOSTNAME=//' | tr -d '\n' || echo "")
+            machine_type=$(grep "PRETTY_HOSTNAME" /etc/machine-info 2>/dev/null | sed 's/PRETTY_HOSTNAME=//' | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
         fi
         
         # Clean up the machine type string
         if [[ -n "$machine_type" ]]; then
             # Remove common prefixes and clean up
             machine_type=$(echo "$machine_type" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sed 's/^Dell Inc\. //; s/^HP //; s/^Lenovo //; s/^ASUSTeK //; s/^GIGABYTE //; s/^MSI //')
+            
+            # Validate and sanitize the machine type string
+            # Remove any non-printable characters and ensure it's a valid string
+            machine_type=$(echo "$machine_type" | tr -cd '[:print:][:space:]' | sed 's/[[:space:]]*$//')
+            
+            # If the result is empty, contains only whitespace, or is corrupted, set a fallback
+            if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]] || [[ "$machine_type" =~ [^[:alnum:][:space:]-] ]]; then
+                machine_type="Unknown"
+            fi
+        fi
+        
+        # If no machine type was detected, set a fallback
+        if [[ -z "$machine_type" ]]; then
+            machine_type="Unknown"
         fi
     fi
     
@@ -512,6 +527,11 @@ get_system_info() {
     # Ensure uptime_sec is a number
     if [[ ! "$uptime_sec" =~ ^[0-9]+$ ]]; then
         uptime_sec=0
+    fi
+    
+    # Final validation of machine_type to prevent corrupted output
+    if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ [^[:print:]] ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]]; then
+        machine_type="Unknown"
     fi
     
     echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"machine_type\": \"$machine_type\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\"}"
