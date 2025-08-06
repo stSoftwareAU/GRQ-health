@@ -2,18 +2,18 @@
 Version 1.3.3
 Disk usage:
 Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
-/dev/disk3s1s1   926Gi    10Gi   342Gi     3%    426k  3.6G    0%   /
+/dev/disk3s1s1   926Gi    10Gi   409Gi     3%    426k  4.3G    0%   /
 devfs            210Ki   210Ki     0Bi   100%     728     0  100%   /dev
-/dev/disk3s6     926Gi    24Ki   342Gi     1%       0  3.6G    0%   /System/Volumes/VM
-/dev/disk3s2     926Gi   6.6Gi   342Gi     2%    1.4k  3.6G    0%   /System/Volumes/Preboot
-/dev/disk3s4     926Gi   3.6Mi   342Gi     1%      56  3.6G    0%   /System/Volumes/Update
+/dev/disk3s6     926Gi    24Ki   409Gi     1%       0  4.3G    0%   /System/Volumes/VM
+/dev/disk3s2     926Gi   6.6Gi   409Gi     2%    1.3k  4.3G    0%   /System/Volumes/Preboot
+/dev/disk3s4     926Gi   3.6Mi   409Gi     1%      56  4.3G    0%   /System/Volumes/Update
 /dev/disk1s2     500Mi   6.0Mi   483Mi     2%       1  4.9M    0%   /System/Volumes/xarts
 /dev/disk1s1     500Mi   5.4Mi   483Mi     2%      32  4.9M    0%   /System/Volumes/iSCPreboot
 /dev/disk1s3     500Mi   1.0Mi   483Mi     1%      62  4.9M    0%   /System/Volumes/Hardware
-/dev/disk3s5     926Gi   566Gi   342Gi    63%     11M  3.6G    0%   /System/Volumes/Data
+/dev/disk3s5     926Gi   499Gi   409Gi    55%     11M  4.3G    0%   /System/Volumes/Data
 map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
-/dev/disk7s1     1.8Ti   193Gi   1.6Ti    11%    9.0M   18G    0%   /Volumes/GRQ
-Uptime: 12:11  up 1 day, 23 hrs, 6 users, load averages: 2.43 8.65 13.98
+/dev/disk7s1     1.8Ti   197Gi   1.6Ti    11%    9.0M   17G    0%   /Volumes/GRQ
+Uptime: 20:43  up 2 days,  7:32, 6 users, load averages: 17.64 20.65 20.65
 USER        PID  PPID COMMAND
 nigelleck  1234     1 cloudphotod
 nigelleck  2201     1 /Library/Application Support/Citrix Receiver/SafariAdapter.app/Contents/MacOS/SafariAdapter
@@ -22,11 +22,11 @@ nigelleck  4914  4899 Cursor Helper: fileWatcher [1]
 nigelleck  4915  4899 Cursor Helper (Plugin): extension-host [1-1]                   
 nigelleck  4918  4899 Cursor Helper: terminal pty-host                 
 nigelleck  5056  4915 /Users/nigelleck/.deno/bin/deno lsp
+nigelleck 20127     1 /bin/bash /Users/nigelleck/src/GRQ/run.sh
+nigelleck 26718 20127 /bin/bash worker/node.sh
+root      26728 26718 ps -U nigelleck -o user,pid,ppid,command
 nigelleck 45258  4915 tsserver[5.8.2]: syntax                    
 nigelleck 45259  4915 tsserver[5.8.2]: semantic                  
-nigelleck 53897     1 /bin/bash /Users/nigelleck/src/GRQ/run.sh
-nigelleck 54434 53897 /bin/bash worker/node.sh
-root      54444 54434 ps -U nigelleck -o user,pid,ppid,command
 root       1320  1257 login -pfl nigelleck /bin/bash -c exec -la zsh /bin/zsh
 nigelleck  1322  1320 -zsh
 nigelleck  2036  1322 tail -F /Users/nigelleck/logs/node.log
@@ -36,9 +36,9 @@ root       1974  1331 sudo su - grq
 root       1335  1257 login -pfl nigelleck /bin/bash -c exec -la zsh /bin/zsh
 nigelleck  1340  1335 -zsh
 nigelleck  6312  1340 /bin/bash /Users/nigelleck/run3.sh
-nigelleck 52773  6312 /bin/bash worker/score.sh
-nigelleck 52779 52773 /bin/bash ./repos.sh
-nigelleck 54424 52779 /bin/bash /Users/nigelleck/src3/GRQ/worker/shared/git_pull.sh GRQ-insiders
+nigelleck 26011  6312 /bin/bash worker/validation.sh
+nigelleck 26109 26011 /bin/bash ../../GRQ-validation/run.sh
+nigelleck 26120 26109 ./target/release/grq-validation --docs-path docs
 root       1347  1257 login -pf nigelleck
 nigelleck  1348  1347 -zsh
 nigelleck 59473  1348 view v1/USDJPY.json.invalid
@@ -52,7 +52,7 @@ IP: 10.0.0.221
 10.0.0.148
 100.124.27.110
 Number of CPUs: 24
-Available Memory: 27G
+Available Memory: 46G
 ================ Clean up ENDED ================
 Use local deno
 PATH: /Users/nigelleck/.deno/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
@@ -62,175 +62,563 @@ typescript 5.8.3
 aws-cli/2.26.2 Python/3.13.3 Darwin/24.6.0 source/arm64
 Option: learn
 Already up to date.
++++ dirname /Users/nigelleck/src/GRQ/worker/shared/git_pull.sh
+++ cd -P /Users/nigelleck/src/GRQ/worker/shared
+++ pwd -P
++ BASE_DIR=/Users/nigelleck/src/GRQ/worker/shared
++ cd /Users/nigelleck/src/GRQ/worker/shared/../../..
++ trap cleanup_on_exit EXIT
++ trap 'echo "🚨 Script interrupted - cleaning up..."; cleanup_on_exit; exit 1' SIGINT SIGTERM
++ REPO=GRQ-cluster
++ [[ -z GRQ-cluster ]]
++ [[ ! GRQ-cluster =~ ^[a-zA-Z0-9_-]+$ ]]
+++ date +%s
++ START_TIME=1754477035
++ MAX_ATTEMPTS=3
++ attempts=1
++ [[ -d GRQ-cluster ]]
++ cd GRQ-cluster
++ [[ 1 -le 3 ]]
++ [[ 1 -gt 1 ]]
++ echo '📥 Pulling GRQ-cluster with --ours strategy...'
 📥 Pulling GRQ-cluster with --ours strategy...
-From github.com:stSoftwareAU/GRQ-cluster
-   f711e58..da1b999  main       -> origin/main
++ git fetch origin
+++ git rev-parse --abbrev-ref HEAD
++ CURRENT_BRANCH=main
++ [[ main == \H\E\A\D ]]
++ git ls-remote --heads origin main
++ grep -q main
++ has_local_changes=false
++ has_untracked_files=false
++ git diff-index --quiet HEAD
+++ git ls-files --others --exclude-standard
++ [[ -n '' ]]
++ [[ false == \f\a\l\s\e ]]
++ [[ false == \f\a\l\s\e ]]
++ echo '📦 No local changes or untracked files - checking remote state'
 📦 No local changes or untracked files - checking remote state
+++ git ls-remote --heads origin main
+++ head -1
+++ awk '{print $1}'
++ remote_commit=da1b9998aadb86163c8a77e5c4c32aaf309fdec8
++ [[ -n da1b9998aadb86163c8a77e5c4c32aaf309fdec8 ]]
++ echo '🔄 Resetting to remote state (commit: da1b9998)'
 🔄 Resetting to remote state (commit: da1b9998)
++ set +e
++ git reset --hard da1b9998aadb86163c8a77e5c4c32aaf309fdec8
 HEAD is now at da1b999 Evolution score 0.4673 -> 0.4674 {diff 1} on GRQ-19
++ reset_status=0
++ set -e
++ [[ 0 -eq 0 ]]
++ git clean -fd
++ echo '✅ Successfully reset to remote state - all models updated by another machine'
 ✅ Successfully reset to remote state - all models updated by another machine
-✅ GRQ-cluster pull succeeded in 8 seconds
+++ date +%s
++ echo '✅ GRQ-cluster pull succeeded in 7 seconds'
+✅ GRQ-cluster pull succeeded in 7 seconds
++ break
++ [[ 1 -gt 3 ]]
++ cd ..
++ [[ ! -d GRQ-cluster ]]
++ touch /Users/nigelleck/src/GRQ/worker/shared/../../.run.pid
++ cleanup_on_exit
++ [[ -d .git ]]
++++ dirname /Users/nigelleck/src/GRQ/worker/shared/git_pull.sh
+++ cd -P /Users/nigelleck/src/GRQ/worker/shared
+++ pwd -P
++ BASE_DIR=/Users/nigelleck/src/GRQ/worker/shared
++ cd /Users/nigelleck/src/GRQ/worker/shared/../../..
++ trap cleanup_on_exit EXIT
++ trap 'echo "🚨 Script interrupted - cleaning up..."; cleanup_on_exit; exit 1' SIGINT SIGTERM
++ REPO=GRQ-sampler
++ [[ -z GRQ-sampler ]]
++ [[ ! GRQ-sampler =~ ^[a-zA-Z0-9_-]+$ ]]
+++ date +%s
++ START_TIME=1754477042
++ MAX_ATTEMPTS=3
++ attempts=1
++ [[ -d GRQ-sampler ]]
++ cd GRQ-sampler
++ [[ 1 -le 3 ]]
++ [[ 1 -gt 1 ]]
++ echo '📥 Pulling GRQ-sampler with --ours strategy...'
 📥 Pulling GRQ-sampler with --ours strategy...
++ git fetch origin
+++ git rev-parse --abbrev-ref HEAD
++ CURRENT_BRANCH=main
++ [[ main == \H\E\A\D ]]
++ git ls-remote --heads origin main
++ grep -q main
++ has_local_changes=false
++ has_untracked_files=false
++ git diff-index --quiet HEAD
+++ git ls-files --others --exclude-standard
++ [[ -n '' ]]
++ [[ false == \f\a\l\s\e ]]
++ [[ false == \f\a\l\s\e ]]
++ echo '📦 No local changes or untracked files - checking remote state'
 📦 No local changes or untracked files - checking remote state
-🔄 Resetting to remote state (commit: eb000261)
-HEAD is now at eb00026 🦠 GRQ-22 🎯, Score: 0.467352, Neurons: 504 & Synapses: 15,701
+++ git ls-remote --heads origin main
+++ awk '{print $1}'
+++ head -1
++ remote_commit=a451273d55b8c7fcfea247fc5d6a9b73f795254a
++ [[ -n a451273d55b8c7fcfea247fc5d6a9b73f795254a ]]
++ echo '🔄 Resetting to remote state (commit: a451273d)'
+🔄 Resetting to remote state (commit: a451273d)
++ set +e
++ git reset --hard a451273d55b8c7fcfea247fc5d6a9b73f795254a
+HEAD is now at a451273 🦠 Mac-Ultra-M2 🎯, Score: 0.467454, Neurons: 502 & Synapses: 15,710
++ reset_status=0
++ set -e
++ [[ 0 -eq 0 ]]
++ git clean -fd
++ echo '✅ Successfully reset to remote state - all models updated by another machine'
 ✅ Successfully reset to remote state - all models updated by another machine
-✅ GRQ-sampler pull succeeded in 7 seconds
+++ date +%s
++ echo '✅ GRQ-sampler pull succeeded in 8 seconds'
+✅ GRQ-sampler pull succeeded in 8 seconds
++ break
++ [[ 1 -gt 3 ]]
++ cd ..
++ [[ ! -d GRQ-sampler ]]
++ touch /Users/nigelleck/src/GRQ/worker/shared/../../.run.pid
++ cleanup_on_exit
++ [[ -d .git ]]
++++ dirname /Users/nigelleck/src/GRQ/worker/shared/git_pull.sh
+++ cd -P /Users/nigelleck/src/GRQ/worker/shared
+++ pwd -P
++ BASE_DIR=/Users/nigelleck/src/GRQ/worker/shared
++ cd /Users/nigelleck/src/GRQ/worker/shared/../../..
++ trap cleanup_on_exit EXIT
++ trap 'echo "🚨 Script interrupted - cleaning up..."; cleanup_on_exit; exit 1' SIGINT SIGTERM
++ REPO=GRQ-portfolio
++ [[ -z GRQ-portfolio ]]
++ [[ ! GRQ-portfolio =~ ^[a-zA-Z0-9_-]+$ ]]
+++ date +%s
++ START_TIME=1754477050
++ MAX_ATTEMPTS=3
++ attempts=1
++ [[ -d GRQ-portfolio ]]
++ cd GRQ-portfolio
++ [[ 1 -le 3 ]]
++ [[ 1 -gt 1 ]]
++ echo '📥 Pulling GRQ-portfolio with --ours strategy...'
 📥 Pulling GRQ-portfolio with --ours strategy...
++ git fetch origin
+++ git rev-parse --abbrev-ref HEAD
++ CURRENT_BRANCH=main
++ [[ main == \H\E\A\D ]]
++ git ls-remote --heads origin main
++ grep -q main
++ has_local_changes=false
++ has_untracked_files=false
++ git diff-index --quiet HEAD
+++ git ls-files --others --exclude-standard
++ [[ -n '' ]]
++ [[ false == \f\a\l\s\e ]]
++ [[ false == \f\a\l\s\e ]]
++ echo '📦 No local changes or untracked files - checking remote state'
 📦 No local changes or untracked files - checking remote state
+++ git ls-remote --heads origin main
+++ awk '{print $1}'
+++ head -1
++ remote_commit=6efea1f5d5d08c894fc2de8f8eddc96c4ce457b5
++ [[ -n 6efea1f5d5d08c894fc2de8f8eddc96c4ce457b5 ]]
++ echo '🔄 Resetting to remote state (commit: 6efea1f5)'
 🔄 Resetting to remote state (commit: 6efea1f5)
++ set +e
++ git reset --hard 6efea1f5d5d08c894fc2de8f8eddc96c4ce457b5
 HEAD is now at 6efea1f5d REJECTED 38.66% -> 29.83% Delta -8.831
++ reset_status=0
++ set -e
++ [[ 0 -eq 0 ]]
++ git clean -fd
++ echo '✅ Successfully reset to remote state - all models updated by another machine'
 ✅ Successfully reset to remote state - all models updated by another machine
-✅ GRQ-portfolio pull succeeded in 8 seconds
-Starting ... Wed Aug  6 12:12:19 AEST 2025
-Cluster mode
-📥 Pulling GRQ-shareprices2025Q1 with --ours strategy...
-📦 No local changes or untracked files - checking remote state
-🔄 Resetting to remote state (commit: 805027f3)
-HEAD is now at 805027f375 Refresh of history on GRQ-11@2025-08-05
-✅ Successfully reset to remote state - all models updated by another machine
-✅ GRQ-shareprices2025Q1 pull succeeded in 8 seconds
-📥 Pulling GRQ-companyreports with --ours strategy...
-📦 No local changes or untracked files - checking remote state
-🔄 Resetting to remote state (commit: 48f64e98)
-HEAD is now at 48f64e98ae1 Refresh of history on GRQ-11@2025-08-05
-✅ Successfully reset to remote state - all models updated by another machine
-✅ GRQ-companyreports pull succeeded in 8 seconds
-Difference between cluster score 0.4674 & worker score 0.4674 is 0
-Cluster score same as worker ( within three decimal places). Ignoring cluster's network
-📥 Pulling GRQ-portfolio with --ours strategy...
-📦 No local changes or untracked files - checking remote state
-🔄 Resetting to remote state (commit: 6efea1f5)
-HEAD is now at 6efea1f5d REJECTED 38.66% -> 29.83% Delta -8.831
-✅ Successfully reset to remote state - all models updated by another machine
+++ date +%s
++ echo '✅ GRQ-portfolio pull succeeded in 7 seconds'
 ✅ GRQ-portfolio pull succeeded in 7 seconds
-Already up to date.
-Bettye Crist (Observations: 1,486, Neurons: 503, Synapses: 15,702 & Score: 0.467)
-7 mutations, mutation rate 5.0%, elitism 7, mutation ALL, selection POWER, timeout 45, PopSize 20
-Initialized in 1s 253ms
-Can't deDuplicate creature at 17 of 20
-Training 7f025436 scheduled
-Training 7f025436 with 494 binary files, target error: 0.002, iterations: 1, sample rate: 10.0%, sparse: 5.0%
-Fine tuning increased fitness by 0.00003199335674203274 to 0.4673613220118871 adjusted 1 weight, 1 bias Restored: 7
-Generation 1 score 0.4673613220118871 (avg: 0.4513) error 0.5324313589906399 time 1m 36s 553ms
-Training 7f025436 samples 200 ( rate 10.0% ) error 0.446 time average: 300ms 865µs total: 1m 173ms
-Fine tuning increased fitness by 2.3234794643833823e-8 to 0.46736134524668177 adjusted 1 weight, 1 bias 
-Generation 2 score 0.46736134524668177 (avg: 0.4673) error 0.5324313257558454 time 1m 18s 941ms
-Training 7f025436 samples 402 ( rate 10.0% ) error 0.479 time average: 299ms 47µs 263ns total: 2m 217ms
-Generation 3 score 0.46736134524668177 (avg: 0.4674) error 0.5324313257558454 time 1m 19s 30ms
-Training 7f025436 samples 607 ( rate 10.0% ) error 0.496 time average: 297ms 698µs 517ns total: 3m 703ms
-Retrying increased fitness by 0.0000013696842918742291 to 0.46736271493097364 adjusted 1 weight, 1 bias
-Training 7f025436 samples 810 ( rate 10.0% ) error 0.500 time average: 297ms 488µs 888ns total: 4m 966ms
-Generation 4 score 0.46736271493097364 (avg: 0.4674) error 0.5324299660715534 time 1m 18s 574ms
-Training 7f025436 samples 1,095 ( rate 10.0% ) error 0.523 time average: 274ms 993µs 607ns total: 5m 1s 118ms
-Fine tuning increased fitness by 2.1891693013920133e-7 to 0.4673629338479038 adjusted 2 weights, 1 bias 
-Generation 5 score 0.4673629338479038 (avg: 0.4674) error 0.5324297371546234 time 1m 18s 467ms
-Training 7f025436 samples 1,368 ( rate 10.0% ) error 0.543 time average: 264ms 59µs 941ns total: 6m 1s 234ms
-Fine tuning increased fitness by 3.764587544474729e-7 to 0.46736331030665823 adjusted 2 weights, 1 bias 
-Generation 6 score 0.46736331030665823 (avg: 0.4674) error 0.5324293606958689 time 1m 19s 34ms
-Training 7f025436 samples 1,588 ( rate 10.0% ) error 0.540 time average: 265ms 324µs 937ns total: 7m 1s 336ms
-Generation 7 score 0.46736331030665823 (avg: 0.4674) error 0.5324293606958689 time 1m 18s 572ms
-Training 7f025436 samples 1,788 ( rate 10.0% ) error 0.540 time average: 269ms 407µs 158ns total: 8m 1s 700ms
-Training 7f025436 samples 1,992 ( rate 10.0% ) error 0.547 time average: 272ms 73µs 293ns total: 9m 1s 970ms
-Fine tuning increased fitness by 5.372921552115884e-10 to 0.4673633108439504 adjusted 1 weight 
-Generation 8 score 0.4673633108439504 (avg: 0.4673) error 0.5324293501585768 time 1m 20s 125ms
-Training 7f025436 samples 2,162 ( rate 10.0% ) error 0.548 time average: 278ms 728µs 29ns total: 10m 2s 610ms
-Fine tuning increased fitness by 5.329070518200751e-15 to 0.4673633108439557 adjusted 1 weight 
-Generation 9 score 0.4673633108439557 (avg: 0.4674) error 0.5324293501585715 time 1m 22s 353ms
-Training 7f025436 samples 2,377 ( rate 10.0% ) error 0.542 time average: 278ms 775µs 767ns total: 11m 2s 650ms
-Fine tuning increased fitness by 3.441691376337985e-14 to 0.46736331084399013 adjusted 1 weight 
-Training 7f025436 samples 2,697 ( rate 10.0% ) error 0.544 time average: 267ms 985µs 539ns total: 12m 2s 757ms
-Generation 10 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 22s 653ms
-Training 7f025436 samples 2,982 ( rate 10.0% ) error 0.536 time average: 262ms 597µs 250ns total: 13m 3s 65ms
-Generation 11 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 38s 343ms
-Training 7f025436 samples 3,198 ( rate 10.0% ) error 0.542 time average: 263ms 890µs 243ns total: 14m 3s 921ms
-Training 7f025436 samples 3,392 ( rate 10.0% ) error 0.541 time average: 266ms 640µs 35ns total: 15m 4s 443ms
-Generation 12 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 22s 370ms
-Training 7f025436 samples 3,589 ( rate 10.0% ) error 0.545 time average: 268ms 735µs 23ns total: 16m 4s 490ms
-Generation 13 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 20s 96ms
-Training 7f025436 samples 3,767 ( rate 10.0% ) error 0.539 time average: 271ms 985µs 134ns total: 17m 4s 568ms
-Generation 14 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 19s 665ms
-Training 7f025436 samples 3,965 ( rate 10.0% ) error 0.535 time average: 273ms 546µs 784ns total: 18m 4s 613ms
-Training 7f025436 samples 4,159 ( rate 10.0% ) error 0.534 time average: 275ms 235µs 393ns total: 19m 4s 704ms
-Generation 15 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 21s 654ms
-Training 7f025436 samples 4,369 ( rate 10.0% ) error 0.532 time average: 275ms 744µs 792ns total: 20m 4s 729ms
-Generation 16 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 22s 319ms
-Training 7f025436 samples 4,650 ( rate 10.0% ) error 0.520 time average: 272ms 93µs 118ns total: 21m 5s 233ms
-Generation 17 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 23s 16ms
-Training 7f025436 samples 4,870 ( rate 10.0% ) error 0.521 time average: 272ms 134µs 496ns total: 22m 5s 295ms
-Training 7f025436 samples 5,067 ( rate 10.0% ) error 0.522 time average: 273ms 413µs 262ns total: 23m 5s 385ms
-Generation 18 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 37s 16ms
-Training 7f025436 samples 5,318 ( rate 10.0% ) error 0.525 time average: 271ms 804µs 625ns total: 24m 5s 457ms
-Training 7f025436 samples 5,508 ( rate 10.0% ) error 0.522 time average: 273ms 414µs 306ns total: 25m 5s 966ms
-Generation 19 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 38s 848ms
-Training 7f025436 samples 5,698 ( rate 10.0% ) error 0.519 time average: 274ms 915µs 759ns total: 26m 6s 470ms
-Generation 20 score 0.46736331084399013 (avg: 0.4673) error 0.5324293501585371 time 1m 20s 223ms
-Training 7f025436 samples 5,910 ( rate 10.0% ) error 0.518 time average: 275ms 260µs 236ns total: 27m 6s 788ms
-Generation 21 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 24s 945ms
-Training 7f025436 samples 6,119 ( rate 10.0% ) error 0.522 time average: 275ms 727µs 406ns total: 28m 7s 176ms
-Training 7f025436 samples 6,344 ( rate 10.0% ) error 0.522 time average: 275ms 451µs 134ns total: 29m 7s 462ms
-Generation 22 score 0.46736331084399013 (avg: 0.4660) error 0.5324293501585371 time 1m 22s 605ms
-Training 7f025436 samples 6,505 ( rate 10.0% ) error 0.519 time average: 277ms 948µs 501ns total: 30m 8s 55ms
-Can't deDuplicate creature at 10 of 12
-Generation 23 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 41s 639ms
-Training 7f025436 samples 6,641 ( rate 10.0% ) error 0.516 time average: 281ms 308µs 387ns total: 31m 8s 169ms
-Training 7f025436 samples 6,818 ( rate 10.0% ) error 0.517 time average: 282ms 840µs 862ns total: 32m 8s 409ms
-Generation 24 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 31s 506ms
-Training 7f025436 samples 6,979 ( rate 10.0% ) error 0.519 time average: 284ms 961µs 25ns total: 33m 8s 743ms
-Generation 25 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 37s 607ms
-Training 7f025436 samples 7,200 ( rate 10.0% ) error 0.521 time average: 284ms 549µs 861ns total: 34m 8s 759ms
-Training 7f025436 samples 7,402 ( rate 10.0% ) error 0.523 time average: 284ms 892µs 461ns total: 35m 8s 774ms
-Generation 26 score 0.46736331084399013 (avg: 0.4673) error 0.5324293501585371 time 1m 42s 618ms
-Training 7f025436 samples 7,595 ( rate 10.0% ) error 0.523 time average: 285ms 577µs 880ns total: 36m 8s 964ms
-Training 7f025436 samples 7,765 ( rate 10.0% ) error 0.520 time average: 287ms 66µs 967ns total: 37m 9s 75ms
-Generation 27 score 0.46736331084399013 (avg: 0.4673) error 0.5324293501585371 time 1m 19s 993ms
-Training 7f025436 samples 7,975 ( rate 10.0% ) error 0.521 time average: 287ms 52µs 539ns total: 38m 9s 244ms
-Generation 28 score 0.46736331084399013 (avg: 0.4671) error 0.5324293501585371 time 1m 29s 974ms
-Training 7f025436 samples 8,181 ( rate 10.0% ) error 0.522 time average: 287ms 169µs 416ns total: 39m 9s 333ms
-Training 7f025436 samples 8,479 ( rate 10.0% ) error 0.521 time average: 284ms 158µs 627ns total: 40m 9s 381ms
-Generation 29 score 0.46736331084399013 (avg: 0.4673) error 0.5324293501585371 time 1m 30s 633ms
-Training 7f025436 samples 8,664 ( rate 10.0% ) error 0.521 time average: 285ms 31µs 394ns total: 41m 9s 512ms
-Generation 30 score 0.46736331084399013 (avg: 0.4673) error 0.5324293501585371 time 1m 27s 838ms
-Training 7f025436 samples 8,832 ( rate 10.0% ) error 0.521 time average: 286ms 411µs 118ns total: 42m 9s 583ms
-Training 7f025436 timed out after 42m 9s 583ms
-Training 7f025436 completed after 42m 9s 698ms
-Training 7f025436 compacted
-Generation 31 score 0.46736331084399013 (avg: 0.4591) error 0.5324293501585371 time 1m 36s 271ms
-Waiting for additional generation
-Compact 7f025436 Score: 0.4673612898268243, Error: 0.5324313589906399 -> 0.5324315411757018, 👿 -1.82e-7
-Trained 7f025436 Score: 0.46734790270927046, Error: 0.5324313589906399 -> 0.5324447782932565, 👿 -0.0000134
-Generation 32 score 0.46736331084399013 (avg: 0.4674) error 0.5324293501585371 time 1m 22s 608ms
-Evolution of 32 generations in 47m 14s, averaging 1m 28s 550ms
-[13:00:01] 📦 checkin-sample.sh on host Mac-Ultra-M2
-From github.com:stSoftwareAU/GRQ-sampler
-   eb00026..5ddb906  main       -> origin/main
-Updating eb00026..5ddb906
-Fast-forward
- TacitKnowledge/hive.json |    11 +-
- samples/GRQ-10-1.json    | 86354 ++++++++++++++++++++++++++++++++++++++++++++
- samples/GRQ-12-1.json    |    10 +-
- samples/GRQ-13-1.json    | 86399 +++++++++++++++++++++++++++++++++++++++++++++
- samples/GRQ-15-1.json    | 86360 ++++++++++++++++++++++++++++++++++++++++++++
- samples/GRQ-16-1.json    |   132 +-
- samples/GRQ-19-1.json    |   180 +-
- samples/GRQ-21-1.json    | 86360 ++++++++++++++++++++++++++++++++++++++++++++
- 8 files changed, 345661 insertions(+), 145 deletions(-)
- create mode 100644 samples/GRQ-10-1.json
- create mode 100644 samples/GRQ-13-1.json
- create mode 100644 samples/GRQ-15-1.json
- create mode 100644 samples/GRQ-21-1.json
-[13:00:05] ✅ Committing 🦠 Mac-Ultra-M2 🎯, Score: 0.467363
-[main 1a0c363] 🦠 Mac-Ultra-M2 🎯, Score: 0.467363, Neurons: 504 & Synapses: 15,702
- 1 file changed, 92 insertions(+), 35 deletions(-)
-To github.com:stSoftwareAU/GRQ-sampler.git
-   5ddb906..1a0c363  main -> main
-📥 Pulling GRQ-health with --ours strategy...
-From github.com:stSoftwareAU/GRQ-health
-   3971c51..51fe09d  Develop    -> origin/Develop
++ break
++ [[ 1 -gt 3 ]]
++ cd ..
++ [[ ! -d GRQ-portfolio ]]
++ touch /Users/nigelleck/src/GRQ/worker/shared/../../.run.pid
++ cleanup_on_exit
++ [[ -d .git ]]
+Starting ... Wed Aug  6 20:44:17 AEST 2025
+Cluster mode
++++ dirname shared/git_pull.sh
+++ cd -P shared
+++ pwd -P
++ BASE_DIR=/Users/nigelleck/src/GRQ/worker/shared
++ cd /Users/nigelleck/src/GRQ/worker/shared/../../..
++ trap cleanup_on_exit EXIT
++ trap 'echo "🚨 Script interrupted - cleaning up..."; cleanup_on_exit; exit 1' SIGINT SIGTERM
++ REPO=GRQ-shareprices2025Q1
++ [[ -z GRQ-shareprices2025Q1 ]]
++ [[ ! GRQ-shareprices2025Q1 =~ ^[a-zA-Z0-9_-]+$ ]]
+++ date +%s
++ START_TIME=1754477057
++ MAX_ATTEMPTS=3
++ attempts=1
++ [[ -d GRQ-shareprices2025Q1 ]]
++ cd GRQ-shareprices2025Q1
++ [[ 1 -le 3 ]]
++ [[ 1 -gt 1 ]]
++ echo '📥 Pulling GRQ-shareprices2025Q1 with --ours strategy...'
+📥 Pulling GRQ-shareprices2025Q1 with --ours strategy...
++ git fetch origin
+++ git rev-parse --abbrev-ref HEAD
++ CURRENT_BRANCH=Develop
++ [[ Develop == \H\E\A\D ]]
++ git ls-remote --heads origin Develop
++ grep -q Develop
++ has_local_changes=false
++ has_untracked_files=false
++ git diff-index --quiet HEAD
+++ git ls-files --others --exclude-standard
++ [[ -n '' ]]
++ [[ false == \f\a\l\s\e ]]
++ [[ false == \f\a\l\s\e ]]
++ echo '📦 No local changes or untracked files - checking remote state'
 📦 No local changes or untracked files - checking remote state
-🔄 Resetting to remote state (commit: 51fe09de)
-HEAD is now at 51fe09d Update health status for GRQ-7 at Wed 06 Aug 2025 12:41:23 AEST
+++ git ls-remote --heads origin Develop
+++ awk '{print $1}'
+++ head -1
++ remote_commit=d0b6ec0114da189dbbd5965ce5e04eb4b1eae2b8
++ [[ -n d0b6ec0114da189dbbd5965ce5e04eb4b1eae2b8 ]]
++ echo '🔄 Resetting to remote state (commit: d0b6ec01)'
+🔄 Resetting to remote state (commit: d0b6ec01)
++ set +e
++ git reset --hard d0b6ec0114da189dbbd5965ce5e04eb4b1eae2b8
+HEAD is now at d0b6ec0114 Refresh of history on GRQ-11@2025-08-06
++ reset_status=0
++ set -e
++ [[ 0 -eq 0 ]]
++ git clean -fd
++ echo '✅ Successfully reset to remote state - all models updated by another machine'
 ✅ Successfully reset to remote state - all models updated by another machine
-✅ GRQ-health pull succeeded in 8 seconds
+++ date +%s
++ echo '✅ GRQ-shareprices2025Q1 pull succeeded in 7 seconds'
+✅ GRQ-shareprices2025Q1 pull succeeded in 7 seconds
++ break
++ [[ 1 -gt 3 ]]
++ cd ..
++ [[ ! -d GRQ-shareprices2025Q1 ]]
++ touch /Users/nigelleck/src/GRQ/worker/shared/../../.run.pid
++ cleanup_on_exit
++ [[ -d .git ]]
++++ dirname shared/git_pull.sh
+++ cd -P shared
+++ pwd -P
++ BASE_DIR=/Users/nigelleck/src/GRQ/worker/shared
++ cd /Users/nigelleck/src/GRQ/worker/shared/../../..
++ trap cleanup_on_exit EXIT
++ trap 'echo "🚨 Script interrupted - cleaning up..."; cleanup_on_exit; exit 1' SIGINT SIGTERM
++ REPO=GRQ-companyreports
++ [[ -z GRQ-companyreports ]]
++ [[ ! GRQ-companyreports =~ ^[a-zA-Z0-9_-]+$ ]]
+++ date +%s
++ START_TIME=1754477064
++ MAX_ATTEMPTS=3
++ attempts=1
++ [[ -d GRQ-companyreports ]]
++ cd GRQ-companyreports
++ [[ 1 -le 3 ]]
++ [[ 1 -gt 1 ]]
++ echo '📥 Pulling GRQ-companyreports with --ours strategy...'
+📥 Pulling GRQ-companyreports with --ours strategy...
++ git fetch origin
+++ git rev-parse --abbrev-ref HEAD
++ CURRENT_BRANCH=Develop
++ [[ Develop == \H\E\A\D ]]
++ git ls-remote --heads origin Develop
++ grep -q Develop
++ has_local_changes=false
++ has_untracked_files=false
++ git diff-index --quiet HEAD
+++ git ls-files --others --exclude-standard
++ [[ -n '' ]]
++ [[ false == \f\a\l\s\e ]]
++ [[ false == \f\a\l\s\e ]]
++ echo '📦 No local changes or untracked files - checking remote state'
+📦 No local changes or untracked files - checking remote state
+++ git ls-remote --heads origin Develop
+++ awk '{print $1}'
+++ head -1
++ remote_commit=0c1225603ad7b68b4c485fa0abf24d44d3ebfd2d
++ [[ -n 0c1225603ad7b68b4c485fa0abf24d44d3ebfd2d ]]
++ echo '🔄 Resetting to remote state (commit: 0c122560)'
+🔄 Resetting to remote state (commit: 0c122560)
++ set +e
++ git reset --hard 0c1225603ad7b68b4c485fa0abf24d44d3ebfd2d
+HEAD is now at 0c1225603ad Refresh of history on GRQ-11@2025-08-06
++ reset_status=0
++ set -e
++ [[ 0 -eq 0 ]]
++ git clean -fd
++ echo '✅ Successfully reset to remote state - all models updated by another machine'
+✅ Successfully reset to remote state - all models updated by another machine
+++ date +%s
++ echo '✅ GRQ-companyreports pull succeeded in 8 seconds'
+✅ GRQ-companyreports pull succeeded in 8 seconds
++ break
++ [[ 1 -gt 3 ]]
++ cd ..
++ [[ ! -d GRQ-companyreports ]]
++ touch /Users/nigelleck/src/GRQ/worker/shared/../../.run.pid
++ cleanup_on_exit
++ [[ -d .git ]]
+Difference between cluster score 0.4674 & worker score 0.4675 is 1
+Evolution score 0.4674 -> 0.4675 {diff 1} on Mac-Ultra-M2
+[main d7f0422] Evolution score 0.4674 -> 0.4675 {diff 1} on Mac-Ultra-M2
+ 3 files changed, 302 insertions(+), 107 deletions(-)
+To github.com:stSoftwareAU/GRQ-cluster.git
+   da1b999..d7f0422  main -> main
++++ dirname /Users/nigelleck/src/GRQ/worker/shared/git_pull.sh
+++ cd -P /Users/nigelleck/src/GRQ/worker/shared
+++ pwd -P
++ BASE_DIR=/Users/nigelleck/src/GRQ/worker/shared
++ cd /Users/nigelleck/src/GRQ/worker/shared/../../..
++ trap cleanup_on_exit EXIT
++ trap 'echo "🚨 Script interrupted - cleaning up..."; cleanup_on_exit; exit 1' SIGINT SIGTERM
++ REPO=GRQ-portfolio
++ [[ -z GRQ-portfolio ]]
++ [[ ! GRQ-portfolio =~ ^[a-zA-Z0-9_-]+$ ]]
+++ date +%s
++ START_TIME=1754477075
++ MAX_ATTEMPTS=3
++ attempts=1
++ [[ -d GRQ-portfolio ]]
++ cd GRQ-portfolio
++ [[ 1 -le 3 ]]
++ [[ 1 -gt 1 ]]
++ echo '📥 Pulling GRQ-portfolio with --ours strategy...'
+📥 Pulling GRQ-portfolio with --ours strategy...
++ git fetch origin
+++ git rev-parse --abbrev-ref HEAD
++ CURRENT_BRANCH=main
++ [[ main == \H\E\A\D ]]
++ git ls-remote --heads origin main
++ grep -q main
++ has_local_changes=false
++ has_untracked_files=false
++ git diff-index --quiet HEAD
+++ git ls-files --others --exclude-standard
++ [[ -n '' ]]
++ [[ false == \f\a\l\s\e ]]
++ [[ false == \f\a\l\s\e ]]
++ echo '📦 No local changes or untracked files - checking remote state'
+📦 No local changes or untracked files - checking remote state
+++ git ls-remote --heads origin main
+++ awk '{print $1}'
+++ head -1
++ remote_commit=6efea1f5d5d08c894fc2de8f8eddc96c4ce457b5
++ [[ -n 6efea1f5d5d08c894fc2de8f8eddc96c4ce457b5 ]]
++ echo '🔄 Resetting to remote state (commit: 6efea1f5)'
+🔄 Resetting to remote state (commit: 6efea1f5)
++ set +e
++ git reset --hard 6efea1f5d5d08c894fc2de8f8eddc96c4ce457b5
+HEAD is now at 6efea1f5d REJECTED 38.66% -> 29.83% Delta -8.831
++ reset_status=0
++ set -e
++ [[ 0 -eq 0 ]]
++ git clean -fd
++ echo '✅ Successfully reset to remote state - all models updated by another machine'
+✅ Successfully reset to remote state - all models updated by another machine
+++ date +%s
++ echo '✅ GRQ-portfolio pull succeeded in 8 seconds'
+✅ GRQ-portfolio pull succeeded in 8 seconds
++ break
++ [[ 1 -gt 3 ]]
++ cd ..
++ [[ ! -d GRQ-portfolio ]]
++ touch /Users/nigelleck/src/GRQ/worker/shared/../../.run.pid
++ cleanup_on_exit
++ [[ -d .git ]]
+Already up to date.
+Dejon Smitham (Observations: 1,486, Neurons: 502, Synapses: 15,710 & Score: 0.467)
+7 mutations, mutation rate 50.0%, elitism 3, mutation FFW, selection TOURNAMENT, timeout 45, PopSize 20
+Initialized in 1s 259ms
+Training 90944bde scheduled
+Training 90944bde with 494 binary files, target error: 0.002, iterations: 1, sample rate: 10.0%, sparse: 5.0%
+Fine tuning increased fitness by 0.00006463788123584058 to 0.46754200468892826 adjusted 4 weights, 1 bias Restored: 19
+Generation 1 score 0.46754200468892826 (avg: 0.3916) error 0.5322506763135872 time 1m 43s 538ms
+Training 90944bde samples 238 ( rate 10.0% ) error 0.505 time average: 252ms 407µs 563ns total: 1m 73ms
+Generation 2 score 0.46754200468892826 (avg: 0.4675) error 0.5322506763135872 time 1m 22s 706ms
+Training 90944bde samples 474 ( rate 10.0% ) error 0.457 time average: 254ms 48µs 523ns total: 2m 419ms
+Generation 3 score 0.46754200468892826 (avg: 0.4675) error 0.5322506763135872 time 1m 25s 441ms
+Training 90944bde samples 706 ( rate 10.0% ) error 0.481 time average: 256ms 109µs 65ns total: 3m 813ms
+Training 90944bde samples 909 ( rate 10.0% ) error 0.492 time average: 265ms 229µs 923ns total: 4m 1s 94ms
+Generation 4 score 0.46754200468892826 (avg: 0.4675) error 0.5322506763135872 time 1m 26s 32ms
+Training 90944bde samples 1,192 ( rate 10.0% ) error 0.510 time average: 252ms 670µs 302ns total: 5m 1s 183ms
+Training 90944bde samples 1,321 ( rate 10.0% ) error 0.492 time average: 273ms 964µs 420ns total: 6m 1s 907ms
+Fine tuning increased fitness by 0.000006832360677500038 to 0.46754883704960576 adjusted 4 weights, 1 bias Restored: 1
+Generation 5 score 0.46754883704960576 (avg: 0.4666) error 0.5322438439529097 time 1m 44s 336ms
+Training 90944bde samples 1,510 ( rate 10.0% ) error 0.485 time average: 279ms 670µs 198ns total: 7m 2s 302ms
+Fine tuning increased fitness by 0.0000013279048883263478 to 0.4675501649544941 adjusted 4 weights, 1 bias Restored: 1
+Generation 6 score 0.4675501649544941 (avg: 0.4672) error 0.5322425160480213 time 1m 25s 185ms
+Training 90944bde samples 1,726 ( rate 10.0% ) error 0.499 time average: 279ms 870µs 799ns total: 8m 3s 57ms
+Fine tuning increased fitness by 1.3872847315354875e-8 to 0.4675501788273414 adjusted 4 weights, 1 bias Restored: 1
+Generation 7 score 0.4675501788273414 (avg: 0.4675) error 0.532242502175174 time 1m 22s 749ms
+Training 90944bde samples 1,930 ( rate 10.0% ) error 0.499 time average: 281ms 385µs 492ns total: 9m 3s 74ms
+Training 90944bde samples 2,155 ( rate 10.0% ) error 0.514 time average: 280ms 47µs 331ns total: 10m 3s 502ms
+Fine tuning increased fitness by 8.127421013970348e-8 to 0.46755026010155154 adjusted 4 weights, 1 bias Restored: 1
+Generation 8 score 0.46755026010155154 (avg: 0.4672) error 0.5322424209009639 time 1m 22s 728ms
+Training 90944bde samples 2,340 ( rate 10.0% ) error 0.511 time average: 283ms 662µs 820ns total: 11m 3s 771ms
+Fine tuning increased fitness by 1.3424723621646706e-7 to 0.46755039434878776 adjusted 4 weights, 1 bias Restored: 1
+Generation 9 score 0.46755039434878776 (avg: 0.4675) error 0.5322422866537276 time 1m 25s 382ms
+Training 90944bde samples 2,549 ( rate 10.0% ) error 0.508 time average: 283ms 988µs 623ns total: 12m 3s 887ms
+Training 90944bde samples 2,793 ( rate 10.0% ) error 0.497 time average: 280ms 688µs 148ns total: 13m 3s 962ms
+Generation 10 score 0.46755039434878776 (avg: 0.4675) error 0.5322422866537276 time 1m 25s 356ms
+Training 90944bde samples 2,973 ( rate 10.0% ) error 0.500 time average: 283ms 894µs 382ns total: 14m 4s 18ms
+Generation 11 score 0.46755039434878776 (avg: 0.4674) error 0.5322422866537276 time 1m 41s 15ms
+Training 90944bde samples 3,143 ( rate 10.0% ) error 0.500 time average: 287ms 672µs 605ns total: 15m 4s 155ms
+Training 90944bde samples 3,402 ( rate 10.0% ) error 0.495 time average: 283ms 467µs 372ns total: 16m 4s 356ms
+Generation 12 score 0.46755039434878776 (avg: 0.4675) error 0.5322422866537276 time 1m 24s 298ms
+Training 90944bde samples 3,633 ( rate 10.0% ) error 0.495 time average: 282ms 131µs 571ns total: 17m 4s 984ms
+Fine tuning increased fitness by 4.463893144013298e-9 to 0.4675503988126809 adjusted 1 weight Restored: 1
+Generation 13 score 0.4675503988126809 (avg: 0.4674) error 0.5322422721898347 time 1m 25s 316ms
+Training 90944bde samples 3,784 ( rate 10.0% ) error 0.489 time average: 286ms 809µs 460ns total: 18m 5s 287ms
+Fine tuning increased fitness by 1.8830337289443833e-10 to 0.4675503990009843 adjusted 1 weight Restored: 1
+Generation 14 score 0.4675503990009843 (avg: 0.4675) error 0.5322422720015313 time 1m 21s 882ms
+Training 90944bde samples 4,011 ( rate 10.0% ) error 0.495 time average: 285ms 598µs 354ns total: 19m 5s 535ms
+Training 90944bde samples 4,184 ( rate 10.0% ) error 0.496 time average: 288ms 173µs 518ns total: 20m 5s 718ms
+Fine tuning increased fitness by 2.763266282457266e-10 to 0.4675503992773109 adjusted 1 weight Restored: 1
+Generation 15 score 0.4675503992773109 (avg: 0.4511) error 0.5322422717252047 time 1m 28s 22ms
+Training 90944bde samples 4,396 ( rate 10.0% ) error 0.493 time average: 287ms 931µs 73ns total: 21m 5s 745ms
+Fine tuning increased fitness by 3.692545158529015e-10 to 0.4675503996465654 adjusted 1 weight Restored: 1
+Generation 16 score 0.4675503996465654 (avg: 0.4408) error 0.5322422713559501 time 1m 27s 253ms
+Training 90944bde samples 4,592 ( rate 10.0% ) error 0.492 time average: 288ms 726µs 698ns total: 22m 5s 833ms
+Training 90944bde samples 4,814 ( rate 10.0% ) error 0.495 time average: 287ms 985µs 43ns total: 23m 6s 360ms
+Fine tuning increased fitness by 1.2923426329081167e-8 to 0.46755041256999175 adjusted 1 weight Restored: 1
+Generation 17 score 0.46755041256999175 (avg: 0.4376) error 0.5322422584325238 time 1m 29s 192ms
+Training 90944bde samples 4,963 ( rate 10.0% ) error 0.495 time average: 291ms 513µs 197ns total: 24m 6s 780ms
+Generation 18 score 0.46755041256999175 (avg: 0.4675) error 0.5322422584325238 time 1m 37s 403ms
+Training 90944bde samples 5,165 ( rate 10.0% ) error 0.501 time average: 291ms 780µs 638ns total: 25m 7s 47ms
+Training 90944bde samples 5,360 ( rate 10.0% ) error 0.501 time average: 292ms 390µs 111ns total: 26m 7s 211ms
+Generation 19 score 0.46755041256999175 (avg: 0.4674) error 0.5322422584325238 time 1m 25s 178ms
+Training 90944bde samples 5,542 ( rate 10.0% ) error 0.499 time average: 293ms 734µs 31ns total: 27m 7s 874ms
+Generation 20 score 0.46755041256999175 (avg: 0.4674) error 0.5322422584325238 time 1m 21s 854ms
+Training 90944bde samples 5,750 ( rate 10.0% ) error 0.498 time average: 293ms 556µs 695ns total: 28m 7s 951ms
+Training 90944bde samples 5,932 ( rate 10.0% ) error 0.501 time average: 294ms 705µs 495ns total: 29m 8s 193ms
+Generation 21 score 0.46755041256999175 (avg: 0.4672) error 0.5322422584325238 time 1m 26s 526ms
+Training 90944bde samples 6,134 ( rate 10.0% ) error 0.503 time average: 294ms 791µs 1ns total: 30m 8s 248ms
+Generation 22 score 0.46755041256999175 (avg: 0.4675) error 0.5322422584325238 time 1m 25s 453ms
+Training 90944bde samples 6,434 ( rate 10.0% ) error 0.509 time average: 290ms 412µs 340ns total: 31m 8s 513ms
+Generation 23 score 0.46755041256999175 (avg: 0.4675) error 0.5322422584325238 time 1m 24s 966ms
+Training 90944bde samples 6,706 ( rate 10.0% ) error 0.515 time average: 287ms 620µs 41ns total: 32m 8s 780ms
+Training 90944bde samples 6,892 ( rate 10.0% ) error 0.517 time average: 288ms 577µs 916ns total: 33m 8s 879ms
+Generation 24 score 0.46755041256999175 (avg: 0.4674) error 0.5322422584325238 time 1m 41s 169ms
+Training 90944bde samples 7,058 ( rate 10.0% ) error 0.516 time average: 290ms 347µs 407ns total: 34m 9s 272ms
+Training 90944bde samples 7,244 ( rate 10.0% ) error 0.518 time average: 291ms 211µs 761ns total: 35m 9s 538ms
+Generation 25 score 0.46755041256999175 (avg: 0.4675) error 0.5322422584325238 time 1m 25s 769ms
+Training 90944bde samples 7,464 ( rate 10.0% ) error 0.516 time average: 290ms 680µs 198ns total: 36m 9s 637ms
+Generation 26 score 0.46755041256999175 (avg: 0.4674) error 0.5322422584325238 time 1m 20s 898ms
+Training 90944bde samples 7,650 ( rate 10.0% ) error 0.512 time average: 291ms 483µs 268ns total: 37m 9s 847ms
+Generation 27 score 0.46755041256999175 (avg: 0.4674) error 0.5322422584325238 time 1m 25s 361ms
+Training 90944bde samples 7,864 ( rate 10.0% ) error 0.512 time average: 291ms 222µs 24ns total: 38m 10s 170ms
+Training 90944bde samples 8,089 ( rate 10.0% ) error 0.512 time average: 290ms 552µs 107ns total: 39m 10s 276ms
+Generation 28 score 0.46755041256999175 (avg: 0.4675) error 0.5322422584325238 time 1m 23s 508ms
+Training 90944bde samples 8,309 ( rate 10.0% ) error 0.515 time average: 290ms 126µs 850ns total: 40m 10s 664ms
+Generation 29 score 0.46755041256999175 (avg: 0.4674) error 0.5322422584325238 time 1m 25s 665ms
+Training 90944bde samples 8,499 ( rate 10.0% ) error 0.518 time average: 290ms 751µs 500ns total: 41m 11s 97ms
+Training 90944bde samples 8,626 ( rate 10.0% ) error 0.521 time average: 293ms 497µs 217ns total: 42m 11s 707ms
+Generation 30 score 0.46755041256999175 (avg: 0.4675) error 0.5322422584325238 time 1m 41s 726ms
+Training 90944bde samples 8,908 ( rate 10.0% ) error 0.523 time average: 290ms 958µs 239ns total: 43m 11s 856ms
+Training 90944bde timed out after 43m 11s 856ms
+Training 90944bde completed after 43m 11s 962ms
+Training 90944bde compacted
+Generation 31 score 0.46755041256999175 (avg: 0.4675) error 0.5322422584325238 time 1m 25s 318ms
+Waiting for additional generation
+Compact 90944bde Score: 0.46751260827762253, Error: 0.5322506763135872 -> 0.532280232724892, 👿 -0.0000296
+Trained 90944bde Score: 0.4675038367614901, Error: 0.5322506763135872 -> 0.5322888442410254, 👿 -0.0000382
+Generation 32 score 0.46755041256999175 (avg: 0.4674) error 0.5322422584325238 time 1m 22s 342ms
+Evolution of 32 generations in 47m 7s, averaging 1m 28s 347ms
+[21:31:55] 📦 checkin-sample.sh on host Mac-Ultra-M2
+From github.com:stSoftwareAU/GRQ-sampler
+   a451273..7e451a2  main       -> origin/main
+Updating a451273..7e451a2
+Fast-forward
+ TacitKnowledge/hive.json |     2 +-
+ samples/GRQ-10-1.json    |   244 +-
+ samples/GRQ-11-1.json    | 18965 ++++++++--
+ samples/GRQ-12-1.json    |    20 +-
+ samples/GRQ-13-1.json    |   217 +-
+ samples/GRQ-16-1.json    | 86440 +++++++++++++++++++++++++++++++++++++++++++++
+ samples/GRQ-18-1.json    |   297 +-
+ samples/GRQ-19-1.json    |   184 +-
+ samples/GRQ-21-1.json    |   287 +-
+ samples/GRQ-24-1.json    |    48 +-
+ 10 files changed, 103233 insertions(+), 3471 deletions(-)
+ create mode 100644 samples/GRQ-16-1.json
+[21:31:59] ✅ Committing 🦠 Mac-Ultra-M2 🎯, Score: 0.467550
+[main 76cd00d] 🦠 Mac-Ultra-M2 🎯, Score: 0.467550, Neurons: 503 & Synapses: 15,711
+ 1 file changed, 109 insertions(+), 186 deletions(-)
+To github.com:stSoftwareAU/GRQ-sampler.git
+   7e451a2..76cd00d  main -> main
++++ dirname shared/git_pull.sh
+++ cd -P shared
+++ pwd -P
++ BASE_DIR=/Users/nigelleck/src/GRQ/worker/shared
++ cd /Users/nigelleck/src/GRQ/worker/shared/../../..
++ trap cleanup_on_exit EXIT
++ trap 'echo "🚨 Script interrupted - cleaning up..."; cleanup_on_exit; exit 1' SIGINT SIGTERM
++ REPO=GRQ-health
++ [[ -z GRQ-health ]]
++ [[ ! GRQ-health =~ ^[a-zA-Z0-9_-]+$ ]]
+++ date +%s
++ START_TIME=1754479921
++ MAX_ATTEMPTS=3
++ attempts=1
++ [[ -d GRQ-health ]]
++ cd GRQ-health
++ [[ 1 -le 3 ]]
++ [[ 1 -gt 1 ]]
++ echo '📥 Pulling GRQ-health with --ours strategy...'
+📥 Pulling GRQ-health with --ours strategy...
++ git fetch origin
+From github.com:stSoftwareAU/GRQ-health
+   b7335ad..651f24b  Develop    -> origin/Develop
+++ git rev-parse --abbrev-ref HEAD
++ CURRENT_BRANCH=Develop
++ [[ Develop == \H\E\A\D ]]
++ git ls-remote --heads origin Develop
++ grep -q Develop
++ has_local_changes=false
++ has_untracked_files=false
++ git diff-index --quiet HEAD
+++ git ls-files --others --exclude-standard
++ [[ -n '' ]]
++ [[ false == \f\a\l\s\e ]]
++ [[ false == \f\a\l\s\e ]]
++ echo '📦 No local changes or untracked files - checking remote state'
+📦 No local changes or untracked files - checking remote state
+++ git ls-remote --heads origin Develop
+++ head -1
+++ awk '{print $1}'
++ remote_commit=651f24b69bf8d186382af33b038903ae9d212b2c
++ [[ -n 651f24b69bf8d186382af33b038903ae9d212b2c ]]
++ echo '🔄 Resetting to remote state (commit: 651f24b6)'
+🔄 Resetting to remote state (commit: 651f24b6)
++ set +e
++ git reset --hard 651f24b69bf8d186382af33b038903ae9d212b2c
+HEAD is now at 651f24b Enhance machine type validation in run.sh to ensure accurate system information. Added checks to sanitize and validate the machine type string, setting a fallback to "Unknown" if the result is empty or corrupted.
++ reset_status=0
++ set -e
++ [[ 0 -eq 0 ]]
++ git clean -fd
++ echo '✅ Successfully reset to remote state - all models updated by another machine'
+✅ Successfully reset to remote state - all models updated by another machine
+++ date +%s
++ echo '✅ GRQ-health pull succeeded in 7 seconds'
+✅ GRQ-health pull succeeded in 7 seconds
++ break
++ [[ 1 -gt 3 ]]
++ cd ..
++ [[ ! -d GRQ-health ]]
++ touch /Users/nigelleck/src/GRQ/worker/shared/../../.run.pid
++ cleanup_on_exit
++ [[ -d .git ]]
 Updating health information...
 Updated health information for Mac-Ultra-M2
