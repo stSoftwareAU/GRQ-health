@@ -17,7 +17,7 @@ cd "${BASE_DIR}"
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=4
 HEALTHY_THRESHOLD_HOURS=12
-VERSION="1.0.3"
+VERSION="1.0.4"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -571,6 +571,14 @@ should_update() {
         return 0
     fi
     
+    # If the recorded script version doesn't match current VERSION, update immediately
+    local recorded_version
+    recorded_version=$(jq -r ".\"$HOSTNAME\".version // \"\"" "$JSON_FILE" 2>/dev/null || echo "")
+    if [ "$recorded_version" != "$VERSION" ]; then
+        echo "Version mismatch for $HOSTNAME (found '$recorded_version', current '$VERSION') - updating"
+        return 0
+    fi
+
     # If there are exceptions in the log, update regardless of heartbeat
     # Use the same parsing logic as in get_system_info to count exceptions
     local exception_count=0
