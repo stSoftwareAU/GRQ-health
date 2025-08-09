@@ -15,8 +15,9 @@ cd "${BASE_DIR}"
 
 # Configuration
 JSON_FILE="docs/index.json"
-HEARTBEAT_THRESHOLD_HOURS=8
-HEALTHY_THRESHOLD_HOURS=24
+HEARTBEAT_THRESHOLD_HOURS=4
+HEALTHY_THRESHOLD_HOURS=12
+VERSION="1.0.1"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -582,15 +583,19 @@ update_json() {
 
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
+           --arg version "$VERSION" \
            --argjson info "$system_info" \
-           '.[$host] = ((.[$host] // {}) + $info | .heart_beat_ts = ($ts | tonumber))' \
+           '.[$host] = ((.[$host] // {}) + $info
+             | .heart_beat_ts = ($ts | tonumber)
+             | .version = $version)' \
            "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
         # Create new file
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
+           --arg version "$VERSION" \
            --argjson info "$system_info" \
-           '{($host): ($info + {"heart_beat_ts": ($ts | tonumber)})}' \
+           '{($host): ($info + {"heart_beat_ts": ($ts | tonumber), "version": $version})}' \
            > "$JSON_FILE"
     fi
     # Clean up tmp backup
