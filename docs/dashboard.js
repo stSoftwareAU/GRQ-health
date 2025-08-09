@@ -272,6 +272,7 @@ function createHostCard(hostname, data) {
                     <h5 class="mb-0 d-flex align-items-center">
                         ${emoji} ${hostname}
                         ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}
+                        ${data.version ? `<small class="text-muted ms-2" title="Health script version">v${data.version}</small>` : ''}
                     </h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
                 </div>
@@ -565,12 +566,12 @@ function updateHostCard(hostname, data) {
         hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}${outdatedMacClass}`;
         hostCard.setAttribute('data-status', healthStatus);
         
-        // Update hostname with machine type badge if needed
+        // Update hostname with machine type badge and version if needed
         const hostnameElement = hostCard.querySelector('h5.mb-0');
         if (hostnameElement) {
             const emoji = hostCard.querySelector('h5.mb-0').textContent.match(/^[^\s]+/)?.[0] || '';
             hostnameElement.className = 'mb-0 d-flex align-items-center';
-            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}`;
+            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}${data.version ? `<small class="text-muted ms-2" title="Health script version">v${data.version}</small>` : ''}`;
         }
         
         // Update OS version display with update badge if needed
