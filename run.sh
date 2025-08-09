@@ -17,7 +17,7 @@ cd "${BASE_DIR}"
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=4
 HEALTHY_THRESHOLD_HOURS=12
-VERSION="1.0.2"
+VERSION="1.0.3"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -525,6 +525,18 @@ get_system_info() {
         exception_summary="No log file found"
     fi
     
+    # Check GRQ environment configuration
+    config_warning=""
+    ENV_FILE="$BASE_DIR/../GRQ/.env"
+    if [ -f "$ENV_FILE" ]; then
+        # Check for presence of at least one required variable
+        if ! grep -Eq '^[[:space:]]*(PRIMARY_READ_URL|TRAINING_WRITE_URL)[[:space:]]*=' "$ENV_FILE"; then
+            config_warning="Missing PRIMARY_READ_URL or TRAINING_WRITE_URL in ../GRQ/.env"
+        fi
+    else
+        config_warning="Missing ../GRQ/.env"
+    fi
+    
     # Ensure uptime_sec is a number
     if [[ ! "$uptime_sec" =~ ^[0-9]+$ ]]; then
         uptime_sec=0
@@ -535,7 +547,7 @@ get_system_info() {
         machine_type="Unknown"
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"machine_type\": \"$machine_type\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"machine_type\": \"$machine_type\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\", \"config_warning\": \"$config_warning\"}"
 }
 
 # Function to check if we need to update
