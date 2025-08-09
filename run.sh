@@ -17,7 +17,7 @@ cd "${BASE_DIR}"
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=4
 HEALTHY_THRESHOLD_HOURS=12
-VERSION="1.0.1"
+VERSION="1.0.2"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -559,6 +559,23 @@ should_update() {
         return 0
     fi
     
+    # If there are exceptions in the log, update regardless of heartbeat
+    # Use the same parsing logic as in get_system_info to count exceptions
+    local exception_count=0
+    local log_file="$HOME/logs/node.log"
+    if [ -f "$log_file" ]; then
+        exception_count=$(grep -B1 "^[[:space:]]\+at " "$log_file" \
+            | grep -v "^[[:space:]]\+at " \
+            | grep -v "^--$" \
+            | grep -E "Exception|Error|MEMETIC" \
+            | wc -l 2>/dev/null \
+            | tr -d ' \n' || echo "0")
+    fi
+    if [ "$exception_count" -gt 0 ]; then
+        echo "Exceptions detected ($exception_count) - updating regardless of last heartbeat time"
+        return 0
+    fi
+
     local last_heartbeat=$(jq -r ".\"$HOSTNAME\".heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
     local hours_since_last=$(( (CURRENT_TS - last_heartbeat) / 3600 ))
     if [ $hours_since_last -ge $HEARTBEAT_THRESHOLD_HOURS ]; then
