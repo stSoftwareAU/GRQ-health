@@ -62,6 +62,11 @@ function getHealthStatus(_hostname, data) {
             return 'warning';
         }
         
+        // Config warning (missing PRIMARY_READ_URL or TRAINING_WRITE_URL)
+        if (data.config_warning && data.config_warning.trim().length > 0) {
+            return 'warning';
+        }
+        
         // CPU utilization warning (under 20% for multi-core systems) - indicates potential training issues
         // Low CPU usage on multi-core systems might indicate single-threaded training or stuck processes
         if (data.cpu_load && data.cpu_cores) {
@@ -319,6 +324,7 @@ function createHostCard(hostname, data) {
                         <div class="fw-bold">${data.timezone}</div>
                     </div>
                 </div>
+                ${data.config_warning ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Config</small><div class="fw-bold text-warning">${data.config_warning}</div></div></div>` : ''}
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
                 <div class="text-end mt-2">
@@ -433,6 +439,10 @@ function updateStats(hosts) {
             let warningReason = '';
             if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
                 warningReason += `High disk usage: ${data.used_disk_percent}%`;
+            }
+            if (data.config_warning) {
+                if (warningReason) warningReason += ', ';
+                warningReason += data.config_warning;
             }
             if (data.cpu_load && data.cpu_cores) {
                 const cpuPercent = parseFloat(data.cpu_load.replace('%', ''));
