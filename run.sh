@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.6"
+VERSION="1.0.7"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -506,19 +506,51 @@ get_system_info() {
     if [ -f "$log_file" ]; then
         # Count actual exceptions by looking for error messages that precede stack traces
         # Each exception starts with an error message, followed by stack trace lines
-        exception_count=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Count other critical errors that should be flagged
+        # Missing commands/tools (excluding aws which is only expected on Macs)
+        # Focus on missing script files which indicate configuration issues
+        missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Lock acquisition failures (removed - these are expected for daily tasks)
+        lock_failures=0
+        
+        # Permission/access errors
+        permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Network/connection errors
+        network_errors=$(grep -E "Connection refused|timeout|network unreachable" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Sum all error types
+        exception_count=$((stack_trace_exceptions + missing_command_errors + lock_failures + permission_errors + network_errors))
         
         # If we found exceptions, get more details
         if [ "$exception_count" -gt 0 ]; then
-            # Count unique error types by looking at the line before each stack trace
-            # Extract just the error type (Exception, Error, MEMETIC, etc.)
-            error_types=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -o -E "(Exception|Error|MEMETIC)" | sort | uniq -c | tr '\n' ' ' | sed 's/ *$//' 2>/dev/null | tr -d '\n' || echo "")
-            exception_summary="${exception_count} exceptions found"
-            if [ -n "$error_types" ]; then
-                exception_summary="${exception_summary} (${error_types})"
+            # Build detailed error summary
+            error_details=""
+            if [ "$stack_trace_exceptions" -gt 0 ]; then
+                error_details="${error_details}${stack_trace_exceptions} stack traces"
             fi
+            if [ "$missing_command_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${missing_command_errors} missing commands"
+            fi
+            if [ "$lock_failures" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${lock_failures} lock failures"
+            fi
+            if [ "$permission_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${permission_errors} permission errors"
+            fi
+            if [ "$network_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${network_errors} network errors"
+            fi
+            exception_summary="${exception_count} errors found (${error_details})"
         else
-            exception_summary="No exceptions found"
+            exception_summary="No errors found"
         fi
     else
         exception_summary="No log file found"
