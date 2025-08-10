@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.12"
+VERSION="1.0.13"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -581,11 +581,8 @@ get_system_info() {
         # Permission/access errors
         permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
         
-        # Network/connection errors (excluding training timeouts which are normal)
-        network_errors=$(grep -E "Connection refused|network unreachable" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        # Also check for actual network timeouts (not training timeouts or config parameters)
-        network_timeouts=$(grep -E "timeout" "$log_file" | grep -v "timed out after" | grep -v "Training.*timed out" | grep -v "timeout:" | grep -v "timeout=" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        network_errors=$((network_errors + network_timeouts))
+        # Network/connection errors (removed - too unreliable, causing false positives)
+        network_errors=0
         
         # Sum all error types
         exception_count=$((stack_trace_exceptions + missing_command_errors + lock_failures + permission_errors + network_errors))
@@ -609,10 +606,7 @@ get_system_info() {
                 if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
                 error_details="${error_details}${permission_errors} permission errors"
             fi
-            if [ "$network_errors" -gt 0 ]; then
-                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
-                error_details="${error_details}${network_errors} network errors"
-            fi
+
             exception_summary="${exception_count} errors found (${error_details})"
         else
             exception_summary="No errors found"
