@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.13"
+VERSION="1.0.14"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -563,57 +563,7 @@ get_system_info() {
     fi
     
     # Scan for exceptions in log file
-    exception_count=0
-    log_file="$HOME/logs/node.log"
-    if [ -f "$log_file" ]; then
-        # Count actual exceptions by looking for error messages that precede stack traces
-        # Each exception starts with an error message, followed by stack trace lines
-        stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        
-        # Count other critical errors that should be flagged
-        # Missing commands/tools (excluding aws which is only expected on Macs)
-        # Focus on missing script files which indicate configuration issues
-        missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        
-        # Lock acquisition failures (removed - these are expected for daily tasks)
-        lock_failures=0
-        
-        # Permission/access errors
-        permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        
-        # Network/connection errors (removed - too unreliable, causing false positives)
-        network_errors=0
-        
-        # Sum all error types
-        exception_count=$((stack_trace_exceptions + missing_command_errors + lock_failures + permission_errors + network_errors))
-        
-        # If we found exceptions, get more details
-        if [ "$exception_count" -gt 0 ]; then
-            # Build detailed error summary
-            error_details=""
-            if [ "$stack_trace_exceptions" -gt 0 ]; then
-                error_details="${error_details}${stack_trace_exceptions} stack traces"
-            fi
-            if [ "$missing_command_errors" -gt 0 ]; then
-                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
-                error_details="${error_details}${missing_command_errors} missing commands"
-            fi
-            if [ "$lock_failures" -gt 0 ]; then
-                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
-                error_details="${error_details}${lock_failures} lock failures"
-            fi
-            if [ "$permission_errors" -gt 0 ]; then
-                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
-                error_details="${error_details}${permission_errors} permission errors"
-            fi
-
-            exception_summary="${exception_count} errors found (${error_details})"
-        else
-            exception_summary="No errors found"
-        fi
-    else
-        exception_summary="No log file found"
-    fi
+    scan_log_errors
     
     # Check GRQ environment configuration
     config_warning=""
@@ -695,7 +645,7 @@ scan_log_errors() {
         exception_summary="No log file found"
     fi
     
-    # Return the count (this function sets global variables that get_system_info uses)
+    # Set global variables for use by other functions
     exception_count=$exception_count
     exception_summary=$exception_summary
 }
@@ -730,17 +680,7 @@ should_update() {
     fi
 
     # If there are exceptions in the log, update regardless of heartbeat
-    # Use the same parsing logic as in get_system_info to count exceptions
-    local exception_count=0
-    local log_file="$HOME/logs/node.log"
-    if [ -f "$log_file" ]; then
-        exception_count=$(grep -B1 "^[[:space:]]\+at " "$log_file" \
-            | grep -v "^[[:space:]]\+at " \
-            | grep -v "^--$" \
-            | grep -E "Exception|Error|MEMETIC" \
-            | wc -l 2>/dev/null \
-            | tr -d ' \n' || echo "0")
-    fi
+    scan_log_errors
     if [ "$exception_count" -gt 0 ]; then
         echo "Exceptions detected ($exception_count) - updating regardless of last heartbeat time"
         return 0
