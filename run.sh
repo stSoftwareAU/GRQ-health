@@ -233,8 +233,11 @@ get_system_info() {
         
         # If that fails, try alternative methods
         if [[ -z "$machine_type" ]]; then
-            # Try getting the model identifier and map it
-            model_id=$(sysctl -n hw.model 2>/dev/null || echo "")
+            # Try getting the model identifier and map it (macOS only)
+            model_id=""
+            if command -v sysctl >/dev/null 2>&1; then
+                model_id=$(sysctl -n hw.model 2>/dev/null || echo "")
+            fi
             if [[ -n "$model_id" ]]; then
                 case "$model_id" in
                     "Mac14,2") machine_type="MacBook Pro (M2 Pro)" ;;
