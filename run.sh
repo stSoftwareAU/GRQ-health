@@ -602,8 +602,9 @@ get_system_info() {
 # Function to scan log file for errors and return count
 scan_log_errors() {
     local log_file="$HOME/logs/node.log"
-    local exception_count=0
-    local exception_summary=""
+    # Initialize global variables
+    exception_count=0
+    exception_summary=""
     
     if [ -f "$log_file" ]; then
         # Count actual exceptions by looking for error messages that precede stack traces
@@ -653,10 +654,6 @@ scan_log_errors() {
     else
         exception_summary="No log file found"
     fi
-    
-    # Set global variables for use by other functions
-    exception_count=$exception_count
-    exception_summary=$exception_summary
 }
 
 # Function to check if we need to update
