@@ -640,6 +640,66 @@ get_system_info() {
     echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"machine_type\": \"$machine_type\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\", \"config_warning\": \"$config_warning\"}"
 }
 
+# Function to scan log file for errors and return count
+scan_log_errors() {
+    local log_file="$HOME/logs/node.log"
+    local exception_count=0
+    local exception_summary=""
+    
+    if [ -f "$log_file" ]; then
+        # Count actual exceptions by looking for error messages that precede stack traces
+        # Each exception starts with an error message, followed by stack trace lines
+        local stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Count other critical errors that should be flagged
+        # Missing commands/tools (excluding aws which is only expected on Macs)
+        # Focus on missing script files which indicate configuration issues
+        local missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Lock acquisition failures (removed - these are expected for daily tasks)
+        local lock_failures=0
+        
+        # Permission/access errors
+        local permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Network/connection errors (removed - too unreliable, causing false positives)
+        local network_errors=0
+        
+        # Sum all error types
+        exception_count=$((stack_trace_exceptions + missing_command_errors + lock_failures + permission_errors + network_errors))
+        
+        # If we found exceptions, get more details
+        if [ "$exception_count" -gt 0 ]; then
+            # Build detailed error summary
+            local error_details=""
+            if [ "$stack_trace_exceptions" -gt 0 ]; then
+                error_details="${error_details}${stack_trace_exceptions} stack traces"
+            fi
+            if [ "$missing_command_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${missing_command_errors} missing commands"
+            fi
+            if [ "$lock_failures" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${lock_failures} lock failures"
+            fi
+            if [ "$permission_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${permission_errors} permission errors"
+            fi
+            exception_summary="${exception_count} errors found (${error_details})"
+        else
+            exception_summary="No errors found"
+        fi
+    else
+        exception_summary="No log file found"
+    fi
+    
+    # Return the count (this function sets global variables that get_system_info uses)
+    exception_count=$exception_count
+    exception_summary=$exception_summary
+}
+
 # Function to check if we need to update
 should_update() {
     if [ ! -f "$JSON_FILE" ]; then
