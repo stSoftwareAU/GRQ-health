@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.15"
+VERSION="1.0.16"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -471,13 +471,22 @@ get_system_info() {
     else
         # Linux - try multiple methods
         if [ -f /etc/os-release ]; then
-            # Modern Linux systems
-            os_info=$(source /etc/os-release && echo $NAME)
-            os_version=$(source /etc/os-release && echo $VERSION)
+            # Modern Linux systems - source the file and get proper version info
+            source /etc/os-release
+            os_info="$NAME"
+            # Use VERSION_ID for version number, fallback to VERSION for descriptive version
+            if [ -n "$VERSION_ID" ]; then
+                os_version="$VERSION_ID"
+            elif [ -n "$VERSION" ]; then
+                os_version="$VERSION"
+            else
+                os_version="unknown"
+            fi
         elif [ -f /etc/lsb-release ]; then
             # Ubuntu/Debian
-            os_info=$(source /etc/lsb-release && echo $DISTRIB_ID)
-            os_version=$(source /etc/lsb-release && echo $DISTRIB_RELEASE)
+            source /etc/lsb-release
+            os_info="$DISTRIB_ID"
+            os_version="$DISTRIB_RELEASE"
         elif [ -f /etc/redhat-release ]; then
             # RHEL/CentOS/Amazon Linux
             os_info=$(cat /etc/redhat-release | awk '{print $1}')
