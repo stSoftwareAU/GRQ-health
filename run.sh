@@ -15,8 +15,8 @@ cd "${BASE_DIR}"
 
 # Configuration
 JSON_FILE="docs/index.json"
-HEARTBEAT_THRESHOLD_HOURS=8
-HEALTHY_THRESHOLD_HOURS=24
+HEARTBEAT_THRESHOLD_HOURS=6
+VERSION="1.0.15"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -228,8 +228,70 @@ get_system_info() {
     # Get machine type and CPU speed - cross-platform
     machine_type=""
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS - get machine type using system_profiler
+        # macOS - get machine type using system_profiler with multiple fallbacks
         machine_type=$(system_profiler SPHardwareDataType 2>/dev/null | grep "Model Name:" | sed 's/.*Model Name: //' | tr -d '\n' || echo "")
+        
+        # If that fails, try alternative methods
+        if [[ -z "$machine_type" ]]; then
+            # Try getting the model identifier and map it (macOS only)
+            model_id=""
+            if command -v sysctl >/dev/null 2>&1; then
+                model_id=$(sysctl -n hw.model 2>/dev/null || echo "")
+            fi
+            if [[ -n "$model_id" ]]; then
+                case "$model_id" in
+                    "Mac14,2") machine_type="MacBook Pro (M2 Pro)" ;;
+                    "Mac14,3") machine_type="MacBook Pro (M2 Max)" ;;
+                    "Mac14,5") machine_type="Mac mini (M2)" ;;
+                    "Mac14,6") machine_type="Mac mini (M2 Pro)" ;;
+                    "Mac14,7") machine_type="MacBook Air (M2)" ;;
+                    "Mac14,8") machine_type="MacBook Air (M2)" ;;
+                    "Mac14,9") machine_type="MacBook Pro (M2)" ;;
+                    "Mac14,10") machine_type="MacBook Pro (M2)" ;;
+                    "Mac14,11") machine_type="MacBook Pro (M2 Pro)" ;;
+                    "Mac14,12") machine_type="MacBook Pro (M2 Max)" ;;
+                    "Mac14,13") machine_type="Mac Studio (M2 Max)" ;;
+                    "Mac14,14") machine_type="Mac Studio (M2 Ultra)" ;;
+                    "Mac14,15") machine_type="Mac Pro (M2 Ultra)" ;;
+                    "Mac14,16") machine_type="MacBook Pro (M3)" ;;
+                    "Mac14,17") machine_type="MacBook Pro (M3 Pro)" ;;
+                    "Mac14,18") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac14,19") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,20") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,21") machine_type="Mac mini (M3)" ;;
+                    "Mac14,22") machine_type="Mac mini (M3 Pro)" ;;
+                    "Mac14,23") machine_type="MacBook Pro (M3)" ;;
+                    "Mac14,24") machine_type="MacBook Pro (M3 Pro)" ;;
+                    "Mac14,25") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac14,26") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac14,27") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,28") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,29") machine_type="Mac mini (M3)" ;;
+                    "Mac14,30") machine_type="Mac mini (M3 Pro)" ;;
+                    "Mac14,31") machine_type="Mac Studio (M3 Max)" ;;
+                    "Mac14,32") machine_type="Mac Studio (M3 Ultra)" ;;
+                    "Mac15,1") machine_type="MacBook Air (M3)" ;;
+                    "Mac15,2") machine_type="MacBook Air (M3)" ;;
+                    "Mac15,3") machine_type="MacBook Pro (M3)" ;;
+                    "Mac15,4") machine_type="MacBook Pro (M3 Pro)" ;;
+                    "Mac15,5") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac15,6") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac15,7") machine_type="Mac mini (M3)" ;;
+                    "Mac15,8") machine_type="Mac mini (M3 Pro)" ;;
+                    "Mac15,9") machine_type="Mac Studio (M3 Max)" ;;
+                    "Mac15,10") machine_type="Mac Studio (M3 Ultra)" ;;
+                    "Mac15,11") machine_type="Mac Pro (M3 Ultra)" ;;
+                    "Mac15,12") machine_type="Mac Pro (M3 Ultra)" ;;
+                    *) machine_type="Mac ($model_id)" ;;
+                esac
+            fi
+        fi
+        
+        # If still no machine type, try one more fallback
+        if [[ -z "$machine_type" ]]; then
+            # Try getting the marketing name
+            machine_type=$(system_profiler SPHardwareDataType 2>/dev/null | grep "Marketing Name:" | sed 's/.*Marketing Name: //' | tr -d '\n' || echo "")
+        fi
     else
         # Linux/Ubuntu - try multiple methods to get machine type
         if [ -f /sys/class/dmi/id/product_name ]; then
@@ -501,27 +563,18 @@ get_system_info() {
     fi
     
     # Scan for exceptions in log file
-    exception_count=0
-    log_file="$HOME/logs/node.log"
-    if [ -f "$log_file" ]; then
-        # Count actual exceptions by looking for error messages that precede stack traces
-        # Each exception starts with an error message, followed by stack trace lines
-        exception_count=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        
-        # If we found exceptions, get more details
-        if [ "$exception_count" -gt 0 ]; then
-            # Count unique error types by looking at the line before each stack trace
-            # Extract just the error type (Exception, Error, MEMETIC, etc.)
-            error_types=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -o -E "(Exception|Error|MEMETIC)" | sort | uniq -c | tr '\n' ' ' | sed 's/ *$//' 2>/dev/null | tr -d '\n' || echo "")
-            exception_summary="${exception_count} exceptions found"
-            if [ -n "$error_types" ]; then
-                exception_summary="${exception_summary} (${error_types})"
-            fi
-        else
-            exception_summary="No exceptions found"
+    scan_log_errors
+    
+    # Check GRQ environment configuration
+    config_warning=""
+    ENV_FILE="$BASE_DIR/../GRQ/.env"
+    if [ -f "$ENV_FILE" ]; then
+        # Check for presence of at least one required variable
+        if ! grep -Eq '^[[:space:]]*(PRIMARY_READ_URL|TRAINING_WRITE_URL)[[:space:]]*=' "$ENV_FILE"; then
+            config_warning="Missing PRIMARY_READ_URL or TRAINING_WRITE_URL in ../GRQ/.env"
         fi
     else
-        exception_summary="No log file found"
+        config_warning="Missing ../GRQ/.env"
     fi
     
     # Ensure uptime_sec is a number
@@ -534,7 +587,67 @@ get_system_info() {
         machine_type="Unknown"
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"machine_type\": \"$machine_type\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"machine_type\": \"$machine_type\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\", \"config_warning\": \"$config_warning\"}"
+}
+
+# Function to scan log file for errors and return count
+scan_log_errors() {
+    local log_file="$HOME/logs/node.log"
+    local exception_count=0
+    local exception_summary=""
+    
+    if [ -f "$log_file" ]; then
+        # Count actual exceptions by looking for error messages that precede stack traces
+        # Each exception starts with an error message, followed by stack trace lines
+        local stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Count other critical errors that should be flagged
+        # Missing commands/tools (excluding aws which is only expected on Macs)
+        # Focus on missing script files which indicate configuration issues
+        local missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Lock acquisition failures (removed - these are expected for daily tasks)
+        local lock_failures=0
+        
+        # Permission/access errors
+        local permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        # Network/connection errors (removed - too unreliable, causing false positives)
+        local network_errors=0
+        
+        # Sum all error types
+        exception_count=$((stack_trace_exceptions + missing_command_errors + lock_failures + permission_errors + network_errors))
+        
+        # If we found exceptions, get more details
+        if [ "$exception_count" -gt 0 ]; then
+            # Build detailed error summary
+            local error_details=""
+            if [ "$stack_trace_exceptions" -gt 0 ]; then
+                error_details="${error_details}${stack_trace_exceptions} stack traces"
+            fi
+            if [ "$missing_command_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${missing_command_errors} missing commands"
+            fi
+            if [ "$lock_failures" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${lock_failures} lock failures"
+            fi
+            if [ "$permission_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${permission_errors} permission errors"
+            fi
+            exception_summary="${exception_count} errors found (${error_details})"
+        else
+            exception_summary="No errors found"
+        fi
+    else
+        exception_summary="No log file found"
+    fi
+    
+    # Set global variables for use by other functions
+    exception_count=$exception_count
+    exception_summary=$exception_summary
 }
 
 # Function to check if we need to update
@@ -558,6 +671,21 @@ should_update() {
         return 0
     fi
     
+    # If the recorded script version doesn't match current VERSION, update immediately
+    local recorded_version
+    recorded_version=$(jq -r ".\"$HOSTNAME\".version // \"\"" "$JSON_FILE" 2>/dev/null || echo "")
+    if [ "$recorded_version" != "$VERSION" ]; then
+        echo "Version mismatch for $HOSTNAME (found '$recorded_version', current '$VERSION') - updating"
+        return 0
+    fi
+
+    # If there are exceptions in the log, update regardless of heartbeat
+    scan_log_errors
+    if [ "$exception_count" -gt 0 ]; then
+        echo "Exceptions detected ($exception_count) - updating regardless of last heartbeat time"
+        return 0
+    fi
+
     local last_heartbeat=$(jq -r ".\"$HOSTNAME\".heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
     local hours_since_last=$(( (CURRENT_TS - last_heartbeat) / 3600 ))
     if [ $hours_since_last -ge $HEARTBEAT_THRESHOLD_HOURS ]; then
@@ -582,15 +710,19 @@ update_json() {
 
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
+           --arg version "$VERSION" \
            --argjson info "$system_info" \
-           '.[$host] = ((.[$host] // {}) + $info | .heart_beat_ts = ($ts | tonumber))' \
+           '.[$host] = ((.[$host] // {}) + $info
+             | .heart_beat_ts = ($ts | tonumber)
+             | .version = $version)' \
            "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
         # Create new file
         jq --arg host "$HOSTNAME" \
            --arg ts "$CURRENT_TS" \
+           --arg version "$VERSION" \
            --argjson info "$system_info" \
-           '{($host): ($info + {"heart_beat_ts": ($ts | tonumber)})}' \
+           '{($host): ($info + {"heart_beat_ts": ($ts | tonumber), "version": $version})}' \
            > "$JSON_FILE"
     fi
     # Clean up tmp backup
@@ -630,6 +762,7 @@ commit_and_push() {
 main() {
     if should_update; then
         echo "Updating health information..."
+        git pull --rebase
         update_json
         # After updating JSON, copy log if present
         # Copy node.log if present
