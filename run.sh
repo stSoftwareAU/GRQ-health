@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.7"
+VERSION="1.0.8"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -519,8 +519,11 @@ get_system_info() {
         # Permission/access errors
         permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
         
-        # Network/connection errors
-        network_errors=$(grep -E "Connection refused|timeout|network unreachable" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        # Network/connection errors (excluding training timeouts which are normal)
+        network_errors=$(grep -E "Connection refused|network unreachable" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        # Also check for actual network timeouts (not training timeouts)
+        network_timeouts=$(grep -E "timeout" "$log_file" | grep -v "timed out after" | grep -v "Training.*timed out" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        network_errors=$((network_errors + network_timeouts))
         
         # Sum all error types
         exception_count=$((stack_trace_exceptions + missing_command_errors + lock_failures + permission_errors + network_errors))
