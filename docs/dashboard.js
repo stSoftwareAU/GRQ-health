@@ -62,6 +62,11 @@ function getHealthStatus(_hostname, data) {
             return 'warning';
         }
         
+        // Config warning (missing PRIMARY_READ_URL or TRAINING_WRITE_URL)
+        if (data.config_warning && data.config_warning.trim().length > 0) {
+            return 'warning';
+        }
+        
         // CPU utilization warning (under 20% for multi-core systems) - indicates potential training issues
         // Low CPU usage on multi-core systems might indicate single-threaded training or stuck processes
         if (data.cpu_load && data.cpu_cores) {
@@ -272,6 +277,7 @@ function createHostCard(hostname, data) {
                     <h5 class="mb-0 d-flex align-items-center">
                         ${emoji} ${hostname}
                         ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}
+                        ${data.version ? `<small class="text-muted ms-2" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}
                     </h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
                 </div>
@@ -318,6 +324,7 @@ function createHostCard(hostname, data) {
                         <div class="fw-bold">${data.timezone}</div>
                     </div>
                 </div>
+                ${data.config_warning ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Config</small><div class="fw-bold text-warning">${data.config_warning}</div></div></div>` : ''}
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
                 <div class="text-end mt-2">
@@ -432,6 +439,10 @@ function updateStats(hosts) {
             let warningReason = '';
             if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
                 warningReason += `High disk usage: ${data.used_disk_percent}%`;
+            }
+            if (data.config_warning) {
+                if (warningReason) warningReason += ', ';
+                warningReason += data.config_warning;
             }
             if (data.cpu_load && data.cpu_cores) {
                 const cpuPercent = parseFloat(data.cpu_load.replace('%', ''));
@@ -565,12 +576,12 @@ function updateHostCard(hostname, data) {
         hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}${outdatedMacClass}`;
         hostCard.setAttribute('data-status', healthStatus);
         
-        // Update hostname with machine type badge if needed
+        // Update hostname with machine type badge and version if needed
         const hostnameElement = hostCard.querySelector('h5.mb-0');
         if (hostnameElement) {
             const emoji = hostCard.querySelector('h5.mb-0').textContent.match(/^[^\s]+/)?.[0] || '';
             hostnameElement.className = 'mb-0 d-flex align-items-center';
-            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}`;
+            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}${data.version ? `<small class="text-muted ms-2" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}`;
         }
         
         // Update OS version display with update badge if needed
