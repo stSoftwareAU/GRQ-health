@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.8"
+VERSION="1.0.10"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -228,8 +228,67 @@ get_system_info() {
     # Get machine type and CPU speed - cross-platform
     machine_type=""
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS - get machine type using system_profiler
+        # macOS - get machine type using system_profiler with multiple fallbacks
         machine_type=$(system_profiler SPHardwareDataType 2>/dev/null | grep "Model Name:" | sed 's/.*Model Name: //' | tr -d '\n' || echo "")
+        
+        # If that fails, try alternative methods
+        if [[ -z "$machine_type" ]]; then
+            # Try getting the model identifier and map it
+            model_id=$(sysctl -n hw.model 2>/dev/null || echo "")
+            if [[ -n "$model_id" ]]; then
+                case "$model_id" in
+                    "Mac14,2") machine_type="MacBook Pro (M2 Pro)" ;;
+                    "Mac14,3") machine_type="MacBook Pro (M2 Max)" ;;
+                    "Mac14,5") machine_type="Mac mini (M2)" ;;
+                    "Mac14,6") machine_type="Mac mini (M2 Pro)" ;;
+                    "Mac14,7") machine_type="MacBook Air (M2)" ;;
+                    "Mac14,8") machine_type="MacBook Air (M2)" ;;
+                    "Mac14,9") machine_type="MacBook Pro (M2)" ;;
+                    "Mac14,10") machine_type="MacBook Pro (M2)" ;;
+                    "Mac14,11") machine_type="MacBook Pro (M2 Pro)" ;;
+                    "Mac14,12") machine_type="MacBook Pro (M2 Max)" ;;
+                    "Mac14,13") machine_type="Mac Studio (M2 Max)" ;;
+                    "Mac14,14") machine_type="Mac Studio (M2 Ultra)" ;;
+                    "Mac14,15") machine_type="Mac Pro (M2 Ultra)" ;;
+                    "Mac14,16") machine_type="MacBook Pro (M3)" ;;
+                    "Mac14,17") machine_type="MacBook Pro (M3 Pro)" ;;
+                    "Mac14,18") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac14,19") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,20") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,21") machine_type="Mac mini (M3)" ;;
+                    "Mac14,22") machine_type="Mac mini (M3 Pro)" ;;
+                    "Mac14,23") machine_type="MacBook Pro (M3)" ;;
+                    "Mac14,24") machine_type="MacBook Pro (M3 Pro)" ;;
+                    "Mac14,25") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac14,26") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac14,27") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,28") machine_type="MacBook Air (M3)" ;;
+                    "Mac14,29") machine_type="Mac mini (M3)" ;;
+                    "Mac14,30") machine_type="Mac mini (M3 Pro)" ;;
+                    "Mac14,31") machine_type="Mac Studio (M3 Max)" ;;
+                    "Mac14,32") machine_type="Mac Studio (M3 Ultra)" ;;
+                    "Mac15,1") machine_type="MacBook Air (M3)" ;;
+                    "Mac15,2") machine_type="MacBook Air (M3)" ;;
+                    "Mac15,3") machine_type="MacBook Pro (M3)" ;;
+                    "Mac15,4") machine_type="MacBook Pro (M3 Pro)" ;;
+                    "Mac15,5") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac15,6") machine_type="MacBook Pro (M3 Max)" ;;
+                    "Mac15,7") machine_type="Mac mini (M3)" ;;
+                    "Mac15,8") machine_type="Mac mini (M3 Pro)" ;;
+                    "Mac15,9") machine_type="Mac Studio (M3 Max)" ;;
+                    "Mac15,10") machine_type="Mac Studio (M3 Ultra)" ;;
+                    "Mac15,11") machine_type="Mac Pro (M3 Ultra)" ;;
+                    "Mac15,12") machine_type="Mac Pro (M3 Ultra)" ;;
+                    *) machine_type="Mac ($model_id)" ;;
+                esac
+            fi
+        fi
+        
+        # If still no machine type, try one more fallback
+        if [[ -z "$machine_type" ]]; then
+            # Try getting the marketing name
+            machine_type=$(system_profiler SPHardwareDataType 2>/dev/null | grep "Marketing Name:" | sed 's/.*Marketing Name: //' | tr -d '\n' || echo "")
+        fi
     else
         # Linux/Ubuntu - try multiple methods to get machine type
         if [ -f /sys/class/dmi/id/product_name ]; then
