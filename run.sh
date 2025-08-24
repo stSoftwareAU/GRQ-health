@@ -347,13 +347,18 @@ get_system_info() {
                 # For Apple Silicon, get the processor model name
                 cpu_name=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "")
                 if [[ "$cpu_name" == *"Apple"* ]]; then
-                    # Extract the processor model (M1, M2, M3, etc.) with variant
-                    if [[ "$cpu_name" =~ (M[0-9]+[[:space:]]*[A-Za-z]*) ]]; then
-                        cpu_speed="${BASH_REMATCH[1]}"
-                    elif [[ "$cpu_name" =~ (A[0-9]+[[:space:]]*[A-Za-z]*) ]]; then
-                        cpu_speed="${BASH_REMATCH[1]}"
+                    # Extract the processor model (M1, M2, M3, etc.) with variant using grep
+                    processor_model=$(echo "$cpu_name" | grep -o "M[0-9]\+[[:space:]]*[A-Za-z]*" | head -1)
+                    if [[ -n "$processor_model" ]]; then
+                        cpu_speed="$processor_model"
                     else
-                        cpu_speed="Apple Silicon"
+                        # Try A-series processors
+                        processor_model=$(echo "$cpu_name" | grep -o "A[0-9]\+[[:space:]]*[A-Za-z]*" | head -1)
+                        if [[ -n "$processor_model" ]]; then
+                            cpu_speed="$processor_model"
+                        else
+                            cpu_speed="Apple Silicon"
+                        fi
                     fi
                 else
                     cpu_speed="unknown"
