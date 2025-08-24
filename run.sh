@@ -319,12 +319,19 @@ get_system_info() {
             
             # If the result is empty, contains only whitespace, or is corrupted, set a fallback
             if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]] || [[ "$machine_type" =~ [^[:alnum:][:space:]-] ]]; then
+                # Log debug info before setting to Unknown
+                echo "DEBUG: Machine type validation failed, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: machine_type='$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 machine_type="Unknown"
             fi
         fi
         
         # If no machine type was detected, set a fallback
         if [[ -z "$machine_type" ]]; then
+            # Log debug info before setting to Unknown
+            echo "DEBUG: No machine type detected, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
+            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
             machine_type="Unknown"
         fi
     fi
@@ -357,10 +364,19 @@ get_system_info() {
                         if [[ -n "$processor_model" ]]; then
                             cpu_speed="$processor_model"
                         else
+                            # Log debug info before falling back to generic "Apple Silicon"
+                            echo "DEBUG: Apple Silicon detected but processor model extraction failed" >> "$HOME/logs/node.log" 2>/dev/null || true
+                            echo "DEBUG: cpu_name='$cpu_name'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                            echo "DEBUG: grep M-series result: '$(echo "$cpu_name" | grep -o "M[0-9]\+[[:space:]]*[A-Za-z]*" | head -1)'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                            echo "DEBUG: grep A-series result: '$(echo "$cpu_name" | grep -o "A[0-9]\+[[:space:]]*[A-Za-z]*" | head -1)'" >> "$HOME/logs/node.log" 2>/dev/null || true
                             cpu_speed="Apple Silicon"
                         fi
                     fi
                 else
+                    # Log debug info before setting to unknown
+                    echo "DEBUG: Non-Apple processor detected, setting cpu_speed to unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
+                    echo "DEBUG: cpu_name='$cpu_name'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                    echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                     cpu_speed="unknown"
                 fi
             fi
@@ -381,6 +397,10 @@ get_system_info() {
                     cpu_speed=$(echo "scale=2; $cpu_speed_raw / 1000" | bc -l 2>/dev/null || echo "0")
                     cpu_speed="${cpu_speed} GHz"
                 else
+                    # Log debug info before setting to unknown
+                    echo "DEBUG: Linux CPU detection failed - lscpu max frequency not available" >> "$HOME/logs/node.log" 2>/dev/null || true
+                    echo "DEBUG: cpu_speed_raw='$cpu_speed_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                    echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                     cpu_speed="unknown"
                 fi
             fi
@@ -392,9 +412,16 @@ get_system_info() {
                 cpu_speed=$(echo "scale=2; $cpu_speed_raw / 1000" | bc -l 2>/dev/null || echo "0")
                 cpu_speed="${cpu_speed} GHz"
             else
+                # Log debug info before setting to unknown
+                echo "DEBUG: Linux CPU detection failed - /proc/cpuinfo frequency not available" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: cpu_speed_raw='$cpu_speed_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 cpu_speed="unknown"
             fi
         else
+            # Log debug info before setting to unknown
+            echo "DEBUG: Linux CPU detection failed - no lscpu or /proc/cpuinfo available" >> "$HOME/logs/node.log" 2>/dev/null || true
+            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
             cpu_speed="unknown"
         fi
     fi
@@ -432,6 +459,10 @@ get_system_info() {
             cpu_idle=$(echo "$cpu_info" | awk '{print $7}' | sed 's/%//')
             cpu_breakdown="${cpu_user}% user, ${cpu_sys}% sys, ${cpu_idle}% idle"
         else
+            # Log debug info before setting cpu_breakdown to unknown
+            echo "DEBUG: macOS CPU breakdown detection failed - no CPU usage info found" >> "$HOME/logs/node.log" 2>/dev/null || true
+            echo "DEBUG: cpu_info='$cpu_info'" >> "$HOME/logs/node.log" 2>/dev/null || true
+            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
             cpu_breakdown="unknown"
         fi
     else
@@ -441,6 +472,10 @@ get_system_info() {
             if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
                 cpu_breakdown="mpstat: ${cpu_load_raw}%"
             else
+                # Log debug info before setting cpu_breakdown to unknown
+                echo "DEBUG: Linux CPU breakdown detection failed - mpstat result invalid" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: cpu_load_raw='$cpu_load_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 cpu_breakdown="unknown"
             fi
         elif command -v top >/dev/null 2>&1; then
@@ -448,9 +483,16 @@ get_system_info() {
             if [[ "$cpu_load_raw" =~ ^[0-9]*\.?[0-9]+$ ]]; then
                 cpu_breakdown="top: ${cpu_load_raw}%"
             else
+                # Log debug info before setting cpu_breakdown to unknown
+                echo "DEBUG: Linux CPU breakdown detection failed - top result invalid" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: cpu_load_raw='$cpu_load_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 cpu_breakdown="unknown"
             fi
         else
+            # Log debug info before setting cpu_breakdown to unknown
+            echo "DEBUG: Linux CPU breakdown detection failed - no mpstat or top available" >> "$HOME/logs/node.log" 2>/dev/null || true
+            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
             cpu_breakdown="unknown"
         fi
     fi
@@ -598,6 +640,10 @@ get_system_info() {
     
     # Final validation of machine_type to prevent corrupted output
     if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ [^[:print:]] ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]]; then
+        # Log debug info before final fallback to Unknown
+        echo "DEBUG: Final machine type validation failed, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
+        echo "DEBUG: machine_type='$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
+        echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
         machine_type="Unknown"
     fi
     
