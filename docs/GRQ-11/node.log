@@ -11,23 +11,29 @@ devfs            204Ki   204Ki     0Bi   100%     704     0  100%   /dev
 /dev/disk1s2     500Mi   6.0Mi   483Mi     2%       1  4.9M    0%   /System/Volumes/xarts
 /dev/disk1s1     500Mi   5.4Mi   483Mi     2%      30  4.9M    0%   /System/Volumes/iSCPreboot
 /dev/disk1s3     500Mi   1.2Mi   483Mi     1%      60  4.9M    0%   /System/Volumes/Hardware
-/dev/disk3s5     460Gi   109Gi   324Gi    26%    541k  3.4G    0%   /System/Volumes/Data
+/dev/disk3s5     460Gi   108Gi   324Gi    26%    542k  3.4G    0%   /System/Volumes/Data
 map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
 /dev/disk5s1     1.8Ti   682Gi   1.2Ti    37%     25M   12G    0%   /Volumes/DataGRQ
 /dev/disk2s1     5.0Gi   1.8Gi   3.1Gi    37%      56   33M    0%   /System/Volumes/Update/SFR/mnt1
 /dev/disk3s1     460Gi    11Gi   324Gi     4%    426k  3.4G    0%   /System/Volumes/Update/mnt1
-Uptime: 10:09  up 23 days, 16:22, 4 users, load averages: 5.56 6.85 7.26
+Uptime: 10:14  up 23 days, 16:27, 4 users, load averages: 6.16 6.55 6.98
 USER    PID  PPID COMMAND
 nigel 44846     1 cloudphotod
 nigel 47965 47964 /bin/bash -c /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh > ~/logs/market.err 2>&1
 nigel 47966 47965 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh
 nigel 47983 47966 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/fetch.sh
 nigel 48030 47983 deno run --allow-read --allow-write --allow-env --allow-net src/Fetch.ts --sharesRepo=GRQ-shareprices2025Q1 --reportRepo=GRQ-companyreports
-nigel 54830 54829 /bin/bash /Volumes/DataGRQ/train/GRQ/worker/sync_training_to_s3.sh
-nigel 54876 54830 /opt/homebrew/Cellar/python@3.12/3.12.7_1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python /opt/homebrew/bin/aws s3 cp /Users/nigel/Training/3489a9ef6579cc7d8178f8c041445b610b9e1b3594da6e3b2b9b2f46b752d9a6.tgz s3://grq-trainingdata/trainData-industry_88/data.tgz
 nigel 56368     1 /bin/bash /Users/nigel/src/GRQ/run.sh
-nigel 61397 56368 /bin/bash worker/node.sh
-root  61407 61397 ps -U nigel -o user,pid,ppid,command
+nigel 61846 61845 /bin/bash -c mkdir -p ~/logs; /Volumes/DataGRQ/train/GRQ/run.sh --run-once > ~/logs/run-train.log 2>&1
+nigel 61848 61846 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
+nigel 61867 61848 /bin/bash worker/node.sh
+nigel 61905 61867 /bin/bash ./trainDataStocks.sh
+nigel 62056 61905 /bin/bash ./repos.sh
+nigel 62242 62056 /bin/bash ./model_fetch.sh GRQ-sentiment-tickers --skip-validate
+nigel 62281 62280 /bin/bash /Volumes/DataGRQ/train/GRQ/worker/sync_training_to_s3.sh
+nigel 62328 62281 /opt/homebrew/Cellar/python@3.12/3.12.7_1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python /opt/homebrew/bin/aws s3 cp /Users/nigel/Training/3489a9ef6579cc7d8178f8c041445b610b9e1b3594da6e3b2b9b2f46b752d9a6.tgz s3://grq-trainingdata/trainData-industry_88/data.tgz
+nigel 62603 56368 /bin/bash worker/node.sh
+root  62613 62603 ps -U nigel -o user,pid,ppid,command
 root    526   368 login -pfl nigel /bin/bash -c exec -la zsh /bin/zsh
 nigel   531   526 -zsh
 nigel  6387   531 tail -F /Users/nigel/logs/node.log
@@ -41,7 +47,7 @@ IP: 10.0.0.11
 10.0.0.89
 100.107.196.16
 Number of CPUs: 10
-Available Memory: 15G
+Available Memory: 14G
 ================ Clean up ENDED ================
 Use local deno
 PATH: /Users/nigel/.deno/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
@@ -50,7 +56,7 @@ v8 13.7.152.14-rusty
 typescript 5.8.3
 aws-cli/2.18.15 Python/3.12.7 Darwin/24.6.0 source/arm64
 Option: sampler
-Starting... Tue Sep  2 10:09:11 AEST 2025
+Starting... Tue Sep  2 10:14:11 AEST 2025
 Already up to date.
 HEAD is now at dd23f47 Evolution score 0.4710 -> 0.4711 {diff 1} on GRQ-23
 Reset branch 'main'
@@ -58,8 +64,8 @@ branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-cluster synced with remote (validation skipped)
 From github.com:stSoftwareAU/GRQ-sampler
-   ab891538..39ebc57b  main       -> origin/main
-HEAD is now at 39ebc57b 🦠 GRQ-23 🎯, Score: 0.471099, Neurons: 497 & Synapses: 16,235
+   39ebc57b..334b6cb5  main       -> origin/main
+HEAD is now at 334b6cb5 🤼 Venus 🎯, Score: 0.470831, Neurons: 499 & Synapses: 16,244
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
@@ -69,7 +75,7 @@ Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-portfolio synced with remote (validation skipped)
-Starting sampler... Tue Sep  2 10:09:38 AEST 2025
+Starting sampler... Tue Sep  2 10:14:37 AEST 2025
 Sampler mode
 Loop 1 of 5
 Already up to date.
@@ -83,11 +89,11 @@ Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
 Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
 Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
 Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-1) Sample rate: 0.01, batch Size: 10000, timeout: 3
-Total time taken: 6s 130ms
+1) Sample rate: 0.01, batch Size: 10000, timeout: 5
+Total time taken: 7s 47ms
 Shania Haag (Observations: 1,486, Neurons: 500, Synapses: 16,212 & Score: 0.474)
-8 mutations, mutation rate 8.5%, elitism 1, mutation FFW, selection TOURNAMENT, timeout 3, PopSize 50 SAMPLER
-Initialized in 2s 245ms
+3 mutations, mutation rate 15.1%, elitism 1, mutation ALL, selection TOURNAMENT, timeout 5, PopSize 50 SAMPLER
+Initialized in 2s 426ms
 Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
 Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
 Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
@@ -106,35 +112,47 @@ Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
 Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
 Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
 Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Discovery d2457c48 scheduled
-Training d2457c48 scheduled
-Training d2457c48 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
-Discovery d2457c48 with 1 binary files, sample rate: 2.5%, batch size: 20
-Discovery d2457c48 initialize time 166ms
-Discovery d2457c48 processing .trainData-binary_88-sampler/sample-1.bin
-Generation 1 score 0.47319229330342444 (avg: 0.2900) error 0.5268066459515826 time 37s 776ms
-Fine tuning increased fitness by 0.00004313042532044786 to 0.4732354237287449 adjusted 6 weights 
-Training d2457c48 samples 4,654 of 20,820 22.4%( rate 30.0% ) error 0.542 time average: 12ms 894µs 714ns total: 1m 12ms
-Training d2457c48 timed out after 1m 12ms
-compactUnused hidden neuron d55e5002 has no outward connections
-Generation 2 score 0.4732354237287449 (avg: 0.4730) error 0.5267635154762621 time 38s 597ms
-Training d2457c48 caused a higher error of 0.5423337847065482 from 0.5268066459515826
-Discovery d2457c48 read time  for .trainData-binary_88-sampler/sample-1.bin with 20 records
-Discovery d2457c48 scanning time 1m 21s 436ms
-Discovery d2457c48 recorded time 1m 21s 744ms
-Fine tuning increased fitness by 0.00005393067717673894 to 0.4732893544059216 adjusted 6 weights 
-Discovered beneficial synapse from input-22 to insider-combined-positive-check-7 with weight 1.0000, helping 100.0% more records than it harms (4/4)
-Discovery d2457c48 analyze time 9s 915ms found 1 candidates
-error: Uncaught (in worker "worker-7") (in promise) AssertionError: Mismatched records 20 != 4 for .discovery/6dac0f5c-b726-52cc-a994-f1c7d2457c48_6622184844239924/input-3.csv
+Discovery 91799edc scheduled
+Training 91799edc scheduled
+Training 91799edc with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
+Discovery 91799edc with 1 binary files, sample rate: 2.5%, batch size: 20
+Discovery 91799edc initialize time 174ms
+Discovery 91799edc processing .trainData-binary_88-sampler/sample-1.bin
+Generation 1 score 0.47441688324623743 (avg: 0.4409) error 0.5255820548087695 time 39s 164ms
+Fine tuning increased fitness by 5.757156447128153e-7 to 0.47441745896188214 adjusted 1 weight 
+Training 91799edc samples 1,663 of 21,028 7.9%( rate 30.0% ) error 0.513 time average: 36ms 84µs 185ns total: 1m 8ms
+Generation 2 score 0.47441745896188214 (avg: 0.4744) error 0.5255814790931248 time 41s 13ms
+Fine tuning increased fitness by 0.00003608722571757372 to 0.4744535461875997 adjusted 1 weight 
+Training 91799edc samples 3,087 of 21,028 14.7%( rate 30.0% ) error 0.528 time average: 38ms 876µs 579ns total: 2m 12ms
+Generation 3 score 0.4744535461875997 (avg: 0.4744) error 0.5255453893674072 time 57s 952ms
+Fine tuning increased fitness by 2.0159509284134458e-8 to 0.474453566347109 adjusted 1 weight 
+Generation 4 score 0.474453566347109 (avg: 0.4742) error 0.525545369207898 time 48s 290ms
+Training 91799edc samples 4,504 of 21,028 21.4%( rate 30.0% ) error 0.529 time average: 39ms 980µs 905ns total: 3m 74ms
+Fine tuning increased fitness by 3.366033340945762e-8 to 0.4744536000074424 adjusted 1 weight 
+Generation 5 score 0.4744536000074424 (avg: 0.4683) error 0.5255453355475646 time 39s 315ms
+Training 91799edc samples 6,146 of 21,028 29.2%( rate 30.0% ) error 0.538 time average: 39ms 71µs 754ns total: 4m 135ms
+Training 91799edc timed out after 4m 135ms
+Fine tuning increased fitness by 4.7992630647364365e-8 to 0.47445364800007306 adjusted 1 weight 
+Generation 6 score 0.47445364800007306 (avg: 0.4739) error 0.5255452875549339 time 41s 700ms
+Set training/discovery clean up count to 2
+Waiting for discovery to complete
+Training 91799edc caused a higher error of 0.5375187873751036 from 0.5255820548087695
+Discovery 91799edc read time  for .trainData-binary_88-sampler/sample-1.bin with 20 records
+Discovery 91799edc scanning time 4m 22s 900ms
+Discovery 91799edc recorded time 4m 23s 587ms
+Fine tuning increased fitness by 1.0841803599337396e-7 to 0.47445375641810905 adjusted 1 weight 
+Training 91799edc completed after 4m 255ms
+Training 91799edc compacted
+Generation 7 score 0.47445375641810905 (avg: 0.4742) error 0.5255451791368979 time 40s 574ms
+Waiting for discovery to complete
+Trained 91799edc Score: 0.4735120694598423, Error: 0.5255820548087695 -> 0.5264868685951649, 👿 -0.000905
+Compact 91799edc Score: 0.47350638051563526, Error: 0.5255820548087695 -> 0.5264925700393717, 👿 -0.000911
+Discovered beneficial synapse from input-298 to insider-combined-positive-check-7 with weight -1.0000, helping 100.0% more records than it harms (14/14)
+Discovery 91799edc analyze time 47s 171ms found 1 candidates
+Fine tuning increased fitness by 2.5736397457620797e-7 to 0.47445401378208363 adjusted 1 weight 
+Generation 8 score 0.47445401378208363 (avg: 0.4743) error 0.5255449217729233 time 41s 974ms
+Waiting for discovery to complete
+error: Uncaught (in worker "worker-2") (in promise) AssertionError: Mismatched records 20 != 14 for .discovery/0f89d33e-face-5906-a713-eb2e91799edc_7420417004655584/input-3.csv
     throw new AssertionError(msg);
           ^
     at assert (https://jsr.io/@std/assert/1.0.14/assert.ts:21:11)
@@ -147,11 +165,6 @@ error: Uncaught (in worker "worker-7") (in promise) AssertionError: Mismatched r
     at async recordDirectory (https://jsr.io/@stsoftware/neat-ai/0.185.1/src/architecture/ErrorGuidedStructuralEvolution/DiscoverDirectory.ts:17:10)
     at async WorkerProcessor.process (https://jsr.io/@stsoftware/neat-ai/0.185.1/src/multithreading/workers/WorkerProcessor.ts:194:24)
     at async workerHandler.onmessage (https://jsr.io/@stsoftware/neat-ai/0.185.1/src/multithreading/workers/deno/worker.ts:10:18)
-Training d2457c48 completed after 1m 168ms
-Training d2457c48 compacted
-Generation 3 score 0.4732893544059216 (avg: 0.4732) error 0.5267095847990854 time 38s 757ms
-Set training/discovery clean up count to 2
-Waiting for discovery to complete
 Worker error event: ErrorEvent {
   bubbles: false,
   cancelable: true,
@@ -164,7 +177,7 @@ Worker error event: ErrorEvent {
   returnValue: true,
   timeStamp: 0,
   type: "error",
-  message: "Uncaught (in promise) AssertionError: Mismatched records 20 != 4 for .discovery/6dac0f5c-b726-52cc-a994-f1c7d2457c48_6622184844239924/input-3.csv",
+  message: "Uncaught (in promise) AssertionError: Mismatched records 20 != 14 for .discovery/0f89d33e-face-5906-a713-eb2e91799edc_7420417004655584/input-3.csv",
   filename: "https://jsr.io/@std/assert/1.0.14/assert.ts",
   lineno: 21,
   colno: 11,
@@ -174,19 +187,20 @@ error: Uncaught (in promise) Error: Unhandled error in child worker.
     at Worker.#pollControl (ext:runtime/11_workers.js:204:19)
     at eventLoopTick (ext:core/01_core.js:179:7)
 Cloning into 'GRQ-logs'...
-[Develop 7fb443d] GRQ-11 status 1
- 1 file changed, 40 insertions(+), 57 deletions(-)
+[Develop 5f832fd] GRQ-11 status 1
+ 1 file changed, 189 insertions(+)
+ create mode 100644 GRQ-11.log
 To github.com:stSoftwareAU/GRQ-logs.git
-   48e7f75..7fb443d  Develop -> Develop
+   2484d5e..5f832fd  Develop -> Develop
 HEAD is now at 552d3e01 Update deno.json
 From github.com:stSoftwareAU/GRQ-health
-   6ab2926..e65c470  Develop    -> origin/Develop
-HEAD is now at e65c470 Update health status for GRQ-19 at Tue Sep  2 10:12:33 AEST 2025
+   4e5f4f1..7eea5c4  Develop    -> origin/Develop
+HEAD is now at 7eea5c4 Update health status for GRQ-24 at Tue Sep  2 10:20:31 AEST 2025
 Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
 ✅ GRQ-health synced with remote (validation skipped)
-HEAD is now at e65c470 Update health status for GRQ-19 at Tue Sep  2 10:12:33 AEST 2025
+HEAD is now at 7eea5c4 Update health status for GRQ-24 at Tue Sep  2 10:20:31 AEST 2025
 Exceptions detected (1) - updating regardless of last heartbeat time
 Updating health information...
 Already up to date.
