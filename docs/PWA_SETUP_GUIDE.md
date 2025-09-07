@@ -83,8 +83,8 @@ const STATIC_FILES = [
 ```
 
 ### Version Management
-- Version displayed in header: `v1.0.17`
-- Service worker version: `grq-health-v1.0.17`
+- Version displayed in header: `v1.0.18`
+- Service worker version: `grq-health-v1.0.18`
 - Cache versioning for updates
 
 ### Browser Support
@@ -119,9 +119,10 @@ Update these files for different color schemes:
 ### Version Management Script
 The project includes `update_version.sh` which automatically:
 - Reads the version from `run.sh`
-- Updates all version references in `docs/index.html`
-- Ensures consistent versioning across CSS, JS, and service worker files
+- Updates all version references in `docs/index.html` (CSS, JS, service worker links)
+- Updates the VERSION constant in `docs/dashboard.js`
 - Updates the displayed version in the UI
+- Ensures consistent versioning across all files
 
 ## Troubleshooting
 
@@ -174,4 +175,4 @@ For issues with the PWA functionality:
 ---
 
 *Last updated: January 2025*
-*PWA Version: 1.0.17*
+*PWA Version: 1.0.18*
