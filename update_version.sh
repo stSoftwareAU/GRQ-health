@@ -37,4 +37,17 @@ else
     echo "Warning: docs/index.html not found"
 fi
 
+# Update dashboard.js
+if [ -f "docs/dashboard.js" ]; then
+    # Update the VERSION constant
+    sed -i.bak "s/const VERSION = \"[0-9.]*\";/const VERSION = \"$VERSION\";/g" docs/dashboard.js
+    
+    # Clean up backup files
+    rm -f docs/dashboard.js.bak
+    
+    echo "Updated docs/dashboard.js with version $VERSION"
+else
+    echo "Warning: docs/dashboard.js not found"
+fi
+
 echo "Version update complete!"
