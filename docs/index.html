@@ -3,8 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GRQ Healthy</title>
+    <title>GRQ Health Dashboard</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Monitor system health status across all hosts">
+    <meta name="theme-color" content="#28a745">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="GRQ Health">
+    <meta name="msapplication-TileColor" content="#28a745">
+    <meta name="msapplication-config" content="./browserconfig.xml">
+    
+    <!-- Icons and Manifest -->
     <link rel="icon" type="image/png" href="./medical-check.png">
+    <link rel="apple-touch-icon" href="./icons/icon-192x192.png">
+    <link rel="manifest" href="./manifest.json">
+    
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
@@ -14,8 +28,15 @@
 <body>
     <div class="container-fluid py-4">
         <div class="header">
-            <h1><i class="bi bi-display"></i> GRQ Health Dashboard</h1>
-            <p>System health status across all hosts</p>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <h1><i class="bi bi-display"></i> GRQ Health Dashboard</h1>
+                    <p>System health status across all hosts</p>
+                </div>
+                <div class="text-end">
+                    <small class="text-muted">Version <span id="version">1.0.0</span></small>
+                </div>
+            </div>
         </div>
 
         <div id="criticalSection" class="critical-section" style="display: none;">
@@ -68,5 +89,49 @@
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="./dashboard.js?v=9"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered successfully:', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New version available
+                                    console.log('New version available');
+                                    // You could show a notification to the user here
+                                }
+                            });
+                        });
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+        
+        // Handle PWA install prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent the mini-infobar from appearing on mobile
+            e.preventDefault();
+            // Stash the event so it can be triggered later
+            deferredPrompt = e;
+            console.log('PWA install prompt available');
+        });
+        
+        // Handle PWA installed
+        window.addEventListener('appinstalled', (evt) => {
+            console.log('PWA was installed');
+            deferredPrompt = null;
+        });
+    </script>
 </body>
 </html> 

@@ -1,5 +1,23 @@
+// Version constant - this will be updated by the git hook
+const VERSION = "1.0.0";
+
+// Set page title with version
+document.title = `GRQ Health Dashboard v${VERSION}`;
+
 let currentFilter = 'all';
 let allHosts = [];
+
+// Initialize PWA functionality when DOM is loaded
+document.addEventListener("DOMContentLoaded", () => {
+  console.log('DOM loaded, setting version:', VERSION);
+  const versionElement = document.getElementById("version");
+  if (versionElement) {
+    versionElement.textContent = VERSION;
+  }
+  
+  // Initialize offline indicator
+  initializeOfflineIndicator();
+});
 
 function formatUptime(seconds) {
     if (seconds < 60) return `${seconds}s`;
@@ -16,6 +34,135 @@ function formatTimestamp(timestamp) {
     if (diffHours < 1) return 'Just now';
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${Math.floor(diffHours / 24)}d ago`;
+}
+
+// Offline indicator functionality
+function initializeOfflineIndicator() {
+  // Monitor online/offline status and apply color scheme
+  function updateOnlineStatus() {
+    if (!navigator.onLine) {
+      // Apply offline color scheme
+      document.body.classList.add('offline-mode');
+      showOfflineIndicator();
+    } else {
+      // Remove offline color scheme
+      document.body.classList.remove('offline-mode');
+      hideOfflineIndicator();
+    }
+  }
+  
+  // Listen for online/offline events
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  
+  // Check initial status
+  updateOnlineStatus();
+  
+  // Monitor fetch requests for cache indicators
+  const originalFetch = window.fetch;
+  window.fetch = function(...args) {
+    const url = args[0];
+    const isDataFile = typeof url === 'string' && url.includes('index.json');
+    
+    return originalFetch.apply(this, args)
+      .then(response => {
+        // Check if response was served from cache
+        if (response.headers.get('X-Served-From-Cache') === 'true') {
+          if (isDataFile) {
+            showCacheIndicator();
+            console.warn('HEALTH WARNING: Using cached data for', url);
+          }
+        }
+        
+        // Check for validation warnings
+        if (response.headers.get('X-Validation-Warning') === 'CACHED-DATA') {
+          showCacheIndicator();
+          console.error('HEALTH ERROR: Cached data being used for health monitoring!');
+        }
+        
+        return response;
+      })
+      .catch(error => {
+        // If fetch fails for data files, show health error
+        if (isDataFile && !navigator.onLine) {
+          showHealthError('No network connection available. Cannot load health data.');
+          console.error('HEALTH ERROR: Cannot load data for health monitoring:', error);
+        }
+        throw error;
+      });
+  };
+}
+
+function showOfflineIndicator() {
+  // Create or update offline indicator
+  let indicator = document.getElementById('offline-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'offline-indicator';
+    indicator.className = 'alert alert-warning position-fixed';
+    indicator.style.cssText = 'top: 10px; right: 10px; z-index: 9999; max-width: 300px;';
+    document.body.appendChild(indicator);
+  }
+  
+  indicator.innerHTML = `
+    <div class="d-flex align-items-center">
+      <i class="bi bi-wifi-off me-2"></i>
+      <div>
+        <strong>Offline Mode</strong><br>
+        <small>Using cached health data</small>
+      </div>
+    </div>
+  `;
+  indicator.style.display = 'block';
+}
+
+function hideOfflineIndicator() {
+  const indicator = document.getElementById('offline-indicator');
+  if (indicator) {
+    indicator.style.display = 'none';
+  }
+}
+
+function showCacheIndicator() {
+  const indicator = document.getElementById('offline-indicator');
+  if (indicator) {
+    indicator.className = 'alert alert-danger position-fixed';
+    indicator.style.cssText = 'top: 10px; right: 10px; z-index: 9999; max-width: 400px; display: block;';
+    indicator.innerHTML = `
+      <div class="d-flex align-items-center">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <div>
+          <strong>⚠️ HEALTH WARNING ⚠️</strong><br>
+          <small>Using CACHED data - health status may be OUTDATED!</small><br>
+          <small>Connect to internet for real-time monitoring</small>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function showHealthError(message) {
+  // Create a more prominent error indicator
+  const errorIndicator = document.createElement('div');
+  errorIndicator.id = 'health-error';
+  errorIndicator.className = 'alert alert-danger position-fixed';
+  errorIndicator.style.cssText = 'top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10000; max-width: 500px; text-align: center;';
+  errorIndicator.innerHTML = `
+    <div class="d-flex flex-column align-items-center">
+      <i class="bi bi-exclamation-circle mb-3" style="font-size: 3rem; color: #dc3545;"></i>
+      <h4 class="text-danger mb-3">Health Monitoring Unavailable</h4>
+      <p class="mb-3">${message}</p>
+      <button class="btn btn-primary" onclick="this.parentElement.parentElement.remove()">
+        <i class="bi bi-arrow-clockwise me-1"></i> Retry
+      </button>
+    </div>
+  `;
+  
+  // Remove any existing error indicator
+  const existing = document.getElementById('health-error');
+  if (existing) existing.remove();
+  
+  document.body.appendChild(errorIndicator);
 }
 
 function getHealthStatus(_hostname, data) {
