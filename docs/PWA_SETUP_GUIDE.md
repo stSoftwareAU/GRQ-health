@@ -7,8 +7,8 @@ This guide explains how the GRQ Health Dashboard has been configured as a Progre
 ### 1. Web App Manifest (`manifest.json`)
 - **App Name**: GRQ Health Dashboard
 - **Short Name**: GRQ Health
-- **Theme Color**: #28a745 (Bootstrap success green)
-- **Background Color**: #28a745
+- **Theme Color**: #667eea (Blue gradient matching the background)
+- **Background Color**: #667eea
 - **Display Mode**: standalone (full-screen app experience)
 - **Orientation**: portrait-primary (optimized for mobile)
 - **Icons**: Multiple sizes (72x72 to 512x512) for different devices
@@ -83,8 +83,8 @@ const STATIC_FILES = [
 ```
 
 ### Version Management
-- Version displayed in header: `v1.0.0`
-- Service worker version: `grq-health-v1.0.0`
+- Version displayed in header: `v1.0.17`
+- Service worker version: `grq-health-v1.0.17`
 - Cache versioning for updates
 
 ### Browser Support
@@ -112,9 +112,16 @@ Update these files for different color schemes:
    ```
 
 ### Updating Service Worker
-1. Increment version in `sw.js` (CACHE_NAME)
-2. Update version in `dashboard.js` (VERSION constant)
+1. Increment version in `run.sh` (VERSION variable)
+2. Run `./update_version.sh` to sync version across all files
 3. Clear browser cache to see changes
+
+### Version Management Script
+The project includes `update_version.sh` which automatically:
+- Reads the version from `run.sh`
+- Updates all version references in `docs/index.html`
+- Ensures consistent versioning across CSS, JS, and service worker files
+- Updates the displayed version in the UI
 
 ## Troubleshooting
 
@@ -166,5 +173,5 @@ For issues with the PWA functionality:
 
 ---
 
-*Last updated: September 2025*
-*PWA Version: 1.0.0*
+*Last updated: January 2025*
+*PWA Version: 1.0.17*
