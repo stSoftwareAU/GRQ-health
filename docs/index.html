@@ -23,19 +23,14 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="./styles.css?v=1.0.18" rel="stylesheet">
+    <link href="./styles.css?v=1.0.19" rel="stylesheet">
 </head>
 <body>
     <div class="container-fluid py-4">
         <div class="header">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <div>
-                    <h1><i class="bi bi-display"></i> GRQ Health Dashboard</h1>
-                    <p>System health status across all hosts</p>
-                </div>
-                <div class="text-end">
-                    <small class="text-muted">Version <span id="version">1.0.18</span></small>
-                </div>
+            <div class="text-center mb-2">
+                <h1><i class="bi bi-display"></i> GRQ Health Dashboard</h1>
+                <p>System health status across all hosts</p>
             </div>
         </div>
 
@@ -84,18 +79,23 @@
         <div id="content">
             <div class="loading">Loading health data...</div>
         </div>
+        
+        <!-- Footer with version info -->
+        <footer class="mt-5 py-3 text-center text-muted border-top">
+            <small>GRQ Health Dashboard v<span id="version">1.0.19</span></small>
+        </footer>
     </div>
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="./dashboard.js?v=1.0.18"></script>
+    <script src="./dashboard.js?v=1.0.19"></script>
     
     <!-- PWA Service Worker Registration -->
     <script>
-        // Register service worker
+        // Register service worker only if supported
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=1.0.18')
+                navigator.serviceWorker.register('./sw.js?v=1.0.19')
                     .then((registration) => {
                         console.log('Service Worker registered successfully:', registration.scope);
                         
@@ -154,8 +154,15 @@
                     })
                     .catch((error) => {
                         console.log('Service Worker registration failed:', error);
+                        // If service worker registration fails, redirect to simple version
+                        console.log('Redirecting to simple version due to service worker failure');
+                        window.location.href = './simple.html';
                     });
             });
+        } else {
+            // Service worker not supported, redirect to simple version
+            console.log('Service Worker not supported, redirecting to simple version');
+            window.location.href = './simple.html';
         }
         
         // Handle PWA install prompt
