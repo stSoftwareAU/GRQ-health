@@ -40,31 +40,70 @@ function getMimeType(filename: string) {
   return MIME_TYPES[ext] ?? "application/octet-stream";
 }
 
-function getFilePath(url: string) {
+function getFilePath(url: string, userAgent?: string, requestUrl?: string) {
   let path = decodeURIComponent(url.substring(1));
 
   if (DEBUG) {
     console.log(`🔍 Requested URL: "${url}"`);
     console.log(`📂 Decoded path: "${path}"`);
+    if (userAgent) {
+      console.log(`🤖 User Agent: "${userAgent}"`);
+    }
   }
 
-  if (path === "" || path === "/") path = "index.html";
-  else if (path === "docs" || path === "docs/") path = "index.html";
-  else if (path === "index.html") path = "index.html";
-  else if (path.startsWith("docs/")) {
-    path = path.substring(5) || "index.html";
+  // Check if this is a request for the simple version
+  // This can be triggered by:
+  // 1. Query parameter ?simple=true
+  // 2. User agent indicating no service worker support
+  // 3. Known monitoring services that don't support service workers
+  const urlObj = requestUrl ? new URL(requestUrl) : null;
+  const hasSimpleParam = urlObj && urlObj.searchParams.get('simple') === 'true';
+  
+  // Check for user agents that typically don't support service workers
+  const isLegacyClient = userAgent && (
+    userAgent.toLowerCase().includes('bot') ||
+    userAgent.toLowerCase().includes('crawler') ||
+    userAgent.toLowerCase().includes('spider') ||
+    userAgent.toLowerCase().includes('monitor') ||
+    userAgent.toLowerCase().includes('uptimerobot') ||
+    userAgent.toLowerCase().includes('pingdom') ||
+    userAgent.toLowerCase().includes('statuscake') ||
+    userAgent.toLowerCase().includes('curl') ||
+    userAgent.toLowerCase().includes('wget') ||
+    userAgent.toLowerCase().includes('python-requests') ||
+    userAgent.toLowerCase().includes('java') ||
+    userAgent.toLowerCase().includes('go-http-client')
+  );
+
+  const shouldServeSimple = hasSimpleParam || isLegacyClient;
+
+  if (path === "" || path === "/") {
+    // Serve simple.html for clients that don't support service workers, index.html for regular users
+    path = shouldServeSimple ? "simple.html" : "index.html";
+  } else if (path === "docs" || path === "docs/") {
+    path = shouldServeSimple ? "simple.html" : "index.html";
+  } else if (path === "index.html") {
+    path = shouldServeSimple ? "simple.html" : "index.html";
+  } else if (path.startsWith("docs/")) {
+    path = path.substring(5) || (shouldServeSimple ? "simple.html" : "index.html");
   }
 
   const fullPath = join(DOCS_DIR, path);
 
-  if (DEBUG) console.log(`🎯 Final file path: "${fullPath}"`);
+  if (DEBUG) {
+    console.log(`🎯 Final file path: "${fullPath}"`);
+    if (shouldServeSimple) {
+      console.log(`🔧 Serving simple version for better compatibility`);
+    }
+  }
 
   return fullPath;
 }
 
 async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const filePath = getFilePath(url.pathname);
+  const userAgent = request.headers.get('user-agent') || '';
+  const filePath = getFilePath(url.pathname, userAgent, request.url);
 
   if (DEBUG) {
     console.log(

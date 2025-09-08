@@ -37,6 +37,25 @@ else
     echo "Warning: docs/index.html not found"
 fi
 
+# Update simple.html
+if [ -f "docs/simple.html" ]; then
+    # Update CSS link
+    sed -i.bak "s|styles\.css?v=[0-9.]*|styles.css?v=$VERSION|g" docs/simple.html
+    
+    # Update JS link
+    sed -i.bak "s|dashboard\.js?v=[0-9.]*|dashboard.js?v=$VERSION|g" docs/simple.html
+    
+    # Update version display in footer
+    sed -i.bak "s|<span id=\"version\">[0-9.]*</span>|<span id=\"version\">$VERSION</span>|g" docs/simple.html
+    
+    # Clean up backup files
+    rm -f docs/simple.html.bak
+    
+    echo "Updated docs/simple.html with version $VERSION"
+else
+    echo "Warning: docs/simple.html not found"
+fi
+
 # Update dashboard.js
 if [ -f "docs/dashboard.js" ]; then
     # Update the VERSION constant

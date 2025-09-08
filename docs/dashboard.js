@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.18";
+const VERSION = "1.0.19";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -14,6 +14,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (versionElement) {
     versionElement.textContent = VERSION;
   }
+  
+  // Check if service workers are supported, if not redirect to simple version
+  checkServiceWorkerSupport();
   
   // Initialize offline indicator
   initializeOfflineIndicator();
@@ -163,6 +166,45 @@ function showHealthError(message) {
   if (existing) existing.remove();
   
   document.body.appendChild(errorIndicator);
+}
+
+function checkServiceWorkerSupport() {
+  // Check if service workers are supported
+  if (!('serviceWorker' in navigator)) {
+    console.log('Service Worker not supported, redirecting to simple version');
+    redirectToSimpleVersion();
+    return;
+  }
+  
+  // Additional check: try to register a test service worker to see if it actually works
+  // This helps catch cases where serviceWorker exists but doesn't work properly
+  try {
+    // Check if we can create a service worker registration
+    if (!navigator.serviceWorker.register) {
+      console.log('Service Worker registration not available, redirecting to simple version');
+      redirectToSimpleVersion();
+      return;
+    }
+    
+    // Check if we're in a secure context (required for service workers)
+    if (!window.isSecureContext && location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      console.log('Not in secure context, service workers may not work properly');
+      // Don't redirect here as it might work in some cases, just log a warning
+    }
+    
+    console.log('Service Worker support detected, continuing with PWA version');
+  } catch (error) {
+    console.log('Service Worker support check failed, redirecting to simple version:', error);
+    redirectToSimpleVersion();
+  }
+}
+
+function redirectToSimpleVersion() {
+  // Only redirect if we're not already on the simple version
+  if (!window.location.pathname.includes('simple.html')) {
+    console.log('Redirecting to simple version for better compatibility');
+    window.location.href = './simple.html';
+  }
 }
 
 function getHealthStatus(_hostname, data) {
