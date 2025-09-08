@@ -26,8 +26,7 @@ if [ -f "docs/index.html" ]; then
     # Update service worker link
     sed -i.bak "s|sw\.js?v=[0-9.]*|sw.js?v=$VERSION|g" docs/index.html
     
-    # Update version display
-    sed -i.bak "s|<span id=\"version\">[0-9.]*</span>|<span id=\"version\">$VERSION</span>|g" docs/index.html
+    # Version display is now dynamic via JavaScript, no need to update static HTML
     
     # Clean up backup files
     rm -f docs/index.html.bak
@@ -45,8 +44,7 @@ if [ -f "docs/simple.html" ]; then
     # Update JS link
     sed -i.bak "s|dashboard\.js?v=[0-9.]*|dashboard.js?v=$VERSION|g" docs/simple.html
     
-    # Update version display in footer
-    sed -i.bak "s|<span id=\"version\">[0-9.]*</span>|<span id=\"version\">$VERSION</span>|g" docs/simple.html
+    # Version display is now dynamic via JavaScript, no need to update static HTML
     
     # Clean up backup files
     rm -f docs/simple.html.bak
