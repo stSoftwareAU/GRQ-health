@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.23";
+const VERSION = "1.0.24";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -307,7 +307,7 @@ function getHealthStatus(_hostname, data) {
 function createHostCard(hostname, data) {
     const healthStatus = getHealthStatus(hostname, data);
     const statusClass = healthStatus;
-    const logUrl = `./${hostname}/node.log`;
+    const logUrl = `./log-viewer.html?file=./${hostname}/node.log`;
     const emoji = data.emoji || '';
     const location = data.location || '';
     
@@ -520,7 +520,7 @@ function createHostCard(hostname, data) {
                         ${data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}
                     </div>
                     <div class="position-absolute" style="right: 0;">
-                        <a href="${logUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}" 
+                        <a href="${logUrl}" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}" 
                            ${data.exception_count && parseInt(data.exception_count) > 0 ? `title="${data.exception_summary}" data-bs-toggle="tooltip" data-bs-placement="top"` : ''}>
                             <i class="bi ${data.exception_count && parseInt(data.exception_count) > 0 ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> 
                             ${data.exception_count && parseInt(data.exception_count) > 0 ? 'View Log ⚠️' : 'View Log'}
@@ -889,6 +889,9 @@ function updateHostCard(hostname, data) {
             const hasExceptions = data.exception_count && parseInt(data.exception_count) > 0;
             logButton.className = `btn btn-sm ${hasExceptions ? 'btn-danger' : 'btn-outline-primary'}`;
             logButton.innerHTML = `<i class="bi ${hasExceptions ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> ${hasExceptions ? 'View Log ⚠️' : 'View Log'}`;
+            // Remove target="_blank" to open in same tab for better mobile experience
+            logButton.removeAttribute('target');
+            logButton.removeAttribute('rel');
             
             if (hasExceptions) {
                 logButton.setAttribute('title', data.exception_summary);
