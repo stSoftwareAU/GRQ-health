@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.22"
+VERSION="1.0.23"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -74,6 +74,12 @@ fi
 
 # Function to get system information
 get_system_info() {
+    # Ensure /usr/sbin is in PATH for macOS (needed for sysctl)
+    if [[ "$OSTYPE" == "darwin"* ]] && [[ ":$PATH:" != *":/usr/sbin:"* ]]; then
+        export PATH="/usr/sbin:$PATH"
+        echo "DEBUG: Added /usr/sbin to PATH for sysctl access" >> "$HOME/logs/node.log" 2>/dev/null || true
+    fi
+    
     # Get uptime in seconds
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS: use sysctl for accurate uptime
@@ -230,6 +236,7 @@ get_system_info() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS - get machine type using system_profiler with multiple fallbacks
         machine_type=$(system_profiler SPHardwareDataType 2>/dev/null | grep "Model Name:" | sed 's/.*Model Name: //' | tr -d '\n' || echo "")
+        echo "DEBUG: system_profiler result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         
         # If that fails, try alternative methods
         if [[ -z "$machine_type" ]]; then
@@ -237,6 +244,9 @@ get_system_info() {
             model_id=""
             if command -v sysctl >/dev/null 2>&1; then
                 model_id=$(sysctl -n hw.model 2>/dev/null || echo "")
+                echo "DEBUG: sysctl hw.model result: '$model_id'" >> "$HOME/logs/node.log" 2>/dev/null || true
+            else
+                echo "DEBUG: sysctl command not found in PATH" >> "$HOME/logs/node.log" 2>/dev/null || true
             fi
             if [[ -n "$model_id" ]]; then
                 case "$model_id" in

@@ -67,4 +67,24 @@ else
     echo "Warning: docs/dashboard.js not found"
 fi
 
+# Update service worker (sw.js)
+if [ -f "docs/sw.js" ]; then
+    # Update the service worker version comment
+    sed -i.bak "s/\/\/ Version: [0-9.]*/\/\/ Version: $VERSION/g" docs/sw.js
+    
+    # Update cache names
+    sed -i.bak "s/grq-health-v[0-9.]*/grq-health-v$VERSION/g" docs/sw.js
+    sed -i.bak "s/grq-health-static-v[0-9.]*/grq-health-static-v$VERSION/g" docs/sw.js
+    
+    # Update dashboard.js reference in cache list
+    sed -i.bak "s|dashboard\.js?v=[0-9.]*|dashboard.js?v=$VERSION|g" docs/sw.js
+    
+    # Clean up backup files
+    rm -f docs/sw.js.bak
+    
+    echo "Updated docs/sw.js with version $VERSION"
+else
+    echo "Warning: docs/sw.js not found"
+fi
+
 echo "Version update complete!"

@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.20";
+const VERSION = "1.0.23";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -466,7 +466,6 @@ function createHostCard(hostname, data) {
                     <h5 class="mb-0 d-flex align-items-center">
                         ${emoji} ${hostname}
                         ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}
-                        ${data.version ? `<small class="text-muted ms-2" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}
                     </h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
                 </div>
@@ -516,12 +515,17 @@ function createHostCard(hostname, data) {
                 ${data.config_warning ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Config</small><div class="fw-bold text-warning">${data.config_warning}</div></div></div>` : ''}
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
-                <div class="text-end mt-2">
-                    <a href="${logUrl}" target="_blank" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}" 
-                       ${data.exception_count && parseInt(data.exception_count) > 0 ? `title="${data.exception_summary}" data-bs-toggle="tooltip" data-bs-placement="top"` : ''}>
-                        <i class="bi ${data.exception_count && parseInt(data.exception_count) > 0 ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> 
-                        ${data.exception_count && parseInt(data.exception_count) > 0 ? 'View Log ⚠️' : 'View Log'}
-                    </a>
+                <div class="d-flex justify-content-center align-items-center mt-2 position-relative">
+                    <div class="text-center">
+                        ${data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}
+                    </div>
+                    <div class="position-absolute" style="right: 0;">
+                        <a href="${logUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}" 
+                           ${data.exception_count && parseInt(data.exception_count) > 0 ? `title="${data.exception_summary}" data-bs-toggle="tooltip" data-bs-placement="top"` : ''}>
+                            <i class="bi ${data.exception_count && parseInt(data.exception_count) > 0 ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> 
+                            ${data.exception_count && parseInt(data.exception_count) > 0 ? 'View Log ⚠️' : 'View Log'}
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -765,12 +769,12 @@ function updateHostCard(hostname, data) {
         hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}${outdatedMacClass}`;
         hostCard.setAttribute('data-status', healthStatus);
         
-        // Update hostname with machine type badge and version if needed
+        // Update hostname with machine type badge (version moved to bottom-left)
         const hostnameElement = hostCard.querySelector('h5.mb-0');
         if (hostnameElement) {
             const emoji = hostCard.querySelector('h5.mb-0').textContent.match(/^[^\s]+/)?.[0] || '';
             hostnameElement.className = 'mb-0 d-flex align-items-center';
-            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}${data.version ? `<small class="text-muted ms-2" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}`;
+            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}`;
         }
         
         // Update OS version display with update badge if needed
@@ -871,6 +875,12 @@ function updateHostCard(hostname, data) {
         const lastSeenElement = hostCard.querySelector('.last-seen');
         if (lastSeenElement) {
             lastSeenElement.textContent = `Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}`;
+        }
+        
+        // Update version badge (centered on same row as View Log button)
+        const versionContainer = hostCard.querySelector('.d-flex.justify-content-center.align-items-center.mt-2.position-relative > div:first-child');
+        if (versionContainer) {
+            versionContainer.innerHTML = data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : '';
         }
         
         // Update the View Log button
