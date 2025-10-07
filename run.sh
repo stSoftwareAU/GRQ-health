@@ -307,28 +307,38 @@ get_system_info() {
         if [ -f /sys/class/dmi/id/product_name ]; then
             # Modern Linux systems with DMI
             machine_type=$(cat /sys/class/dmi/id/product_name 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
+            echo "DEBUG: DMI product_name result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         elif [ -f /proc/device-tree/model ]; then
             # ARM-based systems (like Raspberry Pi)
             machine_type=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
+            echo "DEBUG: device-tree model result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         elif command -v dmidecode >/dev/null 2>&1; then
             # Use dmidecode if available
             machine_type=$(dmidecode -s system-product-name 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
+            echo "DEBUG: dmidecode result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         elif [ -f /etc/machine-info ]; then
             # Some systems store machine info here
             machine_type=$(grep "PRETTY_HOSTNAME" /etc/machine-info 2>/dev/null | sed 's/PRETTY_HOSTNAME=//' | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
+            echo "DEBUG: machine-info result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
+        else
+            echo "DEBUG: No machine type detection methods available" >> "$HOME/logs/node.log" 2>/dev/null || true
         fi
         
         # Clean up the machine type string
         if [[ -n "$machine_type" ]]; then
+            echo "DEBUG: Raw machine_type before cleanup: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
             # Remove common prefixes and clean up
             machine_type=$(echo "$machine_type" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sed 's/^Dell Inc\. //; s/^HP //; s/^Lenovo //; s/^ASUSTeK //; s/^GIGABYTE //; s/^MSI //')
+            echo "DEBUG: machine_type after prefix removal: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
             
             # Validate and sanitize the machine type string
             # Remove any non-printable characters and ensure it's a valid string
             machine_type=$(echo "$machine_type" | tr -cd '[:print:][:space:]' | sed 's/[[:space:]]*$//')
+            echo "DEBUG: machine_type after sanitization: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
             
             # If the result is empty, contains only whitespace, or is corrupted, set a fallback
-            if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]] || [[ "$machine_type" =~ [^[:alnum:][:space:]-] ]]; then
+            # Allow common characters in machine names: alphanumeric, spaces, hyphens, parentheses, periods, underscores, colons
+            if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]] || [[ "$machine_type" =~ [^[:alnum:][:space:]-()._:] ]]; then
                 # Log debug info before setting to Unknown
                 echo "DEBUG: Machine type validation failed, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
                 echo "DEBUG: machine_type='$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
