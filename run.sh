@@ -142,14 +142,52 @@ get_system_info() {
             free_disk_space=$(echo "$df_output" | awk '{print $4}' | sed 's/Gi//')
             used_disk=$(echo "$df_output" | awk '{print $3}' | sed 's/Gi//')
         else
-            # Linux/AWS - check current directory
-            current_dir=$(pwd)
-            df_output=$(df -h "$current_dir" | awk 'NR==2')
+            # Linux/AWS - find the largest available storage
+            # First try to find the main data partition (usually the largest)
+            largest_fs=""
+            largest_size=0
+            
+            # Get all mounted filesystems and find the largest one
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^/dev/ ]]; then
+                    # Extract size and convert to GB for comparison
+                    size_str=$(echo "$line" | awk '{print $2}')
+                    size_gb=0
+                    
+                    # Convert different units to GB for comparison
+                    if [[ "$size_str" =~ ([0-9]+)T ]]; then
+                        size_gb=$((${BASH_REMATCH[1]} * 1024))
+                    elif [[ "$size_str" =~ ([0-9]+)G ]]; then
+                        size_gb=${BASH_REMATCH[1]}
+                    elif [[ "$size_str" =~ ([0-9]+)M ]]; then
+                        size_gb=$((${BASH_REMATCH[1]} / 1024))
+                    fi
+                    
+                    # Skip very small filesystems (boot, efi, tmpfs, etc.)
+                    if [[ $size_gb -gt 10 && $size_gb -gt $largest_size ]]; then
+                        largest_fs="$line"
+                        largest_size=$size_gb
+                    fi
+                fi
+            done < <(df -h | grep -E '^/dev/')
+            
+            # Use the largest filesystem found, or fallback to current directory
+            if [[ -n "$largest_fs" ]]; then
+                df_output="$largest_fs"
+                echo "DEBUG: Using largest filesystem: $largest_fs" >> "$HOME/logs/node.log" 2>/dev/null || true
+            else
+                # Fallback to current directory
+                current_dir=$(pwd)
+                df_output=$(df -h "$current_dir" | awk 'NR==2')
+                echo "DEBUG: Fallback to current directory: $current_dir" >> "$HOME/logs/node.log" 2>/dev/null || true
+            fi
             
             # Linux/AWS - handle G suffix and other variations
             total_disk=$(echo "$df_output" | awk '{print $2}' | sed 's/G//; s/Ti//; s/Mi//')
             free_disk_space=$(echo "$df_output" | awk '{print $4}' | sed 's/G//; s/Ti//; s/Mi//')
             used_disk=$(echo "$df_output" | awk '{print $3}' | sed 's/G//; s/Ti//; s/Mi//')
+            
+            echo "DEBUG: Disk detection - total: $total_disk, free: $free_disk_space, used: $used_disk" >> "$HOME/logs/node.log" 2>/dev/null || true
         fi
         
         # Calculate used disk space percentage - handle different units
