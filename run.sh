@@ -362,6 +362,7 @@ get_system_info() {
             echo "DEBUG: No machine type detection methods available" >> "$HOME/logs/node.log" 2>/dev/null || true
         fi
         
+        
         # Clean up the machine type string
         if [[ -n "$machine_type" ]]; then
             echo "DEBUG: Raw machine_type before cleanup: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
@@ -385,12 +386,25 @@ get_system_info() {
             fi
         fi
         
-        # If no machine type was detected, set a fallback
+        # If no machine type was detected, use uname as fallback
         if [[ -z "$machine_type" ]]; then
-            # Log debug info before setting to Unknown
-            echo "DEBUG: No machine type detected, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
-            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
-            machine_type="Unknown"
+            uname_output=$(uname -a 2>/dev/null || echo "")
+            if [[ -n "$uname_output" ]]; then
+                # Extract useful information from uname -a
+                # Format: Linux hostname kernel version architecture
+                hostname_part=$(echo "$uname_output" | awk '{print $2}')
+                arch_part=$(echo "$uname_output" | awk '{print $(NF-1)}')
+                kernel_part=$(echo "$uname_output" | awk '{print $3}' | cut -d'-' -f1)
+                
+                # Create a descriptive machine type from uname info
+                machine_type="Linux ($hostname_part, $arch_part, kernel $kernel_part)"
+                echo "DEBUG: Using uname -a fallback: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
+            else
+                # Log debug info before setting to Unknown
+                echo "DEBUG: No machine type detected, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
+                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
+                machine_type="Unknown"
+            fi
         fi
     fi
     
