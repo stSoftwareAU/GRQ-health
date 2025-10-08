@@ -705,7 +705,32 @@ get_system_info() {
         machine_type="Unknown"
     fi
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space\", \"used_disk_percent\": \"$used_disk_percent\", \"total_disk_gb\": \"$total_disk_gb\", \"mem_usage_percent\": \"$mem_usage_percent\", \"total_mem_gb\": \"$total_mem_gb\", \"cpu_load\": \"$cpu_load\", \"cpu_cores\": \"$cpu_cores\", \"cpu_model\": \"$cpu_speed\", \"machine_type\": \"$machine_type\", \"cpu_breakdown\": \"$cpu_breakdown\", \"load_averages\": \"$load_averages\", \"timezone\": \"$timezone\", \"os_info\": \"$os_info\", \"os_version\": \"$os_version\", \"network_status\": \"$network_status\", \"ip_addresses\": \"$ip_addresses\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary\", \"config_warning\": \"$config_warning\"}"
+    # Escape JSON strings to prevent parsing errors
+    escape_json() {
+        echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\n/\\n/g'
+    }
+    
+    # Escape all string variables that might contain special characters
+    free_disk_space_escaped=$(escape_json "$free_disk_space")
+    used_disk_percent_escaped=$(escape_json "$used_disk_percent")
+    total_disk_gb_escaped=$(escape_json "$total_disk_gb")
+    mem_usage_percent_escaped=$(escape_json "$mem_usage_percent")
+    total_mem_gb_escaped=$(escape_json "$total_mem_gb")
+    cpu_load_escaped=$(escape_json "$cpu_load")
+    cpu_cores_escaped=$(escape_json "$cpu_cores")
+    cpu_speed_escaped=$(escape_json "$cpu_speed")
+    machine_type_escaped=$(escape_json "$machine_type")
+    cpu_breakdown_escaped=$(escape_json "$cpu_breakdown")
+    load_averages_escaped=$(escape_json "$load_averages")
+    timezone_escaped=$(escape_json "$timezone")
+    os_info_escaped=$(escape_json "$os_info")
+    os_version_escaped=$(escape_json "$os_version")
+    network_status_escaped=$(escape_json "$network_status")
+    ip_addresses_escaped=$(escape_json "$ip_addresses")
+    exception_summary_escaped=$(escape_json "$exception_summary")
+    config_warning_escaped=$(escape_json "$config_warning")
+    
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space_escaped\", \"used_disk_percent\": \"$used_disk_percent_escaped\", \"total_disk_gb\": \"$total_disk_gb_escaped\", \"mem_usage_percent\": \"$mem_usage_percent_escaped\", \"total_mem_gb\": \"$total_mem_gb_escaped\", \"cpu_load\": \"$cpu_load_escaped\", \"cpu_cores\": \"$cpu_cores_escaped\", \"cpu_model\": \"$cpu_speed_escaped\", \"machine_type\": \"$machine_type_escaped\", \"cpu_breakdown\": \"$cpu_breakdown_escaped\", \"load_averages\": \"$load_averages_escaped\", \"timezone\": \"$timezone_escaped\", \"os_info\": \"$os_info_escaped\", \"os_version\": \"$os_version_escaped\", \"network_status\": \"$network_status_escaped\", \"ip_addresses\": \"$ip_addresses_escaped\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary_escaped\", \"config_warning\": \"$config_warning_escaped\"}"
 }
 
 # Function to scan log file for errors and return count
