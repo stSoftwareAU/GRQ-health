@@ -17,7 +17,7 @@
             border-radius: 8px;
             padding: 20px;
             margin: 80px 20px 20px 20px;
-            max-height: 70vh;
+            max-height: 95vh;
             overflow-y: auto;
             font-size: 12px;
             line-height: 1.4;
@@ -26,7 +26,11 @@
         }
         @media (max-width: 768px) {
             .log-container {
-                margin: 60px 10px 10px 10px;
+                margin: 60px 5px 5px 5px;
+                max-height: 93vh;
+            }
+            .log-content {
+                max-height: 88vh;
             }
         }
         .log-header {
@@ -63,13 +67,18 @@
             line-height: 1.4;
             white-space: pre-wrap;
             word-wrap: break-word;
-            max-height: 60vh;
+            max-height: 85vh;
             overflow-y: auto;
         }
         .error-line {
             background-color: rgba(220, 53, 69, 0.1);
             border-left: 3px solid #dc3545;
             padding-left: 10px;
+        }
+        .stack-trace-line {
+            background-color: rgba(220, 53, 69, 0.05);
+            padding-left: 10px;
+            color: #ff9999;
         }
         .warning-line {
             background-color: rgba(255, 193, 7, 0.1);
@@ -154,6 +163,9 @@
                 // Update page title
                 document.title = `${hostname} Log - GRQ Health Dashboard`;
                 
+                // Scroll to first stack trace after a brief delay to ensure rendering is complete
+                setTimeout(scrollToFirstStackTrace, 300);
+                
             } catch (error) {
                 console.error('Error loading log file:', error);
                 document.getElementById('logContainer').innerHTML = `
@@ -169,16 +181,21 @@
         
         function processLogContent(content) {
             const lines = content.split('\n');
-            return lines.map(line => {
+            return lines.map((line, index) => {
+                // Check if this is a stack trace line (starts with whitespace + "at ")
+                const isStackTraceLine = /^\s+at /.test(line);
+                
                 // Highlight different types of log messages
                 if (line.includes('ERROR') || line.includes('Exception') || line.includes('Error:')) {
-                    return `<div class="error-line">${escapeHtml(line)}</div>`;
+                    return `<div class="error-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
+                } else if (isStackTraceLine) {
+                    return `<div class="stack-trace-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (line.includes('WARNING') || line.includes('Warning:')) {
-                    return `<div class="warning-line">${escapeHtml(line)}</div>`;
+                    return `<div class="warning-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (line.includes('DEBUG:')) {
-                    return `<div class="debug-line">${escapeHtml(line)}</div>`;
+                    return `<div class="debug-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else {
-                    return escapeHtml(line);
+                    return `<span data-line-index="${index}">${escapeHtml(line)}</span>`;
                 }
             }).join('\n');
         }
@@ -187,6 +204,44 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        function scrollToFirstStackTrace() {
+            // Find the first error line that has a stack trace below it
+            const logContent = document.querySelector('.log-content');
+            if (!logContent) return;
+            
+            // Look for error lines followed by stack trace lines
+            const errorLines = logContent.querySelectorAll('.error-line');
+            
+            for (let errorLine of errorLines) {
+                // Check if the next sibling or nearby elements contain stack traces
+                let nextElement = errorLine.nextElementSibling;
+                let checkCount = 0;
+                
+                while (nextElement && checkCount < 5) {
+                    if (nextElement.classList && nextElement.classList.contains('stack-trace-line')) {
+                        // Found a stack trace! Scroll to the error line
+                        errorLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        return;
+                    }
+                    nextElement = nextElement.nextElementSibling;
+                    checkCount++;
+                }
+            }
+            
+            // If no error+stack trace combo found, just scroll to first stack trace line
+            const firstStackTrace = logContent.querySelector('.stack-trace-line');
+            if (firstStackTrace) {
+                firstStackTrace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+            }
+            
+            // If no stack trace found, scroll to first error
+            const firstError = logContent.querySelector('.error-line');
+            if (firstError) {
+                firstError.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         }
         
         // Auto-refresh every 30 seconds
