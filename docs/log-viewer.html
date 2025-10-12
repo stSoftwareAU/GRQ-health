@@ -211,37 +211,33 @@
             const logContent = document.querySelector('.log-content');
             if (!logContent) return;
             
-            // Look for error lines followed by stack trace lines
-            const errorLines = logContent.querySelectorAll('.error-line');
-            
-            for (let errorLine of errorLines) {
-                // Check if the next sibling or nearby elements contain stack traces
-                let nextElement = errorLine.nextElementSibling;
-                let checkCount = 0;
-                
-                while (nextElement && checkCount < 5) {
-                    if (nextElement.classList && nextElement.classList.contains('stack-trace-line')) {
-                        // Found a stack trace! Scroll to the error line
-                        errorLine.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        return;
-                    }
-                    nextElement = nextElement.nextElementSibling;
-                    checkCount++;
-                }
-            }
-            
-            // If no error+stack trace combo found, just scroll to first stack trace line
-            const firstStackTrace = logContent.querySelector('.stack-trace-line');
-            if (firstStackTrace) {
-                firstStackTrace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // First check if there are any stack traces at all
+            const stackTraces = logContent.querySelectorAll('.stack-trace-line');
+            if (stackTraces.length === 0) {
+                // No stack traces found - don't scroll, stay at the top
                 return;
             }
             
-            // If no stack trace found, scroll to first error
-            const firstError = logContent.querySelector('.error-line');
-            if (firstError) {
-                firstError.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // There are stack traces, now find the first one and look for the error line above it
+            const firstStackTrace = stackTraces[0];
+            
+            // Try to find the error message that precedes this stack trace
+            let currentElement = firstStackTrace.previousElementSibling;
+            let searchCount = 0;
+            
+            // Look backwards up to 3 lines to find the error line
+            while (currentElement && searchCount < 3) {
+                if (currentElement.classList && currentElement.classList.contains('error-line')) {
+                    // Found the error line that precedes the stack trace
+                    currentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    return;
+                }
+                currentElement = currentElement.previousElementSibling;
+                searchCount++;
             }
+            
+            // If we couldn't find an error line before the stack trace, just scroll to the stack trace itself
+            firstStackTrace.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         
         // Auto-refresh every 30 seconds
