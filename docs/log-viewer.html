@@ -191,11 +191,16 @@
                 const isStackTraceLine = /^\s+at /.test(line);
                 
                 // Highlight different types of log messages
-                if (line.includes('ERROR') || line.includes('Exception') || line.startsWith('Error:')) {
+                // Be specific to avoid false positives from training metrics that mention "Error:"
+                if (line.includes('ERROR') || 
+                    line.includes('Exception') || 
+                    line.startsWith('Error:') ||
+                    /Discovery failed/.test(line) ||
+                    /\bfailed\b.*Error:/.test(line)) {
                     return `<div class="error-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (isStackTraceLine) {
                     return `<div class="stack-trace-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
-                } else if (line.includes('WARNING') || line.includes('Warning:')) {
+                } else if (line.includes('WARNING') || line.includes('Warning:') || line.includes('⚠️')) {
                     return `<div class="warning-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (line.includes('DEBUG:')) {
                     return `<div class="debug-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
