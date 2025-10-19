@@ -168,8 +168,8 @@
                 // Update page title
                 document.title = `${hostname} Log - GRQ Health Dashboard`;
                 
-                // Scroll to first stack trace after a brief delay to ensure rendering is complete
-                setTimeout(scrollToFirstStackTrace, 300);
+                // Scroll to first issue after a brief delay to ensure rendering is complete
+                setTimeout(scrollToFirstIssue, 300);
                 
             } catch (error) {
                 console.error('Error loading log file:', error);
@@ -193,6 +193,8 @@
                 // Highlight different types of log messages
                 if (line.includes('ERROR') || line.includes('Exception') || line.startsWith('Error:')) {
                     return `<div class="error-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
+                } else if (line.includes('⚠️')) {
+                    return `<div class="error-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (isStackTraceLine) {
                     return `<div class="stack-trace-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (line.includes('WARNING') || line.includes('Warning:')) {
@@ -211,38 +213,19 @@
             return div.innerHTML;
         }
         
-        function scrollToFirstStackTrace() {
-            // Find the first error line that has a stack trace below it
+        function scrollToFirstIssue() {
+            // Find the first issue (error, warning emoji, or stack trace) in the log
             const logContent = document.querySelector('.log-content');
             if (!logContent) return;
             
-            // First check if there are any stack traces at all
-            const stackTraces = logContent.querySelectorAll('.stack-trace-line');
-            if (stackTraces.length === 0) {
-                // No stack traces found - don't scroll, stay at the top
-                return;
+            // Get all issue elements and find the first one by DOM order
+            const allIssues = logContent.querySelectorAll('.error-line, .stack-trace-line, .warning-line');
+            
+            if (allIssues.length > 0) {
+                // Scroll to the first issue found in the log (by DOM order)
+                allIssues[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
-            
-            // There are stack traces, now find the first one and look for the error line above it
-            const firstStackTrace = stackTraces[0];
-            
-            // Try to find the error message that precedes this stack trace
-            let currentElement = firstStackTrace.previousElementSibling;
-            let searchCount = 0;
-            
-            // Look backwards up to 3 lines to find the error line
-            while (currentElement && searchCount < 3) {
-                if (currentElement.classList && currentElement.classList.contains('error-line')) {
-                    // Found the error line that precedes the stack trace
-                    currentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    return;
-                }
-                currentElement = currentElement.previousElementSibling;
-                searchCount++;
-            }
-            
-            // If we couldn't find an error line before the stack trace, just scroll to the stack trace itself
-            firstStackTrace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // No issues found - stay at the top
         }
     </script>
 </body>
