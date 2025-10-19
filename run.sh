@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.36"
+VERSION="1.0.37"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -757,7 +757,7 @@ scan_log_errors() {
     if [ -f "$log_file" ]; then
         # Count actual exceptions by looking for error messages that precede stack traces
         # Each exception starts with an error message, followed by stack trace lines
-        local stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|Error|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        local stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|^Error:|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
         
         # Count other critical errors that should be flagged
         # Missing commands/tools (excluding aws which is only expected on Macs)
