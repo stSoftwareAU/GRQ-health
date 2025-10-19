@@ -2,6 +2,41 @@
 
 A distributed health monitoring system that tracks the status of multiple hosts across different operating systems and timezones. The system provides a beautiful web dashboard to visualize host health status with location tracking, historical records, and smart health logic.
 
+## 🤖 AI Assistant Instructions
+
+**IMPORTANT: This README serves as the primary specification document for the AI assistant working on this project.**
+
+### Before Making Any Changes:
+1. **ALWAYS read this entire README first** to understand the current system architecture and specifications
+2. **Check the current version** in `run.sh` and increment it for any code changes
+3. **Run `./update_version.sh`** after making changes to sync version across all files
+4. **Update this README** if you modify system behavior, add features, or change specifications
+5. **Test changes** on both desktop and mobile views when applicable
+
+### Current System Specifications:
+
+#### Log Viewer Auto-Scroll Behavior:
+- **Function**: `scrollToFirstIssue()` in `log-viewer.html`
+- **Current Logic**: 
+  1. Find the first issue of any type in DOM order (error, stack trace, or warning)
+  2. Scroll to that first issue
+  3. If no issues found, stay at the top
+- **Highlighted Issues**: ERROR, Exception, Error:, ⚠️ (warning emoji), WARNING, Warning:, DEBUG:
+- **Stack Trace Detection**: Lines matching `/^\s+at /` pattern
+- **All issues are counted** in the dashboard exception count
+
+#### Exception Detection in run.sh:
+- **Stack traces**: Lines with "Exception", "Error", "MEMETIC" followed by stack trace lines
+- **Missing commands**: "No such file or directory" errors
+- **Warning emojis**: Lines containing "⚠️" 
+- **Permission errors**: "Permission denied", "access denied", "EACCES"
+- **All exceptions trigger health updates** regardless of heartbeat timing
+
+#### Version Management:
+- **Primary version**: Stored in `run.sh` VERSION variable
+- **Auto-sync**: `./update_version.sh` updates all HTML/JS files
+- **Required**: Increment version for any code changes
+
 ## Features
 
 - **Cross-platform compatibility**: Works on macOS, Ubuntu, and AWS Linux
@@ -313,8 +348,17 @@ bash -x run.sh
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test on different operating systems
-5. Submit a pull request
+4. **Always update the version number** in `run.sh` when making code changes
+5. **Run the version update script**: `./update_version.sh` to sync version across all files
+6. Test on different operating systems
+7. Submit a pull request
+
+### Version Management
+
+When making code changes, you must:
+1. Update the `VERSION` variable in `run.sh` (e.g., from "1.0.32" to "1.0.33")
+2. Run `./update_version.sh` to automatically update version numbers in all HTML and JavaScript files
+3. This ensures version consistency across the entire project
 
 ## License
 

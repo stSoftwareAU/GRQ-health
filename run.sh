@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.32"
+VERSION="1.0.36"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -764,6 +764,9 @@ scan_log_errors() {
         # Focus on missing script files which indicate configuration issues
         local missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
         
+        # Count warning emoji issues (⚠️)
+        local warning_emoji_errors=$(grep -c "⚠️" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
+        
         # Lock acquisition failures (removed - these are expected for daily tasks)
         local lock_failures=0
         
@@ -774,7 +777,7 @@ scan_log_errors() {
         local network_errors=0
         
         # Sum all error types
-        exception_count=$((stack_trace_exceptions + missing_command_errors + lock_failures + permission_errors + network_errors))
+        exception_count=$((stack_trace_exceptions + missing_command_errors + warning_emoji_errors + lock_failures + permission_errors + network_errors))
         
         # If we found exceptions, get more details
         if [ "$exception_count" -gt 0 ]; then
@@ -786,6 +789,10 @@ scan_log_errors() {
             if [ "$missing_command_errors" -gt 0 ]; then
                 if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
                 error_details="${error_details}${missing_command_errors} missing commands"
+            fi
+            if [ "$warning_emoji_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${warning_emoji_errors} warning issues"
             fi
             if [ "$lock_failures" -gt 0 ]; then
                 if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
