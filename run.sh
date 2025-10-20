@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.37"
+VERSION="1.0.39"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -776,8 +776,11 @@ scan_log_errors() {
         # Network/connection errors (removed - too unreliable, causing false positives)
         local network_errors=0
         
+        # Count all Deno crashes with C stack traces (includes out of memory, segfaults, etc.)
+        local deno_crashes=$(grep -c "==== C stack trace" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
+        
         # Sum all error types
-        exception_count=$((stack_trace_exceptions + missing_command_errors + warning_emoji_errors + lock_failures + permission_errors + network_errors))
+        exception_count=$((stack_trace_exceptions + missing_command_errors + warning_emoji_errors + lock_failures + permission_errors + network_errors + deno_crashes))
         
         # If we found exceptions, get more details
         if [ "$exception_count" -gt 0 ]; then
@@ -801,6 +804,10 @@ scan_log_errors() {
             if [ "$permission_errors" -gt 0 ]; then
                 if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
                 error_details="${error_details}${permission_errors} permission errors"
+            fi
+            if [ "$deno_crashes" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${deno_crashes} Deno crashes"
             fi
             exception_summary="${exception_count} errors found (${error_details})"
         else
