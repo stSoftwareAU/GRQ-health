@@ -190,17 +190,23 @@
                 // Check if this is a stack trace line (starts with whitespace + "at ")
                 const isStackTraceLine = /^\s+at /.test(line);
                 
+                // Check if this is a C stack trace line (starts with whitespace + number)
+                const isCStackTraceLine = /^\s+\d+\s+/.test(line);
+                
                 // Highlight different types of log messages
                 // Be specific to avoid false positives from training metrics that mention "Error:"
                 if (line.includes('ERROR') || 
                     line.includes('Exception') || 
                     line.startsWith('Error:') ||
                     /Discovery failed/.test(line) ||
-                    /\bfailed\b.*Error:/.test(line)) {
+                    /\bfailed\b.*Error:/.test(line) ||
+                    /Fatal JavaScript out of memory/.test(line) ||
+                    /==== C stack trace/.test(line) ||
+                    /Fatal error/.test(line)) {
                     return `<div class="error-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (line.includes('⚠️')) {
                     return `<div class="error-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
-                } else if (isStackTraceLine) {
+                } else if (isStackTraceLine || isCStackTraceLine) {
                     return `<div class="stack-trace-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
                 } else if (line.includes('WARNING') || line.includes('Warning:') || line.includes('⚠️')) {
                     return `<div class="warning-line" data-line-index="${index}">${escapeHtml(line)}</div>`;
