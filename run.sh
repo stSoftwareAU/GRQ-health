@@ -767,6 +767,10 @@ scan_log_errors() {
         # Count warning emoji issues (⚠️)
         local warning_emoji_errors=$(grep -c "⚠️" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
         
+        # Count failure emoji issues (❌)
+        local failure_emoji_errors=$(grep -c "❌" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        
         # Lock acquisition failures (removed - these are expected for daily tasks)
         local lock_failures=0
         
@@ -780,7 +784,7 @@ scan_log_errors() {
         local deno_crashes=$(grep -c "==== C stack trace" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
         
         # Sum all error types
-        exception_count=$((stack_trace_exceptions + missing_command_errors + warning_emoji_errors + lock_failures + permission_errors + network_errors + deno_crashes))
+        exception_count=$((stack_trace_exceptions + missing_command_errors + warning_emoji_errors + failure_emoji_errors + lock_failures + permission_errors + network_errors + deno_crashes))
         
         # If we found exceptions, get more details
         if [ "$exception_count" -gt 0 ]; then
@@ -796,6 +800,10 @@ scan_log_errors() {
             if [ "$warning_emoji_errors" -gt 0 ]; then
                 if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
                 error_details="${error_details}${warning_emoji_errors} warning issues"
+            fi
+            if [ "$failure_emoji_errors" -gt 0 ]; then
+                if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
+                error_details="${error_details}${failure_emoji_errors} failure issues"
             fi
             if [ "$lock_failures" -gt 0 ]; then
                 if [ -n "$error_details" ]; then error_details="${error_details}, "; fi
