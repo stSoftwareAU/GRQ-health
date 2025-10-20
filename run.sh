@@ -16,7 +16,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.40"
+VERSION="1.0.41"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -77,7 +77,6 @@ get_system_info() {
     # Ensure /usr/sbin is in PATH for macOS (needed for sysctl)
     if [[ "$OSTYPE" == "darwin"* ]] && [[ ":$PATH:" != *":/usr/sbin:"* ]]; then
         export PATH="/usr/sbin:$PATH"
-        echo "DEBUG: Added /usr/sbin to PATH for sysctl access" >> "$HOME/logs/node.log" 2>/dev/null || true
     fi
     
     # Get uptime in seconds
@@ -174,20 +173,16 @@ get_system_info() {
             # Use the largest filesystem found, or fallback to current directory
             if [[ -n "$largest_fs" ]]; then
                 df_output="$largest_fs"
-                echo "DEBUG: Using largest filesystem: $largest_fs" >> "$HOME/logs/node.log" 2>/dev/null || true
             else
                 # Fallback to current directory
                 current_dir=$(pwd)
                 df_output=$(df -h "$current_dir" | awk 'NR==2')
-                echo "DEBUG: Fallback to current directory: $current_dir" >> "$HOME/logs/node.log" 2>/dev/null || true
             fi
             
             # Linux/AWS - handle G suffix and other variations
             total_disk=$(echo "$df_output" | awk '{print $2}' | sed 's/G//; s/Ti//; s/Mi//')
             free_disk_space=$(echo "$df_output" | awk '{print $4}' | sed 's/G//; s/Ti//; s/Mi//')
-            used_disk=$(echo "$df_output" | awk '{print $3}' | sed 's/G//; s/Ti//; s/Mi//')
-            
-            echo "DEBUG: Disk detection - total: $total_disk, free: $free_disk_space, used: $used_disk" >> "$HOME/logs/node.log" 2>/dev/null || true
+            used_disk=$(echo "$df_output" | awk '{print $3}' | sed 's/G//; s/Ti//; s/Mi//')            
         fi
         
         # Calculate used disk space percentage - handle different units
@@ -274,7 +269,6 @@ get_system_info() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS - get machine type using system_profiler with multiple fallbacks
         machine_type=$(system_profiler SPHardwareDataType 2>/dev/null | grep "Model Name:" | sed 's/.*Model Name: //' | tr -d '\n' || echo "")
-        echo "DEBUG: system_profiler result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         
         # If that fails, try alternative methods
         if [[ -z "$machine_type" ]]; then
@@ -282,9 +276,6 @@ get_system_info() {
             model_id=""
             if command -v sysctl >/dev/null 2>&1; then
                 model_id=$(sysctl -n hw.model 2>/dev/null || echo "")
-                echo "DEBUG: sysctl hw.model result: '$model_id'" >> "$HOME/logs/node.log" 2>/dev/null || true
-            else
-                echo "DEBUG: sysctl command not found in PATH" >> "$HOME/logs/node.log" 2>/dev/null || true
             fi
             if [[ -n "$model_id" ]]; then
                 case "$model_id" in
@@ -345,43 +336,30 @@ get_system_info() {
         if [ -f /sys/class/dmi/id/product_name ]; then
             # Modern Linux systems with DMI
             machine_type=$(cat /sys/class/dmi/id/product_name 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
-            echo "DEBUG: DMI product_name result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         elif [ -f /proc/device-tree/model ]; then
             # ARM-based systems (like Raspberry Pi)
             machine_type=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
-            echo "DEBUG: device-tree model result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         elif command -v dmidecode >/dev/null 2>&1; then
             # Use dmidecode if available
             machine_type=$(dmidecode -s system-product-name 2>/dev/null | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
-            echo "DEBUG: dmidecode result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
         elif [ -f /etc/machine-info ]; then
             # Some systems store machine info here
             machine_type=$(grep "PRETTY_HOSTNAME" /etc/machine-info 2>/dev/null | sed 's/PRETTY_HOSTNAME=//' | tr -d '\n' | tr -cd '[:print:][:space:]' || echo "")
-            echo "DEBUG: machine-info result: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
-        else
-            echo "DEBUG: No machine type detection methods available" >> "$HOME/logs/node.log" 2>/dev/null || true
         fi
-        
-        
+               
         # Clean up the machine type string
         if [[ -n "$machine_type" ]]; then
-            echo "DEBUG: Raw machine_type before cleanup: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
             # Remove common prefixes and clean up
             machine_type=$(echo "$machine_type" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sed 's/^Dell Inc\. //; s/^HP //; s/^Lenovo //; s/^ASUSTeK //; s/^GIGABYTE //; s/^MSI //')
-            echo "DEBUG: machine_type after prefix removal: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
             
             # Validate and sanitize the machine type string
             # Remove any non-printable characters and ensure it's a valid string
             machine_type=$(echo "$machine_type" | tr -cd '[:print:][:space:]' | sed 's/[[:space:]]*$//')
-            echo "DEBUG: machine_type after sanitization: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
             
             # If the result is empty, contains only whitespace, or is corrupted, set a fallback
             # Allow common characters in machine names: alphanumeric, spaces, hyphens, parentheses, periods, underscores, colons
             if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]] || [[ "$machine_type" =~ [^[:alnum:][:space:]-()._:] ]]; then
                 # Log debug info before setting to Unknown
-                echo "DEBUG: Machine type validation failed, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: machine_type='$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 machine_type="Unknown"
             fi
         fi
@@ -398,11 +376,7 @@ get_system_info() {
                 
                 # Create a descriptive machine type from uname info
                 machine_type="Linux ($hostname_part, $arch_part, kernel $kernel_part)"
-                echo "DEBUG: Using uname -a fallback: '$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
             else
-                # Log debug info before setting to Unknown
-                echo "DEBUG: No machine type detected, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 machine_type="Unknown"
             fi
         fi
@@ -437,18 +411,11 @@ get_system_info() {
                             cpu_speed="$processor_model"
                         else
                             # Log debug info before falling back to generic "Apple Silicon"
-                            echo "DEBUG: Apple Silicon detected but processor model extraction failed" >> "$HOME/logs/node.log" 2>/dev/null || true
-                            echo "DEBUG: cpu_name='$cpu_name'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                            echo "DEBUG: grep M-series result: '$(echo "$cpu_name" | grep -o "M[0-9]\+[[:space:]]*[A-Za-z]*" | head -1)'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                            echo "DEBUG: grep A-series result: '$(echo "$cpu_name" | grep -o "A[0-9]\+[[:space:]]*[A-Za-z]*" | head -1)'" >> "$HOME/logs/node.log" 2>/dev/null || true
                             cpu_speed="Apple Silicon"
                         fi
                     fi
                 else
                     # Log debug info before setting to unknown
-                    echo "DEBUG: Non-Apple processor detected, setting cpu_speed to unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
-                    echo "DEBUG: cpu_name='$cpu_name'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                    echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                     cpu_speed="unknown"
                 fi
             fi
@@ -470,9 +437,6 @@ get_system_info() {
                     cpu_speed="${cpu_speed} GHz"
                 else
                     # Log debug info before setting to unknown
-                    echo "DEBUG: Linux CPU detection failed - lscpu max frequency not available" >> "$HOME/logs/node.log" 2>/dev/null || true
-                    echo "DEBUG: cpu_speed_raw='$cpu_speed_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                    echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                     cpu_speed="unknown"
                 fi
             fi
@@ -485,15 +449,10 @@ get_system_info() {
                 cpu_speed="${cpu_speed} GHz"
             else
                 # Log debug info before setting to unknown
-                echo "DEBUG: Linux CPU detection failed - /proc/cpuinfo frequency not available" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: cpu_speed_raw='$cpu_speed_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 cpu_speed="unknown"
             fi
         else
             # Log debug info before setting to unknown
-            echo "DEBUG: Linux CPU detection failed - no lscpu or /proc/cpuinfo available" >> "$HOME/logs/node.log" 2>/dev/null || true
-            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
             cpu_speed="unknown"
         fi
     fi
@@ -532,9 +491,6 @@ get_system_info() {
             cpu_breakdown="${cpu_user}% user, ${cpu_sys}% sys, ${cpu_idle}% idle"
         else
             # Log debug info before setting cpu_breakdown to unknown
-            echo "DEBUG: macOS CPU breakdown detection failed - no CPU usage info found" >> "$HOME/logs/node.log" 2>/dev/null || true
-            echo "DEBUG: cpu_info='$cpu_info'" >> "$HOME/logs/node.log" 2>/dev/null || true
-            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
             cpu_breakdown="unknown"
         fi
     else
@@ -545,9 +501,6 @@ get_system_info() {
                 cpu_breakdown="mpstat: ${cpu_load_raw}%"
             else
                 # Log debug info before setting cpu_breakdown to unknown
-                echo "DEBUG: Linux CPU breakdown detection failed - mpstat result invalid" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: cpu_load_raw='$cpu_load_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 cpu_breakdown="unknown"
             fi
         elif command -v top >/dev/null 2>&1; then
@@ -556,15 +509,10 @@ get_system_info() {
                 cpu_breakdown="top: ${cpu_load_raw}%"
             else
                 # Log debug info before setting cpu_breakdown to unknown
-                echo "DEBUG: Linux CPU breakdown detection failed - top result invalid" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: cpu_load_raw='$cpu_load_raw'" >> "$HOME/logs/node.log" 2>/dev/null || true
-                echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
                 cpu_breakdown="unknown"
             fi
         else
             # Log debug info before setting cpu_breakdown to unknown
-            echo "DEBUG: Linux CPU breakdown detection failed - no mpstat or top available" >> "$HOME/logs/node.log" 2>/dev/null || true
-            echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
             cpu_breakdown="unknown"
         fi
     fi
@@ -713,9 +661,6 @@ get_system_info() {
     # Final validation of machine_type to prevent corrupted output
     if [[ -z "$machine_type" ]] || [[ "$machine_type" =~ [^[:print:]] ]] || [[ "$machine_type" =~ ^[[:space:]]*$ ]]; then
         # Log debug info before final fallback to Unknown
-        echo "DEBUG: Final machine type validation failed, setting to Unknown" >> "$HOME/logs/node.log" 2>/dev/null || true
-        echo "DEBUG: machine_type='$machine_type'" >> "$HOME/logs/node.log" 2>/dev/null || true
-        echo "DEBUG: OSTYPE='$OSTYPE'" >> "$HOME/logs/node.log" 2>/dev/null || true
         machine_type="Unknown"
     fi
     
