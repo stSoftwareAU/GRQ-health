@@ -24,7 +24,7 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Highlighted Issues**: ERROR, Exception, Error:, ⚠️ (warning emoji), WARNING, Warning:, DEBUG:
 - **Stack Trace Detection**: 
   - JavaScript stack traces: Lines matching `/^\s+at /` pattern
-  - C stack traces: Lines matching `/^\s+\d+\s+\w+\s+0x[0-9a-fA-F]+/` pattern (requires hex address to avoid false positives from git messages)
+  - C stack traces: Lines matching `/^\s+\d+\s+[^\s]+\s+0x[0-9a-fA-F]+/` pattern (allows periods, hyphens, and other valid characters in binary/library names, requires hex address to avoid false positives from git messages)
 - **All issues are counted** in the dashboard exception count
 
 #### Exception Detection in run.sh:
