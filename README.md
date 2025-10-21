@@ -22,7 +22,9 @@ A distributed health monitoring system that tracks the status of multiple hosts 
   2. Scroll to that first issue
   3. If no issues found, stay at the top
 - **Highlighted Issues**: ERROR, Exception, Error:, ⚠️ (warning emoji), WARNING, Warning:, DEBUG:
-- **Stack Trace Detection**: Lines matching `/^\s+at /` pattern
+- **Stack Trace Detection**: 
+  - JavaScript stack traces: Lines matching `/^\s+at /` pattern
+  - C stack traces: Lines matching `/^\s+\d+\s+\w+\s+0x[0-9a-fA-F]+/` pattern (requires hex address to avoid false positives from git messages)
 - **All issues are counted** in the dashboard exception count
 
 #### Exception Detection in run.sh:
