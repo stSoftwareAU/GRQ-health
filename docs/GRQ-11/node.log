@@ -1,5 +1,5 @@
 ================ Clean up START ================
-Version 1.3.7
+Version 1.3.8
 /Users/nigel/src/GRQ/worker
 Disk usage:
 Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
@@ -7,25 +7,33 @@ Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
 devfs            205Ki   205Ki     0Bi   100%     710     0  100%   /dev
 /dev/disk3s6     460Gi   2.0Gi   321Gi     1%       2  3.4G    0%   /System/Volumes/VM
 /dev/disk3s2     460Gi   7.2Gi   321Gi     3%    1.3k  3.4G    0%   /System/Volumes/Preboot
-/dev/disk3s4     460Gi   1.9Mi   321Gi     1%      61  3.4G    0%   /System/Volumes/Update
+/dev/disk3s4     460Gi   2.9Mi   321Gi     1%      61  3.4G    0%   /System/Volumes/Update
 /dev/disk1s2     500Mi   6.0Mi   482Mi     2%       1  4.9M    0%   /System/Volumes/xarts
 /dev/disk1s1     500Mi   5.6Mi   482Mi     2%      30  4.9M    0%   /System/Volumes/iSCPreboot
 /dev/disk1s3     500Mi   1.2Mi   482Mi     1%      60  4.9M    0%   /System/Volumes/Hardware
 /dev/disk3s5     460Gi   118Gi   321Gi    27%    569k  3.4G    0%   /System/Volumes/Data
 map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
-/dev/disk5s1     1.8Ti   682Gi   1.2Ti    37%     26M   12G    0%   /Volumes/DataGRQ
-Uptime:  3:47  up 9 days,  7:20, 5 users, load averages: 4.64 8.34 9.53
+/dev/disk5s1     1.8Ti   684Gi   1.2Ti    37%     26M   12G    0%   /Volumes/DataGRQ
+Uptime: 10:47  up 9 days, 14:20, 5 users, load averages: 7.26 10.76 11.63
 USER    PID  PPID COMMAND
-nigel  7680  7679 /bin/bash -c mkdir -p ~/logs; /Volumes/DataGRQ/train/GRQ/run.sh --run-once > ~/logs/run-train.log 2>&1
-nigel  7682  7680 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
-nigel  7700  7682 /bin/bash worker/node.sh
-nigel  7734  7700 /bin/bash ./train/taskData.sh
-nigel 39088  7734 /bin/bash ./trainDataLocation.sh
-nigel 39090  7734 tee -a /Users/nigel/logs/trainDataLocation.log
-nigel 83133 39088 deno run --v8-flags=--max-old-space-size=8192 --allow-read --allow-write src/location/TrainingData.ts
-nigel 83544 96639 /bin/bash worker/node.sh
-root  83554 83544 ps -U nigel -o user,pid,ppid,command
-nigel 96639     1 /bin/bash /Users/nigel/src/GRQ/run.sh
+nigel  3638 92928 find . -depth 1 ( -type l -o -type f ) -name .train*_87 -exec rm -f {} +
+nigel  4432  4431 /bin/bash -c mkdir -p ~/logs; /Volumes/DataGRQ/train/GRQ/run.sh --run-once > ~/logs/run-train.log 2>&1
+nigel  4434  4432 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
+nigel  4457  4434 /bin/bash worker/node.sh
+nigel  4496  4457 /bin/bash ./train/taskData.sh
+nigel  4505  4496 /bin/bash ./trainDataStocks.sh
+nigel  4506  4496 tee -a /Users/nigel/logs/trainDataStocks.log
+nigel  4637  4505 /bin/bash ./repos.sh
+nigel  4883  4637 /bin/bash ./model_fetch.sh GRQ-sentiment-topics --skip-validate
+nigel  5069 98479 /bin/bash worker/node.sh
+root   5079  5069 ps -U nigel -o user,pid,ppid,command
+nigel 86602     1 cloudphotod
+nigel 92928     1 /bin/bash ./cleanup_cache.sh
+nigel 94880 94879 /bin/bash -c /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh > ~/logs/market.err 2>&1
+nigel 94881 94880 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh
+nigel 94901 94881 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/fetch.sh
+nigel 94945 94901 deno run --allow-read --allow-write --allow-env --allow-net src/Fetch.ts --sharesRepo=GRQ-shareprices2025Q1 --reportRepo=GRQ-companyreports
+nigel 98479     1 /bin/bash /Users/nigel/src/GRQ/run.sh
 root    508   377 login -pfl nigel /bin/bash -c exec -la zsh /bin/zsh
 nigel   517   508 -zsh
 nigel  3207   517 tail -f /Users/nigel/logs/nodetrain.log
@@ -38,6 +46,7 @@ nigel  3206   555 tail -f /Users/nigel/logs/fetch.log
 root    552   377 login -pfl nigel /bin/bash -c exec -la zsh /bin/zsh
 nigel   558   552 -zsh
 Host: GRQ-11
+User: nigel
 IP: 10.0.0.11
 10.0.0.89
 169.254.10.224
@@ -46,44 +55,41 @@ IP: 10.0.0.11
 10.1.0.11
 100.107.196.16
 Number of CPUs: 10
-Available Memory: 9172M
+Available Memory: 8418M
 ================ Clean up ENDED ================
-Use local deno
 PATH: /Users/nigel/.deno/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 deno 2.5.4 (stable, release, aarch64-apple-darwin)
 v8 14.0.365.5-rusty
 typescript 5.9.2
 aws-cli/2.18.15 Python/3.12.7 Darwin/25.0.0 source/arm64
 Option: sampler
-Starting... Wed Oct 22 03:47:30 AEDT 2025
+Starting... Wed Oct 22 10:47:10 AEDT 2025
 Already up to date.
-From github.com:stSoftwareAU/GRQ-cluster
-   a1023e5..a08f419  main       -> origin/main
 HEAD is now at a08f419 Evolution score 0.4115 -> 0.4118 {diff 3} on Mac-Ultra-M2
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-cluster synced with remote (validation skipped)
-HEAD is now at bd8968036 🦠 GRQ-11 🎯, Score: 0.411792, Neurons: 453 & Synapses: 15,882
+HEAD is now at 001139ea7 🦠 GRQ-11 🎯, Score: 0.411816, Neurons: 453 & Synapses: 15,767
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-sampler synced with remote (validation skipped)
-HEAD is now at 85f915234c REJECTED 13.31% -> 8.73% Delta -4.585
+HEAD is now at 68ab96e0ce REJECTED 13.30% -> 9.08% Delta -4.215
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-portfolio synced with remote (validation skipped)
-Starting sampler... Wed Oct 22 03:47:56 AEDT 2025
+Starting sampler... Wed Oct 22 10:47:37 AEDT 2025
 Sampler mode
 🔄 Rsync attempt 1 of 3: /Users/nigel/Training/trainData-binary_88.tgz ../../.cache/trainData-binary_88.tgz
 Loop 1 of 5
 Already up to date.
-1) Sample rate: 0.01, batch Size: 10000, timeout: 1
-Total time taken: 6s 459ms
-Fern Feest (Observations: 1,486, Neurons: 453, Synapses: 15,882 & Score: 0.412)
-3 mutations, mutation rate 5.0%, elitism 1, mutation ALL, selection TOURNAMENT, timeout 1, PopSize 50 SAMPLER
-Initialized in 1s 462ms
+1) Sample rate: 0.01, batch Size: 10000, timeout: 7
+Total time taken: 6s 603ms
+Camila Conroy (Observations: 1,486, Neurons: 453, Synapses: 15,767 & Score: 0.412)
+1 mutation, mutation rate 12.9%, elitism 1, mutation ALL, selection TOURNAMENT, timeout 7, PopSize 50 SAMPLER
+Initialized in 1s 899ms
 Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
 Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
 Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
@@ -102,12 +108,6 @@ Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
 Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
 Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
 Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Can't deDuplicate creature at 28 of 50
-Can't deDuplicate creature at 31 of 49
-Can't deDuplicate creature at 37 of 48
-Remove neuron trend-check-positive-SP500-inclusion-v3 as no longer connected
-Remove neuron proximity-check-below-zero-SP500-inclusion-v3 as no longer connected
-Remove neuron proximity-check-near-zero-SP500-inclusion-v3 as no longer connected
 Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
 Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
 Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
@@ -126,7 +126,6 @@ Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
 Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
 Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
 Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron 920afc76-cc79-41a0-833a-6a07d739155c as no longer connected
 Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
 Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
 Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
@@ -136,400 +135,194 @@ Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
 Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
 Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
 Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron 7c1ec9ad-fc39-4e1d-9bc6-d431191b6b16 as no longer connected
-Fine tuning increased fitness by 0.000288840699411097 to 0.41207550315775043 adjusted 1 weight Restored: 7
-Generation 1 score 0.41207550315775043 (avg: 0.3853) error 0.5879234766472872 time 36s 101ms
-Evolution of 1 generation in 4m 17s, averaging 4m 16s 996ms
-Loop 2 of 5
-Already up to date.
-2) Sample rate: 0.05, batch Size: 10000, timeout: 7
-Total time taken: 3s 992ms
-Alanis Jones (Observations: 1,486, Neurons: 453, Synapses: 15,882 & Score: 0.412)
-9 mutations, mutation rate 7.4%, elitism 1, mutation FFW, selection FITNESS_PROPORTIONATE, timeout 7, PopSize 40 SAMPLER
-Initialized in 1s 839ms
-Can't deDuplicate creature at 17 of 40
-Discovery a2f4608e scheduled
-[Neat] Discovery request sent to worker for a2f4608e
-[WorkerHandler] Posting discovery request to worker (taskID: 6)
-Training a2f4608e scheduled
-Training a2f4608e with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
-[Worker] Starting discovery for creature (taskID: 6)...
-Discovery a2f4608e with 1 binary files, sample rate: 2.5%, batch size: 20
-Discovery a2f4608e initialize time 48ms
-Discovery a2f4608e processing .trainData-binary_88-sampler/sample-5.bin
-Training a2f4608e samples 3,448 of 105,889 3.3%( rate 30.0% ) error 0.575 time average: 17ms 409µs 512ns total: 1m 28ms
-Fine tuning increased fitness by 9.050014814215857e-7 to 0.40900407836924774 adjusted 1 weight Restored: 1
-Training a2f4608e samples 6,733 of 105,889 6.4%( rate 30.0% ) error 0.585 time average: 17ms 826µs 971ns total: 2m 29ms
-Training a2f4608e samples 10,172 of 105,889 9.6%( rate 30.0% ) error 0.586 time average: 17ms 699µs 862ns total: 3m 43ms
-Training a2f4608e samples 13,480 of 105,889 12.7%( rate 30.0% ) error 0.588 time average: 17ms 807µs 640ns total: 4m 47ms
-Training a2f4608e samples 16,895 of 105,889 16.0%( rate 30.0% ) error 0.589 time average: 17ms 759µs 692ns total: 5m 50ms
-Training a2f4608e timed out after 5m 50ms
-Generation 8 score 0.40900407836924774 (avg: 0.4087) error 0.5909938812408274 avg time 33s 842ms
-Set training/discovery clean up count to 2
-Avg time per generation: 55086ms, max wait: 5 generations in 5 minutes
-Discovery timeout set to 20 generations (based on limiting factor)
-[Neat] Waiting for discovery to complete (1/20) - In progress: a2f4608e
-Training a2f4608e completed after 5m 176ms
-Training a2f4608e compacted
-Generation 9 score 0.40900407836924774 (avg: 0.4090) error 0.5909938812408274 avg time 4s 712ms
-[Neat] Waiting for discovery to complete (2/20) - In progress: a2f4608e
-Trained a2f4608e Score: 0.4089979689430698, Error: 0.5909947862423088 -> 0.5909999906670054, 👿 -0.00000520
-Compact a2f4608e Score: 0.4087936434992217, Error: 0.5909947862423088 -> 0.5912043182108535, 👿 -0.000210
-Generation 10 score 0.40900407836924774 (avg: 0.4087) error 0.5909938812408274 avg time 3s 807ms
-[Neat] Waiting for discovery to complete (3/20) - In progress: a2f4608e
-Generation 11 score 0.40900407836924774 (avg: 0.4090) error 0.5909938812408274 avg time 4s 198ms
-[Neat] Waiting for discovery to complete (4/20) - In progress: a2f4608e
-Fine tuning increased fitness by 0.000004453240105783962 to 0.4090085316093535 adjusted 1 weight Restored: 1
-Discovery a2f4608e read time  for .trainData-binary_88-sampler/sample-5.bin with 20 records
-Discovery a2f4608e drained promises after file .trainData-binary_88-sampler/sample-5.bin
-⏲  Discovery a2f4608e timeout reached during file processing. Processed 20 records. Proceeding with partial results for analysis.
-Discovery a2f4608e scanning time 7m 54s 330ms
-Discovery a2f4608e recorded time 7m 54s 330ms
-Discovery a2f4608e analysis timeout extended by 3m
-Generation 12 score 0.4090085316093535 (avg: 0.4090) error 0.5909894280007216 avg time 3s 937ms
-[Neat] Waiting for discovery to complete (5/20) - In progress: a2f4608e
-Fine tuning increased fitness by 0.0000017652433266235334 to 0.40901029685268014 adjusted 1 weight Restored: 1
-Generation 13 score 0.40901029685268014 (avg: 0.4090) error 0.590987662757395 avg time 4s 680ms
-[Neat] Waiting for discovery to complete (6/20) - In progress: a2f4608e
-Fine tuning increased fitness by 2.0616140461449106e-9 to 0.4090102989142942 adjusted 1 weight Restored: 1
-Generation 14 score 0.4090102989142942 (avg: 0.4090) error 0.590987660595781 avg time 4s 226ms
-[Neat] Waiting for discovery to complete (7/20) - In progress: a2f4608e
-Fine tuning increased fitness by 4.093919425685044e-9 to 0.4090103030082136 adjusted 1 weight Restored: 1
-Generation 15 score 0.4090103030082136 (avg: 0.4090) error 0.5909876565018616 avg time 4s 519ms
-[Neat] Waiting for discovery to complete (8/20) - In progress: a2f4608e
-Fine tuning increased fitness by 6.3587285437094465e-9 to 0.40901030936694216 adjusted 1 weight Restored: 1
-Generation 16 score 0.40901030936694216 (avg: 0.4090) error 0.590987650143133 avg time 4s 353ms
-[Neat] Waiting for discovery to complete (9/20) - In progress: a2f4608e
-Fine tuning increased fitness by 4.6059632652362126e-7 to 0.4090107699632687 adjusted 1 weight Restored: 1
-Generation 17 score 0.4090107699632687 (avg: 0.4090) error 0.5909871895468065 avg time 4s 901ms
-[Neat] Waiting for discovery to complete (10/20) - In progress: a2f4608e
-Fine tuning increased fitness by 1.1344346573238795e-9 to 0.40901077109770334 adjusted 1 weight Restored: 1
-Generation 18 score 0.40901077109770334 (avg: 0.4090) error 0.5909871884123719 avg time 4s 317ms
-[Neat] Waiting for discovery to complete (11/20) - In progress: a2f4608e
-Fine tuning increased fitness by 4.865468028469877e-10 to 0.40901077158425014 adjusted 1 weight Restored: 1
-Generation 19 score 0.40901077158425014 (avg: 0.4090) error 0.590987187925825 avg time 5s 61ms
-[Neat] Waiting for discovery to complete (12/20) - In progress: a2f4608e
-Generation 20 score 0.40901077158425014 (avg: 0.4090) error 0.590987187925825 avg time 4s 70ms
-[Neat] Waiting for discovery to complete (13/20) - In progress: a2f4608e
-Generation 21 score 0.40901077158425014 (avg: 0.4090) error 0.590987187925825 avg time 5s 269ms
-[Neat] Waiting for discovery to complete (14/20) - In progress: a2f4608e
-Fine tuning increased fitness by 3.29245963825997e-10 to 0.4090107719134961 adjusted 1 weight Restored: 1
-Generation 22 score 0.4090107719134961 (avg: 0.4045) error 0.5909871874965791 avg time 4s 636ms
-[Neat] Waiting for discovery to complete (15/20) - In progress: a2f4608e
-Fine tuning increased fitness by 9.867637617011482e-7 to 0.4090117586772578 adjusted 1 weight Restored: 1
-Generation 23 score 0.4090117586772578 (avg: 0.4090) error 0.5909862006328174 avg time 4s 487ms
-[Neat] Waiting for discovery to complete (16/20) - In progress: a2f4608e
-Discovered beneficial synapse from input-341 to insider-combined-positive-check-7 with weight -1.0000, helping 100.0% more records than it harms (20/20)
-Discovery a2f4608e analyze time 8m 37s 174ms found 1 candidates
-Discovery timeout reached while listing neurons (0/453 processed)
-Discovery a2f4608e analyze harmful time  found 0 candidates
-Discovery timeout reached while listing neurons (0/453 processed)
-Discovery a2f4608e analyze squashes time  found 0 candidates
-Discovery a2f4608e analysis complete, total time 16m 31s 506ms, starting cleanup...
-Discovery a2f4608e performing cleanup...
-[Worker] Discovery complete for creature (taskID: 6), preparing response...
-[Worker] Returning discovery response (taskID: 6)...
-[WorkerHandler] Received discovery response for taskID: 6
-[Neat] Discovery completed for a2f4608e after 992.0s
-Discovery a2f4608e cleanup complete.
-Fine tuning increased fitness by 0.00000109148003002435 to 0.40901285015728783 adjusted 1 weight Restored: 1
-Can't deDuplicate creature at 4 of 27
-Generation 24 score 0.40901285015728783 (avg: 0.4090) error 0.5909851091527873 avg time 6s 76ms
-Waiting for training/discovery clean up 2
-Fine tuning increased fitness by 1.863720331396479e-7 to 0.409013036529321 adjusted 1 weight Restored: 1
+Discovery c93114e5 scheduled
+[Neat] Discovery request sent to worker for c93114e5
+[WorkerHandler] Posting discovery request to worker (taskID: 7)
+Training c93114e5 scheduled
+Training c93114e5 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
+[Worker] Starting discovery for creature (taskID: 7)...
+Discovery c93114e5 with 1 binary files, sample rate: 2.5%, batch size: 20
+Discovery c93114e5 initialize time 46ms
+Discovery c93114e5 processing .trainData-binary_88-sampler/sample-1.bin
+Generation 1 score 0.41168229670649936 (avg: 0.3686) error 0.5883166829985382 time 37s 671ms
+Training c93114e5 samples 796 of 21,251 3.7%( rate 30.0% ) error 0.576 time average: 75ms 477µs 386ns total: 1m 80ms
+Fine tuning increased fitness by 1.2597700660421651e-12 to 0.41168229670775913 adjusted 1 weight Restored: 1
+Generation 2 score 0.41168229670775913 (avg: 0.4117) error 0.5883166829972785 time 1m 22s 516ms
+Training c93114e5 samples 1,518 of 21,251 7.1%( rate 30.0% ) error 0.578 time average: 79ms 147µs 562ns total: 2m 146ms
+Generation 3 score 0.41168563913743905 (avg: 0.4117) error 0.5883133405675985 time 42s 235ms
+Training c93114e5 samples 2,331 of 21,251 11.0%( rate 30.0% ) error 0.589 time average: 77ms 300µs 729ns total: 3m 188ms
+Fine tuning increased fitness by 0.000021457550315129303 to 0.4117070966877542 adjusted 2 weights Restored: 1
+Generation 4 score 0.4117070966877542 (avg: 0.4117) error 0.5882918830172834 time 41s 260ms
+Fine tuning increased fitness by 0.0000227198430462483 to 0.41172981653080043 adjusted 2 weights Restored: 1
 Remove neuron b0a8f830-3c04-4aeb-8abf-2da506bafa1e as no longer connected
-Generation 25 score 0.409013036529321 (avg: 0.4090) error 0.5909849227807542 avg time 4s 215ms
-Waiting for training/discovery clean up 1
-Fine tuning increased fitness by 0.0000045748632382380805 to 0.4090176113925592 adjusted 1 weight Restored: 1
-Generation 26 score 0.4090176113925592 (avg: 0.4090) error 0.590980347917516 avg time 4s 254ms
-Evolution of 26 generations in 20m 58s, averaging 48s 390ms
-Loop 3 of 5
-From github.com:stSoftwareAU/GRQ-sampler
-   bd8968036..d5616a8b1  main       -> origin/main
-Updating bd8968036..d5616a8b1
-Fast-forward
- TacitKnowledge/hive.json    |   10 +-
- samples/GRQ-19-1.json       |   10 +-
- samples/Mac-Ultra-M2-1.json | 3532 +++++++++++++++++++++----------------------
- 3 files changed, 1773 insertions(+), 1779 deletions(-)
-3) Sample rate: 0.12, batch Size: 10000, timeout: 2
-Total time taken: 7s 555ms
-Vena Simonis (Observations: 1,486, Neurons: 453, Synapses: 15,885 & Score: 0.409)
-6 mutations, mutation rate 5.0%, elitism 1, mutation ALL, selection TOURNAMENT, timeout 2, PopSize 40 SAMPLER
-Initialized in 2s 659ms
-Over populated 42, expected 40.
-Culling duplicate creature at 9 of 42
-Culling duplicate creature at 9 of 41
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-DeDuplication of 2 creatures to 40 in 5s 950ms (previous experiment 2ms)
+Generation 5 score 0.41172981653080043 (avg: 0.4116) error 0.5882691631742372 time 40s 771ms
 Skipping discovery: insufficient time (1m remaining, 2m estimated)
-Training b8d895ab scheduled
-Training b8d895ab with 1 binary file, target error: 0.002, iterations: 1, sample rate: 15.0%, sparse: 7.5%
-Fine tuning increased fitness by 0 to 0.4109676445141025 adjusted 1 weight Restored: 7
-Generation 1 score 0.4109676445141025 (avg: 0.4089) error 0.5890119515866492 time 1m 15s 614ms
-Training b8d895ab samples 48 of 255,009 0.0%( rate 15.0% ) error 0.619 time average: 1s 253ms 812µs 500ns total: 1m 183ms
-Training b8d895ab timed out after 1m 183ms
-compactUnused hidden neuron -check-7 has no outward connections
-Fine tuning increased fitness by 0.000001627073371923693 to 0.4109692715874744 adjusted 1 weight Restored: 1
-Generation 2 score 0.4109692715874744 (avg: 0.4110) error 0.5890103245132773 time 49s 892ms
+Training c93114e5 samples 3,010 of 21,251 14.2%( rate 30.0% ) error 0.588 time average: 79ms 835µs 548ns total: 4m 305ms
+Fine tuning increased fitness by 0.00005317605273502668 to 0.41178299258353546 adjusted 2 weights Restored: 1
+Generation 6 score 0.41178299258353546 (avg: 0.4114) error 0.5882159871215021 time 47s 890ms
+Training c93114e5 samples 3,633 of 21,251 17.1%( rate 30.0% ) error 0.594 time average: 82ms 668µs 868ns total: 5m 336ms
+Training c93114e5 timed out after 5m 336ms
+Fine tuning increased fitness by 0.0000829993694557718 to 0.41186599195299123 adjusted 2 weights Restored: 1
+Generation 7 score 0.41186599195299123 (avg: 0.4118) error 0.5881329877520464 time 40s 991ms
 Set training/discovery clean up count to 2
-Waiting for training to complete
-Training b8d895ab caused a higher error of 0.6191281873883431 from 0.5890119515866492
-Training b8d895ab completed after 1m 308ms
-Training b8d895ab compacted
-Generation 3 score 0.4109692715874744 (avg: 0.4027) error 0.5890103245132773 time 1m 3s 131ms
-Waiting for training/discovery clean up 2
-Trained b8d895ab Score: 0.41095791121812963, Error: 0.5890119515866492 -> 0.5890216848826221, 👿 -0.00000973
-Compact b8d895ab Score: 0.4105724690127333, Error: 0.5890119515866492 -> 0.5894076000880142, 👿 -0.000396
-Fine tuning increased fitness by 0.000003760648446760051 to 0.4109730322359212 adjusted 2229 weights, 32 biases Restored: 1
-Generation 4 score 0.4109730322359212 (avg: 0.4107) error 0.5890065638648305 time 51s 559ms
-Waiting for training/discovery clean up 1
-Fine tuning increased fitness by 0.0000011088261998581928 to 0.41097414106212105 adjusted 2226 weights, 32 biases Restored: 1
-Generation 5 score 0.41097414106212105 (avg: 0.4110) error 0.5890054550386307 time 1m 2s 914ms
-Evolution of 5 generations in 5m 9s, averaging 1m 1s 888ms
-Loop 4 of 5
-From github.com:stSoftwareAU/GRQ-sampler
-   d5616a8b1..e45e613b0  main       -> origin/main
-Updating d5616a8b1..e45e613b0
-Fast-forward
- samples/GRQ-19-1.json | 14 +++++++-------
- 1 file changed, 7 insertions(+), 7 deletions(-)
-4) Sample rate: 0.11, batch Size: 10000, timeout: 7
-Total time taken: 7s 716ms
-Christopher Cronin (Observations: 1,486, Neurons: 453, Synapses: 15,882 & Score: 0.411)
-5 mutations, mutation rate 5.0%, elitism 1, mutation FFW, selection POWER, timeout 7, PopSize 40 SAMPLER
-Initialized in 2s 113ms
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron e70896fe-02d3-4ae9-a4a0-823ec7286d36 as no longer connected
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Discovery 681260f5 scheduled
-[Neat] Discovery request sent to worker for 681260f5
-[WorkerHandler] Posting discovery request to worker (taskID: 6)
-Training 681260f5 scheduled
-Training 681260f5 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 15.0%, sparse: 7.5%
-[Worker] Starting discovery for creature (taskID: 6)...
-Discovery 681260f5 with 1 binary files, sample rate: 1.5%, batch size: 20
-Discovery 681260f5 initialize time 63ms
-Discovery 681260f5 processing .trainData-binary_88-sampler/sample-11.bin
-Generation 1 score 0.41229772665270825 (avg: 0.3811) error 0.5876818694480435 time 1m 13s 199ms
-Training 681260f5 samples 779 of 233,115 0.3%( rate 15.0% ) error 0.617 time average: 77ms 39µs 794ns total: 1m 14ms
-Fine tuning increased fitness by 5.364190167611582e-7 to 0.412298263071725 adjusted 2207 weights, 32 biases Restored: 1
-Generation 2 score 0.412298263071725 (avg: 0.4120) error 0.5876813320290267 time 53s 807ms
-Training 681260f5 samples 1,433 of 233,115 0.6%( rate 15.0% ) error 0.592 time average: 83ms 775µs 994ns total: 2m 51ms
-Fine tuning increased fitness by 0.000005507795713066699 to 0.4123037708674381 adjusted 2207 weights, 32 biases Restored: 1
-Generation 3 score 0.4123037708674381 (avg: 0.4037) error 0.5876758242333137 time 1m 15s 913ms
-Training 681260f5 samples 2,201 of 233,115 0.9%( rate 15.0% ) error 0.599 time average: 81ms 830µs 77ns total: 3m 108ms
-Generation 4 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 54s 384ms
-Training 681260f5 samples 2,804 of 233,115 1.2%( rate 15.0% ) error 0.592 time average: 85ms 656µs 562ns total: 4m 181ms
-Generation 5 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 1m 14s 220ms
-Training 681260f5 samples 3,487 of 233,115 1.5%( rate 15.0% ) error 0.595 time average: 86ms 103µs 527ns total: 5m 243ms
-Training 681260f5 timed out after 5m 243ms
-Training 681260f5 caused a higher error of 0.5948107638049788 from 0.5876818694480435
-Training 681260f5 completed after 5m 340ms
-Training 681260f5 compacted
-Generation 6 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 50s 113ms
-Set training/discovery clean up count to 2
-Avg time per generation: 76470ms, max wait: 3 generations in 5 minutes
+Avg time per generation: 60854ms, max wait: 4 generations in 5 minutes
 Discovery timeout set to 20 generations (based on limiting factor)
-[Neat] Waiting for discovery to complete (1/20) - In progress: 681260f5
-Trained 681260f5 Score: 0.41224315410296575, Error: 0.5876818694480435 -> 0.587736441997786, 👿 -0.0000546
-Compact 681260f5 Score: 0.41209378222703424, Error: 0.5876818694480435 -> 0.5878858348737179, 👿 -0.000204
-Generation 7 score 0.4123037708674381 (avg: 0.4121) error 0.5876758242333137 time 1m 13s 527ms
-[Neat] Waiting for discovery to complete (2/20) - In progress: 681260f5
-Generation 8 score 0.4123037708674381 (avg: 0.4122) error 0.5876758242333137 time 51s 794ms
-[Neat] Waiting for discovery to complete (3/20) - In progress: 681260f5
-Generation 9 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 1m 9s 87ms
-[Neat] Waiting for discovery to complete (4/20) - In progress: 681260f5
-Discovery 681260f5 read time  for .trainData-binary_88-sampler/sample-11.bin with 20 records
-Discovery 681260f5 drained promises after file .trainData-binary_88-sampler/sample-11.bin
-⏲  Discovery 681260f5 timeout reached during file processing. Processed 20 records. Proceeding with partial results for analysis.
-Discovery 681260f5 scanning time 8m 49s 255ms
-Discovery 681260f5 recorded time 8m 49s 255ms
-Discovery 681260f5 analysis timeout extended by 3m
-Generation 10 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 52s 933ms
-[Neat] Waiting for discovery to complete (5/20) - In progress: 681260f5
-Generation 11 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 1m 13s 232ms
-[Neat] Waiting for discovery to complete (6/20) - In progress: 681260f5
-Generation 12 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 56s 223ms
-[Neat] Waiting for discovery to complete (7/20) - In progress: 681260f5
-Generation 13 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 1m 11s 431ms
-[Neat] Waiting for discovery to complete (8/20) - In progress: 681260f5
-Generation 14 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 51s 512ms
-[Neat] Waiting for discovery to complete (9/20) - In progress: 681260f5
-Generation 15 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 1m 9s 934ms
-[Neat] Waiting for discovery to complete (10/20) - In progress: 681260f5
-Generation 16 score 0.4123037708674381 (avg: 0.4123) error 0.5876758242333137 time 52s 400ms
-[Neat] Waiting for discovery to complete (11/20) - In progress: 681260f5
-Fine tuning increased fitness by 5.021397947446715e-8 to 0.41230382108141755 adjusted 2207 weights, 32 biases Restored: 1
-Generation 17 score 0.41230382108141755 (avg: 0.4123) error 0.5876757730193343 time 1m 10s 762ms
-[Neat] Waiting for discovery to complete (12/20) - In progress: 681260f5
-Fine tuning increased fitness by 2.492705800660744e-7 to 0.4123040703519976 adjusted 1 weight Restored: 1
-Generation 18 score 0.4123040703519976 (avg: 0.4123) error 0.5876755237487542 time 54s 95ms
-[Neat] Waiting for discovery to complete (13/20) - In progress: 681260f5
-Fine tuning increased fitness by 3.31079927917699e-8 to 0.4123041034599904 adjusted 1 weight Restored: 1
-Generation 19 score 0.4123041034599904 (avg: 0.4123) error 0.5876754906407614 time 1m 13s 721ms
-[Neat] Waiting for discovery to complete (14/20) - In progress: 681260f5
-Discovered beneficial synapse from input-262 to insider-combined-positive-check-7 with weight -1.0000, helping 100.0% more records than it harms (20/20)
-Discovery 681260f5 analyze time 11m 25s 570ms found 1 candidates
+[Neat] Waiting for discovery to complete (1/20) - In progress: c93114e5
+Training c93114e5 caused a higher error of 0.5944893431297924 from 0.5883166829985382
+Fine tuning increased fitness by 0.000010172077064884988 to 0.4118761640300561 adjusted 2 weights Restored: 1
+Training c93114e5 completed after 5m 437ms
+Training c93114e5 compacted
+Generation 8 score 0.4118761640300561 (avg: 0.3931) error 0.5881228156749815 time 41s 232ms
+[Neat] Waiting for discovery to complete (2/20) - In progress: c93114e5
+Compact c93114e5 Score: 0.4107728182780619, Error: 0.5883166829985382 -> 0.5892261642769756, 👿 -0.000909
+Trained c93114e5 Score: 0.410328166415457, Error: 0.5883166829985382 -> 0.5896708132895806, 👿 -0.00135
+Fine tuning increased fitness by 0.000008653342273623466 to 0.41188481737232974 adjusted 2 weights Restored: 1
+Generation 9 score 0.41188481737232974 (avg: 0.4117) error 0.5881141623327079 time 39s 494ms
+[Neat] Waiting for discovery to complete (3/20) - In progress: c93114e5
+Generation 10 score 0.41188481737232974 (avg: 0.4119) error 0.5881141623327079 time 40s 291ms
+[Neat] Waiting for discovery to complete (4/20) - In progress: c93114e5
+Generation 11 score 0.41188481737232974 (avg: 0.4117) error 0.5881141623327079 time 44s 307ms
+[Neat] Waiting for discovery to complete (5/20) - In progress: c93114e5
+Discovery c93114e5 read time  for .trainData-binary_88-sampler/sample-1.bin with 20 records
+Discovery c93114e5 drained promises after file .trainData-binary_88-sampler/sample-1.bin
+⏲  Discovery c93114e5 timeout reached during file processing. Processed 20 records. Proceeding with partial results for analysis.
+Discovery c93114e5 scanning time 8m 37s 962ms
+Discovery c93114e5 recorded time 8m 37s 962ms
+Discovery c93114e5 analysis timeout extended by 3m
+Generation 12 score 0.41188481737232974 (avg: 0.4118) error 0.5881141623327079 time 41s 768ms
+[Neat] Waiting for discovery to complete (6/20) - In progress: c93114e5
+Fine tuning increased fitness by 4.0368264286883004e-11 to 0.411884817412698 adjusted 2 weights Restored: 1
+Generation 13 score 0.411884817412698 (avg: 0.4117) error 0.5881141622423396 time 40s 271ms
+[Neat] Waiting for discovery to complete (7/20) - In progress: c93114e5
+Fine tuning increased fitness by 1.1643686015361254e-11 to 0.4118848174243417 adjusted 1 weight Restored: 1
+Generation 14 score 0.4118848174243417 (avg: 0.4119) error 0.5881141622306959 time 41s 557ms
+[Neat] Waiting for discovery to complete (8/20) - In progress: c93114e5
+Fine tuning increased fitness by 7.223188713822992e-11 to 0.4118848174965736 adjusted 1 weight Restored: 1
+Generation 15 score 0.4118848174965736 (avg: 0.4119) error 0.588114162158464 time 45s 345ms
+[Neat] Waiting for discovery to complete (9/20) - In progress: c93114e5
+Fine tuning increased fitness by 1.8129941992128806e-11 to 0.4118848175147035 adjusted 1 weight Restored: 1
+Generation 16 score 0.4118848175147035 (avg: 0.4119) error 0.5881141621403341 time 44s 34ms
+[Neat] Waiting for discovery to complete (10/20) - In progress: c93114e5
+Fine tuning increased fitness by 2.1758483903511205e-11 to 0.411884817536462 adjusted 1 weight Restored: 1
+Generation 17 score 0.411884817536462 (avg: 0.4119) error 0.5881141621185756 time 47s 735ms
+[Neat] Waiting for discovery to complete (11/20) - In progress: c93114e5
+Fine tuning increased fitness by 3.8680170177940454e-11 to 0.41188481757514217 adjusted 1 weight Restored: 1
+Generation 18 score 0.41188481757514217 (avg: 0.4119) error 0.5881141620798954 time 52s 863ms
+[Neat] Waiting for discovery to complete (12/20) - In progress: c93114e5
+Fine tuning increased fitness by 3.4588700792426152e-9 to 0.41188482103401225 adjusted 1 weight Restored: 1
+Generation 19 score 0.41188482103401225 (avg: 0.4119) error 0.5881141585710253 time 45s 980ms
+[Neat] Waiting for discovery to complete (13/20) - In progress: c93114e5
+Fine tuning increased fitness by 5.688803650372165e-9 to 0.4118848267228159 adjusted 1 weight Restored: 1
+Generation 20 score 0.4118848267228159 (avg: 0.4119) error 0.5881141528822217 time 42s 649ms
+[Neat] Waiting for discovery to complete (14/20) - In progress: c93114e5
+Fine tuning increased fitness by 1.0232476532756607e-8 to 0.41188483695529243 adjusted 1 weight Restored: 1
+Generation 21 score 0.41188483695529243 (avg: 0.4119) error 0.5881141426497452 time 43s 749ms
+[Neat] Waiting for discovery to complete (15/20) - In progress: c93114e5
+Fine tuning increased fitness by 1.5511928408429299e-9 to 0.4118848385064853 adjusted 1 weight Restored: 1
+Generation 22 score 0.4118848385064853 (avg: 0.4119) error 0.5881141410985523 time 1m 6s 778ms
+[Neat] Waiting for discovery to complete (16/20) - In progress: c93114e5
+Discovered beneficial synapse from input-342 to insider-combined-positive-check-7 with weight -1.0000, helping 100.0% more records than it harms (20/20)
+Discovery c93114e5 analyze time 8m 35s 233ms found 1 candidates
 Discovery timeout reached while listing neurons (0/453 processed)
-Discovery 681260f5 analyze harmful time  found 0 candidates
+Discovery c93114e5 analyze harmful time  found 0 candidates
 Discovery timeout reached while listing neurons (0/453 processed)
-Discovery 681260f5 analyze squashes time  found 0 candidates
-Discovery 681260f5 analysis complete, total time 20m 14s 825ms, starting cleanup...
-Discovery 681260f5 performing cleanup...
-[Worker] Discovery complete for creature (taskID: 6), preparing response...
-[Worker] Returning discovery response (taskID: 6)...
-Discovery 681260f5 cleanup complete.
-Can't deDuplicate creature at 19 of 29
-Generation 20 score 0.4123041034599904 (avg: 0.4123) error 0.5876754906407614 time 1m 30s 288ms
-[Neat] Waiting for discovery to complete (15/20) - In progress: 681260f5
-[WorkerHandler] Received discovery response for taskID: 6
-[Neat] Discovery completed for 681260f5 after 1239.2s
-Generation 21 score 0.4123041034599904 (avg: 0.3768) error 0.5876754906407614 time 59s 447ms
+Discovery c93114e5 analyze squashes time  found 0 candidates
+Discovery c93114e5 analysis complete, total time 17m 13s 195ms, starting cleanup...
+Discovery c93114e5 performing cleanup...
+[Worker] Discovery complete for creature (taskID: 7), preparing response...
+[Worker] Returning discovery response (taskID: 7)...
+Discovery c93114e5 cleanup complete.
+Generation 23 score 0.4118848385064853 (avg: 0.4119) error 0.5881141410985523 time 40s 754ms
+[Neat] Waiting for discovery to complete (17/20) - In progress: c93114e5
+[WorkerHandler] Received discovery response for taskID: 7
+[Neat] Discovery completed for c93114e5 after 1037.6s
+Generation 24 score 0.4118848385064853 (avg: 0.4119) error 0.5881141410985523 time 41s 836ms
 Waiting for training/discovery clean up 2
-Generation 22 score 0.4123041034599904 (avg: 0.4123) error 0.5876754906407614 time 49s 623ms
+Discovery c93114e5 beneficial increased fitness by 1.2245019886947262e-8 to 0.41188485075150516
+Generation 25 score 0.41188485075150516 (avg: 0.4118) error 0.5881141288035324 time 39s 598ms
 Waiting for training/discovery clean up 1
-Generation 23 score 0.4123041034599904 (avg: 0.4123) error 0.5876754906407614 time 1m 11s 670ms
-Evolution of 23 generations in 25m 51s, averaging 1m 7s 419ms
-Loop 5 of 5
+Fine tuning increased fitness by 2.2662151932806296e-8 to 0.4118848734136571 adjusted 1 weight Restored: 1
+Generation 26 score 0.4118848734136571 (avg: 0.4119) error 0.5881141061413805 time 43s 642ms
+Evolution of 26 generations in 21m 10s, averaging 48s 858ms
+Loop 2 of 5
 From github.com:stSoftwareAU/GRQ-sampler
-   e45e613b0..e955ffd07  main       -> origin/main
-Updating e45e613b0..e955ffd07
+   001139ea7..18c78c3d2  main       -> origin/main
+Updating 001139ea7..18c78c3d2
 Fast-forward
- samples/{GRQ-13-1.json => GRQ-23-1.json} | 29 ++++++++++++++++++-----------
- 1 file changed, 18 insertions(+), 11 deletions(-)
- rename samples/{GRQ-13-1.json => GRQ-23-1.json} (99%)
-5) Sample rate: 1, batch Size: 10000, timeout: 21
-Total time taken: 15s 711ms
-Ewell Wisoky (Observations: 1,486, Neurons: 453, Synapses: 15,884 & Score: 0.412)
-9 mutations, mutation rate 32.7%, elitism 1, mutation ALL, selection FITNESS_PROPORTIONATE, timeout 21, PopSize 20 SAMPLER
-Initialized in 1s 592ms
-Over populated 25, expected 20.
-Culling duplicate creature at 5 of 25
-Culling duplicate creature at 7 of 24
-Culling duplicate creature at 13 of 23
-Culling duplicate creature at 19 of 22
-DeDuplication of 4 creatures to 21 in 2ms (previous experiment 1ms)
-Training 38834eb4 scheduled
-Training 38834eb4 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 10.0%, sparse: 7.5%
-Fine tuning increased fitness by 0.000005577453295713131 to 0.41179223991163505 adjusted 1 weight Restored: 9
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Generation 1 score 0.41179223991163505 (avg: 0.4084) error 0.5880037210958821 time 3m 52s 42ms
-Training 38834eb4 samples 97 of 2,122,336 0.0%( rate 10.0% ) error 0.498 time average: 624ms 927µs 835ns total: 1m 618ms
-Generation 2 score 0.41179223991163505 (avg: 0.4118) error 0.5880037210958821 time 1m 46s 409ms
-Training 38834eb4 samples 195 of 2,122,336 0.0%( rate 10.0% ) error 0.501 time average: 618ms 646µs 153ns total: 2m 636ms
-Training 38834eb4 samples 269 of 2,122,336 0.0%( rate 10.0% ) error 0.533 time average: 672ms 635µs 687ns total: 3m 939ms
-Training 38834eb4 samples 344 of 2,122,336 0.0%( rate 10.0% ) error 0.521 time average: 701ms 540µs 697ns total: 4m 1s 330ms
-Training 38834eb4 samples 433 of 2,122,336 0.0%( rate 10.0% ) error 0.541 time average: 698ms 154µs 734ns total: 5m 2s 301ms
-Generation 3 score 0.41179223991163505 (avg: 0.3638) error 0.5880037210958821 time 3m 22s 557ms
-Training 38834eb4 samples 515 of 2,122,336 0.0%( rate 10.0% ) error 0.537 time average: 703ms 749µs 514ns total: 6m 2s 431ms
-Training 38834eb4 samples 591 of 2,122,336 0.0%( rate 10.0% ) error 0.531 time average: 715ms 805µs 414ns total: 7m 3s 41ms
-Generation 4 score 0.41179223991163505 (avg: 0.4118) error 0.5880037210958821 time 2m 6s 73ms
-Training 38834eb4 samples 638 of 2,122,336 0.0%( rate 10.0% ) error 0.523 time average: 761ms 278µs 996ns total: 8m 5s 696ms
-Training 38834eb4 samples 665 of 2,122,336 0.0%( rate 10.0% ) error 0.528 time average: 824ms 36µs 90ns total: 9m 7s 984ms
-Training 38834eb4 samples 696 of 2,122,336 0.0%( rate 10.0% ) error 0.527 time average: 875ms 836µs 206ns total: 10m 9s 582ms
-Training 38834eb4 samples 748 of 2,122,336 0.0%( rate 10.0% ) error 0.533 time average: 895ms 465µs 240ns total: 11m 9s 808ms
-Training 38834eb4 samples 817 of 2,122,336 0.0%( rate 10.0% ) error 0.535 time average: 894ms 84µs 455ns total: 12m 10s 467ms
-Fine tuning increased fitness by 3.9738474510997435e-8 to 0.41179227965010956 adjusted 1 weight Restored: 1
-Generation 5 score 0.41179227965010956 (avg: 0.4118) error 0.5880036813574075 time 5m 18s 418ms
-Training 38834eb4 samples 892 of 2,122,336 0.0%( rate 10.0% ) error 0.542 time average: 887ms 437µs 219ns total: 13m 11s 594ms
-Training 38834eb4 samples 952 of 2,122,336 0.0%( rate 10.0% ) error 0.545 time average: 894ms 679µs 621ns total: 14m 11s 735ms
-Generation 6 score 0.41179227965010956 (avg: 0.4118) error 0.5880036813574075 time 2m 10s 434ms
-Training 38834eb4 samples 1,020 of 2,122,336 0.0%( rate 10.0% ) error 0.546 time average: 894ms 120µs 588ns total: 15m 12s 3ms
-Training 38834eb4 samples 1,081 of 2,122,336 0.1%( rate 10.0% ) error 0.551 time average: 899ms 332µs 99ns total: 16m 12s 178ms
-Training 38834eb4 samples 1,148 of 2,122,336 0.1%( rate 10.0% ) error 0.558 time average: 899ms 142µs 857ns total: 17m 12s 216ms
-Training 38834eb4 timed out after 17m 12s 216ms
-Training 38834eb4 completed after 17m 12s 347ms
-Training 38834eb4 compacted
-Generation 7 score 0.41179227965010956 (avg: 0.4118) error 0.5880036813574075 time 3m 24s 802ms
+ samples/GRQ-12-1.json                    |    99 +-
+ samples/GRQ-18-1.json                    | 84704 ----------------------------
+ samples/{GRQ-22-1.json => GRQ-19-1.json} |    43 +-
+ samples/GRQ-21-1.json                    | 84668 ----------------------------
+ samples/Mac-Ultra-M2-1.json              |    59 +-
+ samples/Tinas-MacBook-Air-1.json         | 84717 -----------------------------
+ 6 files changed, 106 insertions(+), 254184 deletions(-)
+ delete mode 100644 samples/GRQ-18-1.json
+ rename samples/{GRQ-22-1.json => GRQ-19-1.json} (99%)
+ delete mode 100644 samples/GRQ-21-1.json
+ delete mode 100644 samples/Tinas-MacBook-Air-1.json
+2) Sample rate: 0.05, batch Size: 10000, timeout: 2
+Total time taken: 7s 97ms
+Jocelyn Johnson (Observations: 1,486, Neurons: 453, Synapses: 15,887 & Score: 0.412)
+9 mutations, mutation rate 5.0%, elitism 1, mutation FFW, selection POWER, timeout 2, PopSize 40 SAMPLER
+Initialized in 3s 784ms
+Over populated 55, expected 40.
+Culling duplicate creature at 7 of 55
+Culling duplicate creature at 9 of 54
+Culling duplicate creature at 12 of 53
+Culling duplicate creature at 14 of 52
+DeDuplication of 4 creatures to 51 in 2ms (previous experiment 2ms)
+Skipping discovery: insufficient time (1m remaining, 2m estimated)
+Training 96783ce7 scheduled
+Training 96783ce7 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
+Skipping discovery: insufficient time (1m remaining, 2m estimated)
+Fine tuning increased fitness by 1.2617957545479896e-7 to 0.4104929423810762 adjusted 1 weight 
+Training 96783ce7 samples 1,343 of 106,638 1.3%( rate 30.0% ) error 0.588 time average: 44ms 687µs 267ns total: 1m 15ms
+Training 96783ce7 timed out after 1m 15ms
+compactUnused: 28d2bf8f-8306-44d8-8cdf-501a5a7c3be0 already connected to first-one
+compactUnused: 28d2bf8f-8306-44d8-8cdf-501a5a7c3be0 already connected to first-one with type condition required condition
+Fine tuning increased fitness by 3.25108073018221e-7 to 0.4104932674891492 adjusted 1 weight 
+Training 96783ce7 completed after 1m 145ms
+Generation 3 score 0.4104932674891492 (avg: 0.4105) error 0.5895047036209263 avg time 14s 882ms
 Waiting for additional generation
-Compact 38834eb4 Score: 0.4117533085032035, Error: 0.5880037210958821 -> 0.5880429025043078, 👿 -0.0000392
-Trained 38834eb4 Score: 0.4111788791558042, Error: 0.5880037210958821 -> 0.5886170818517129, 👿 -0.000613
-Generation 8 score 0.41179227965010956 (avg: 0.3232) error 0.5880036813574075 time 2m 4s 107ms
-Evolution of 8 generations in 24m 5s, averaging 3m 636ms
-[05:10:03] 📦 checkin-sample.sh on host GRQ-11
-From github.com:stSoftwareAU/GRQ-sampler
-   e955ffd07..551c66695  main       -> origin/main
-Updating e955ffd07..551c66695
-Fast-forward
- TacitKnowledge/hive.json                 |     8 +-
- samples/{GRQ-3-1.json => Africa.json}    | 18267 ++++--
- samples/GRQ-10-1.json                    | 85308 -----------------------------
- samples/GRQ-12-1.json                    |    78 +-
- samples/GRQ-21-1.json                    |  3574 +-
- samples/GRQ-22-1.json                    |  3547 +-
- samples/GRQ-24-1.json                    | 85308 -----------------------------
- samples/{GRQ-18-1.json => GRQ-25-1.json} |    36 +-
- samples/Mac-Ultra-M2-1.json              |    14 +-
- 9 files changed, 18701 insertions(+), 177439 deletions(-)
- rename samples/{GRQ-3-1.json => Africa.json} (84%)
- delete mode 100644 samples/GRQ-10-1.json
- delete mode 100644 samples/GRQ-24-1.json
- rename samples/{GRQ-18-1.json => GRQ-25-1.json} (99%)
-[05:10:07] ✅ Committing 🦠 GRQ-11 🎯, Score: 0.411792
-[main 03457af10] 🦠 GRQ-11 🎯, Score: 0.411792, Neurons: 453 & Synapses: 15,882
- 1 file changed, 6 insertions(+), 6 deletions(-)
-To github.com:stSoftwareAU/GRQ-sampler.git
-   551c66695..03457af10  main -> main
-HEAD is now at 0380beb9 Update sloth.sh
-From github.com:stSoftwareAU/GRQ-health
-   5c5fb749..43b97be1  Develop    -> origin/Develop
-HEAD is now at 43b97be1 Update health status for GRQ-10 at Wed Oct 22 04:59:25 AEDT 2025
-Reset branch 'Develop'
-branch 'Develop' set up to track 'origin/Develop'.
-Your branch is up to date with 'origin/Develop'.
-✅ GRQ-health synced with remote (validation skipped)
-HEAD is now at 43b97be1 Update health status for GRQ-10 at Wed Oct 22 04:59:25 AEDT 2025
-Updating health information...
+Trained 96783ce7 Score: 0.41037550141536955, Error: 0.5895051549085748 -> 0.589622469694706, 👿 -0.000117
+Fine tuning increased fitness by 0.0000010010379126734748 to 0.4104942685270619 adjusted 1 weight 
+Generation 4 score 0.4104942685270619 (avg: 0.4102) error 0.5895037025830137 avg time 4s 237ms
+Evolution of 4 generations in 3m 12s, averaging 47s 927ms
+Loop 3 of 5
 Already up to date.
-Updated health information for GRQ-11
+3) Sample rate: 0.19, batch Size: 10000, timeout: 15
+Total time taken: 8s 360ms
+Ubaldo Gutkowski (Observations: 1,486, Neurons: 453, Synapses: 15,767 & Score: 0.41)
+2 mutations, mutation rate 30.6%, elitism 1, mutation FFW, selection FITNESS_PROPORTIONATE, timeout 15, PopSize 40 SAMPLER
+Initialized in 2s 937ms
+Over populated 44, expected 40.
+Culling duplicate creature at 7 of 44
+Culling duplicate creature at 9 of 43
+Culling duplicate creature at 9 of 42
+Culling duplicate creature at 15 of 41
+DeDuplication of 4 creatures to 40 in 3ms (previous experiment 2ms)
+Discovery dfac0de4 scheduled
+[Neat] Discovery request sent to worker for dfac0de4
+[WorkerHandler] Posting discovery request to worker (taskID: 6)
+Training dfac0de4 scheduled
+Training dfac0de4 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 15.0%, sparse: 7.5%
+[Worker] Starting discovery for creature (taskID: 6)...
+Discovery dfac0de4 with 1 binary files, sample rate: 1.5%, batch size: 20
+Discovery dfac0de4 initialize time 46ms
+Discovery dfac0de4 processing .trainData-binary_88-sampler/sample-19.bin
+Fine tuning increased fitness by 0 to 0.4114122388888915 adjusted 1 weight Restored: 7
+Generation 1 score 0.4114122388888915 (avg: 0.4096) error 0.5885674722118638 time 2m 9s 275ms
+Training dfac0de4 samples 80 of 403,387 0.0%( rate 15.0% ) error 0.606 time average: 753ms 712µs 500ns total: 1m 297ms
+Fine tuning increased fitness by 5.807947620062315e-7 to 0.4114128196836535 adjusted 1 weight 
+Generation 2 score 0.4114128196836535 (avg: 0.4111) error 0.5885668904171019 time 1m 4s 338ms
+Training dfac0de4 samples 147 of 403,387 0.0%( rate 15.0% ) error 0.588 time average: 823ms 6µs 802ns total: 2m 982ms
+Training dfac0de4 samples 191 of 403,387 0.0%( rate 15.0% ) error 0.589 time average: 948ms 198µs 952ns total: 3m 1s 106ms
+Training dfac0de4 samples 239 of 403,387 0.1%( rate 15.0% ) error 0.572 time average: 1s 9ms 347µs 280ns total: 4m 1s 234ms
+Generation 3 score 0.4114128196836535 (avg: 0.4112) error 0.5885668904171019 time 3m 14s 348ms
+Training dfac0de4 samples 257 of 403,387 0.1%( rate 15.0% ) error 0.573 time average: 1s 224ms 867µs 704ns total: 5m 14s 791ms
+Training dfac0de4 samples 278 of 403,387 0.1%( rate 15.0% ) error 0.566 time average: 1s 349ms 93µs 525ns total: 6m 15s 48ms
+Training dfac0de4 samples 324 of 403,387 0.1%( rate 15.0% ) error 0.576 time average: 1s 349ms 398µs 148ns total: 7m 17s 205ms
+Fine tuning increased fitness by 9.381670995622926e-10 to 0.4114128206218206 adjusted 1 weight 
+Training dfac0de4 samples 388 of 403,387 0.1%( rate 15.0% ) error 0.548 time average: 1s 281ms 896µs 907ns total: 8m 17s 376ms
+Training dfac0de4 samples 451 of 403,387 0.1%( rate 15.0% ) error 0.563 time average: 1s 240ms 419µs 68ns total: 9m 19s 429ms
+Training dfac0de4 samples 518 of 403,387 0.1%( rate 15.0% ) error 0.568 time average: 1s 196ms 75µs 289ns total: 10m 19s 567ms
