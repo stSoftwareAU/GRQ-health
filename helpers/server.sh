@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Test Server Starter Script for GRQ Validation Dashboard
 # 
@@ -8,8 +9,6 @@
 #   ./tests/start-server.sh [port]
 # 
 # Default port is 8000 if not specified.
-
-set -e
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

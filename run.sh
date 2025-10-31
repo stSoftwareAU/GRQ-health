@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Health monitoring script for GRQ-health
 # This script checks system health and updates docs/index.json
@@ -7,8 +8,6 @@
 # All AWS instances in this context are spot/temporary and would create dead entries
 # Fixed machine type detection to handle corrupted output and encoding issues
 
-set -e
-
 BASE_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 cd "${BASE_DIR}"
@@ -16,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=6
-VERSION="1.0.49"
+VERSION="1.0.50"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -537,23 +536,30 @@ get_system_info() {
         os_version=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
     else
         # Linux - try multiple methods
+        # Save script's VERSION variable to prevent it from being overwritten by sourcing OS files
+        local script_version="$VERSION"
         if [ -f /etc/os-release ]; then
             # Modern Linux systems - source the file and get proper version info
             source /etc/os-release
-            os_info="$NAME"
+            os_info="${NAME:-}"
             # Use VERSION_ID for version number, fallback to VERSION for descriptive version
-            if [ -n "$VERSION_ID" ]; then
+            # Note: VERSION from /etc/os-release might overwrite script's VERSION, so we restore it after
+            if [ -n "${VERSION_ID:-}" ]; then
                 os_version="$VERSION_ID"
-            elif [ -n "$VERSION" ]; then
+            elif [ -n "${VERSION:-}" ]; then
                 os_version="$VERSION"
             else
                 os_version="unknown"
             fi
+            # Restore script's VERSION variable
+            VERSION="$script_version"
         elif [ -f /etc/lsb-release ]; then
             # Ubuntu/Debian
             source /etc/lsb-release
-            os_info="$DISTRIB_ID"
-            os_version="$DISTRIB_RELEASE"
+            os_info="${DISTRIB_ID:-}"
+            os_version="${DISTRIB_RELEASE:-}"
+            # Restore script's VERSION variable (in case it was somehow affected)
+            VERSION="$script_version"
         elif [ -f /etc/redhat-release ]; then
             # RHEL/CentOS/Amazon Linux
             os_info=$(cat /etc/redhat-release | awk '{print $1}')
