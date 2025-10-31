@@ -1,12 +1,16 @@
 #!/bin/bash
+set -euo pipefail
 
 # Script to update version in HTML files from run.sh
 # This ensures version consistency across the project
 
-set -e
-
 # Get the version from run.sh
-VERSION=$(grep '^VERSION=' run.sh | cut -d'"' -f2)
+if [ ! -f "run.sh" ]; then
+    echo "Error: run.sh not found"
+    exit 1
+fi
+
+VERSION=$(grep '^VERSION=' run.sh | cut -d'"' -f2 || echo "")
 
 if [ -z "$VERSION" ]; then
     echo "Error: Could not find VERSION in run.sh"
