@@ -701,6 +701,11 @@ get_system_info() {
 # Function to scan log file for errors and return count
 scan_log_errors() {
     local log_file="$HOME/logs/node.log"
+
+    if [[ -n "${NODE_PID:-}" ]]; then
+      log_file="${HOME}/logs/node-${NODE_PID}.log"
+    fi
+    
     # Initialize global variables
     exception_count=0
     exception_summary=""
@@ -892,8 +897,12 @@ main() {
         git pull --rebase
         update_json
         # After updating JSON, copy log if present
-        # Copy node.log if present
         LOG_SRC="$HOME/logs/node.log"
+
+        if [[ -n "${NODE_PID:-}" ]]; then
+            LOG_SRC="${HOME}/logs/node-${NODE_PID}.log"
+        fi
+        
         LOG_DEST="docs/$HOSTNAME/node.log"
         if [ -f "$LOG_SRC" ]; then
             mkdir -p "docs/$HOSTNAME"
