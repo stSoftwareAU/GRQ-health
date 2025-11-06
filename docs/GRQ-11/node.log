@@ -1,33 +1,36 @@
 2.8
 ================ Clean up START ================
 Version 1.3.10
-/Users/nigel/src/GRQ/worker
+/Volumes/DataGRQ/train/GRQ/worker
 Disk usage:
 Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
-/dev/disk3s1s1   460Gi    11Gi   330Gi     4%    447k  3.5G    0%   /
+/dev/disk3s1s1   460Gi    11Gi   308Gi     4%    447k  3.2G    0%   /
 devfs            205Ki   205Ki     0Bi   100%     710     0  100%   /dev
-/dev/disk3s6     460Gi   3.0Gi   330Gi     1%       3  3.5G    0%   /System/Volumes/VM
-/dev/disk3s2     460Gi   7.2Gi   330Gi     3%    1.3k  3.5G    0%   /System/Volumes/Preboot
-/dev/disk3s4     460Gi   2.6Mi   330Gi     1%      63  3.5G    0%   /System/Volumes/Update
+/dev/disk3s6     460Gi   2.0Gi   308Gi     1%       2  3.2G    0%   /System/Volumes/VM
+/dev/disk3s2     460Gi   7.2Gi   308Gi     3%    1.3k  3.2G    0%   /System/Volumes/Preboot
+/dev/disk3s4     460Gi   2.4Mi   308Gi     1%      64  3.2G    0%   /System/Volumes/Update
 /dev/disk1s2     500Mi   6.0Mi   482Mi     2%       1  4.9M    0%   /System/Volumes/xarts
 /dev/disk1s1     500Mi   5.6Mi   482Mi     2%      30  4.9M    0%   /System/Volumes/iSCPreboot
 /dev/disk1s3     500Mi   1.2Mi   482Mi     1%      60  4.9M    0%   /System/Volumes/Hardware
-/dev/disk3s5     460Gi   107Gi   330Gi    25%    577k  3.5G    0%   /System/Volumes/Data
+/dev/disk3s5     460Gi   131Gi   308Gi    30%    577k  3.2G    0%   /System/Volumes/Data
 map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
-/dev/disk5s1     1.8Ti   463Gi   1.4Ti    25%     26M   15G    0%   /Volumes/DataGRQ
-Uptime:  3:05  up 24 days,  6:37, 5 users, load averages: 6.42 8.12 11.18
-Start: 03:05:15@AEDT
+/dev/disk5s1     1.8Ti   458Gi   1.4Ti    25%     26M   15G    0%   /Volumes/DataGRQ
+Uptime: 21:10  up 24 days, 42 mins, 5 users, load averages: 8.74 10.91 12.59
+Start: 21:10:00@AEDT
 USER    PID  PPID COMMAND
-nigel 49552     1 /bin/bash /Users/nigel/src/GRQ/run.sh
-nigel 49563 49552 /bin/bash worker/node.sh
-root  49574 49563 ps -U nigel -o user,pid,ppid,command
+nigel 59644 73109 deno run --v8-flags=--max-old-space-size=16384 --allow-read --allow-write --allow-net src/Learn.ts --timeout=30 --log=1 --populationSize=20 --trainingSampleRate=0.1 --sparseRatio=0.075 --elitism=1 --sampler=true --verbose=true --disableCRISPR=true --traceStore=.trace --costOfGrowth=0.000_000_1 --focusList= --discoverySampleRate=0
 nigel 60286 60285 /bin/bash -c mkdir -p ~/logs; /Volumes/DataGRQ/train/GRQ/run.sh --run-once > ~/logs/run-train.log 2>&1
 nigel 60288 60286 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
 nigel 60299 60288 /bin/bash worker/node.sh
-nigel 60337 60299 /bin/bash ./train/taskData.sh
-nigel 60356 60337 /bin/bash ./trainDataStocks.sh
-nigel 60357 60337 tee -a /Users/nigel/logs/trainDataStocks.log
-nigel 61530 60356 deno run --v8-flags=--max-old-space-size=8192 --allow-read --allow-write --allow-env --allow-net src/train/ParallelTrainData.ts
+root  60310 60299 ps -U nigel -o user,pid,ppid,command
+nigel 64958     1 cloudphotod
+nigel 69092 69091 /bin/bash -c /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh > ~/logs/market.err 2>&1
+nigel 69093 69092 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh
+nigel 69113 69093 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/fetch.sh
+nigel 69157 69113 deno run --allow-read --allow-write --allow-env --allow-net src/Fetch.ts --sharesRepo=GRQ-shareprices2025Q3 --reportRepo=GRQ-companyreports
+nigel 73060     1 /bin/bash /Users/nigel/src/GRQ/run.sh
+nigel 73071 73060 /bin/bash worker/node.sh
+nigel 73109 73071 /bin/bash ./sampler.sh
 root    508   377 login -pfl nigel /bin/bash -c exec -la zsh /bin/zsh
 nigel   517   508 -zsh
 nigel 13801   517 tail -f /Users/nigel/logs/nodetrain.log
@@ -52,22 +55,1076 @@ IP: 10.0.0.11
 Number of CPUs: 10
 Available Memory: 31G
 ================ Clean up ENDED ================
-PATH: /Users/nigel/.deno/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
+PATH: /Users/nigel/.deno/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/bin
 deno 2.5.6 (stable, release, aarch64-apple-darwin)
 v8 14.0.365.5-rusty
 typescript 5.9.2
 aws-cli/2.18.15 Python/3.12.7 Darwin/25.0.0 source/arm64
-Option: sampler
-Starting... Thu Nov  6 03:05:21 AEDT 2025
+Option: data
+Starting data training task at Wed Nov  5 21:10:02 AEDT 2025
+Rotating training data logs...
+Removed old log: trainDataStocks.log
+Removed old log: trainDataIndustry.log
+Removed old log: trainDataExchange.log
+Removed old log: trainDataLocation.log
+Removed old log: trainDataFX.log
+Log rotation completed at Wed Nov  5 21:10:02 AEDT 2025
+Running trainDataStocks.sh...
 Already up to date.
-HEAD is now at 6128210 Daily {20251105} regression score 0.4140 -> 0.4133 {diff -7} on Mac-Ultra-M2
+HEAD is now at 61282104 Daily {20251105} regression score 0.4140 -> 0.4133 {diff -7} on Mac-Ultra-M2
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-cluster synced with remote (validation skipped)
 From github.com:stSoftwareAU/GRQ-sampler
-   14b67e10e..9d7a81334  main       -> origin/main
-HEAD is now at 9d7a81334 🦠 GRQ-23 🎯, Score: 0.413289, Neurons: 450 & Synapses: 15,967
+   d172f690b..c879a83b8  main       -> origin/main
+HEAD is now at c879a83b8 🦠 GRQ-13 🎯, Score: 0.413275, Neurons: 452 & Synapses: 15,971
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-portfolio
+   7a00e871a5..fdbbaf6390  main       -> origin/main
+HEAD is now at fdbbaf6390 REJECTED 13.25% -> 11.79% Delta -1.468
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+Starting default... Wed Nov  5 21:10:32 AEDT 2025
+Cluster mode
+HEAD is now at c72e54e3d Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at c6092c14f83 Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+Initialize worker fetch
+Difference between cluster score 0.4133 & worker score 0.4721 is 588
+Cluster score 0.4133 on 20251105 BETTER than worker's score 0.4721 on 0000000; ignoring worker's network
+HEAD is now at c72e54e3d Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at c6092c14f83 Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at e87a8e20 Refresh of history for 2025-11-05 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-location
+   2fafa9f00..64bafa508  Develop    -> origin/Develop
+HEAD is now at 64bafa508 Mac-Ultra-M2 Improved location models (Mac-Ultra-M2)
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-industryV2
+   70a1c0f6d2..e4009c9815  main       -> origin/main
+HEAD is now at e4009c9815 GRQ-7 Improved Industry models (GRQ-7)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-exchange
+   958c7bd1..1ba4b47c  main       -> origin/main
+HEAD is now at 1ba4b47c GRQ-16 Improved exchange models (GRQ-16)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 61282104 Daily {20251105} regression score 0.4140 -> 0.4133 {diff -7} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+HEAD is now at c879a83b8 🦠 GRQ-13 🎯, Score: 0.413275, Neurons: 452 & Synapses: 15,971
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at fdbbaf6390 REJECTED 13.25% -> 11.79% Delta -1.468
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 024a41ccae7 Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-tickers synced with remote (validation skipped)
+HEAD is now at 1fc2f15112b Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-topics synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-commodities
+   9e82038..195f5ec  Develop    -> origin/Develop
+HEAD is now at 195f5ec Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-commodities synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-listing
+   9166083..3a3d927  Develop    -> origin/Develop
+HEAD is now at 3a3d927 Refresh of history on 2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-listing synced with remote (validation skipped)
+HEAD is now at 34be23db Insiders on GRQ-11@2025-03-08
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-insiders synced with remote (validation skipped)
+HEAD is now at d3cb677 Merge pull request #1 from stSoftwareAU/WIP
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-WorldUncertaintyIndex synced with remote (validation skipped)
+Duration: 9m 17s
+From github.com:stSoftwareAU/GRQ-FX-models
+   62b4372a..b82be810  Develop    -> origin/Develop
+HEAD is now at b82be810 GRQ-3 Improved FX models (GRQ-3)
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX-models synced with remote (validation skipped)
+Workers: 10
+History Loaded
+History Loaded
+History Loaded
+History Loaded
+History Loaded
+History Loaded
+History Loaded
+History Loaded
+History Loaded
+History Loaded
+FX Performance stats (avg): dataV62:158ms 170µs 196ns, dataV65:53ms 294µs 827ns, dataV38_financial_markets:1ms 509µs 874ns, dataV38_economy_macro:1ms 212µs 255ns, dataV38_economy_fiscal:976µs 71ns
+FX Performance stats (avg): dataV62:60ms 455µs 208ns, dataV65:26ms 788µs 21ns, dataV14:87µs 125ns, dataV76:39µs 396ns, dataV15:32µs 145ns
+D-2010 loaded 7m 28s 304ms
+FX Performance stats (avg): dataV14:53µs 42ns, dataV81:21µs 250ns, dataV42:20µs 708ns, dataV38_economy_fiscal:17µs 458ns, dataV38_economy_macro:17µs 62ns
+J-2025 loaded 8m 4s 249ms
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+FX Performance stats (avg): dataV62:107ms 511µs 979ns, dataV65:70ms 36µs 604ns, dataV14:163µs 317ns, dataV81:18µs 583ns, dataV42:14µs 385ns
+B-2014 loaded 14m 44s 6ms
+A-2012 loaded 15m 13s 542ms
+FX Performance stats (avg): dataV62:88ms 949µs 229ns, dataV65:37ms 204µs 395ns, dataV14:3ms 54µs 111ns, dataV38_economy_macro:1ms 963µs 749ns, dataV38_economy_fiscal:1ms 719µs 291ns
+FX Performance stats (avg): dataV62:123ms 587µs 358ns, dataV65:91ms 95µs 8ns, dataV15:212µs 458ns, dataV14:77µs 916ns, dataV76:23µs 725ns
+E-2016 loaded 14m 58s 38ms
+FX Performance stats (avg): dataV65:163ms 736µs 125ns, dataV62:137ms 611µs 854ns, dataV14:6ms 569µs 333ns, dataV38_economy_fiscal:25µs 875ns, dataV15:20µs 479ns
+J-2013 loaded 3m 56s 664ms
+H-2015 loaded 14m 31s 376ms
+D-2012 loaded 9m 16s 677ms
+F-2025 loaded 15m 52s 374ms
+FX Performance stats (avg): dataV62:87ms 258µs 625ns, dataV65:41ms 660µs 167ns, dataV76:1ms 813µs 708ns, dataV81:42µs 542ns, dataV14:38µs 708ns
+G-2017 loaded 15m 48s 716ms
+FX Performance stats (avg): dataV62:394ms 384µs 833ns, dataV65:104ms 109µs, dataV38_financial_markets:1ms 807µs 41ns, dataV38_economy_macro:1ms 299µs 479ns, dataV38_economy_fiscal:923µs 896ns
+FX Performance stats (avg): dataV62:73ms 884µs 18ns, dataV65:42ms 716µs 523ns, dataV14:93µs 54ns, dataV38_economy_monetary:78µs 717ns, dataV38_financial_markets:60µs 222ns
+FX Performance stats (avg): dataV62:160ms 524µs 625ns, dataV65:69ms 716µs 292ns, dataV38_technology:1ms 311µs 833ns, dataV38_financial_markets:1ms 130µs 250ns, dataV38_economy_fiscal:812µs 458ns
+FX Performance stats (avg): dataV62:57ms 915µs 812ns, dataV65:25ms 324µs 673ns, dataV14:1ms 322µs 24ns, dataV38_economy_macro:1ms 195µs 124ns, dataV38_economy_fiscal:1ms 87µs 124ns
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+J-2023 loaded 4m 51s 82ms
+FX Performance stats (avg): dataV62:108ms 518µs 315ns, dataV65:74ms 99µs 297ns, dataV15:154µs 357ns, dataV14:65µs 734ns, dataV76:19µs 857ns
+D-2007 loaded 4m 48s 825ms
+E-2008 loaded 6m 37s 718ms
+H-2011 loaded 5m 51s 840ms
+FX Performance stats (avg): dataV62:341ms 499µs 208ns, dataV65:130ms 215µs 291ns, dataV86:1ms 988µs 146ns, dataV87:135µs 375ns, dataV14:88µs 777ns
+FX Performance stats (avg): dataV62:207ms 134µs 875ns, dataV65:122ms 376µs 541ns, dataV14:3ms 301µs 590ns, dataV15:13µs 58ns, dataV81:12µs 408ns
+J-2011 loaded 3m 29s 264ms
+I-2022 loaded 21m 40s 515ms
+FX Performance stats (avg): dataV62:169ms 286µs 833ns, dataV65:57ms 139µs 520ns, dataV38_financial_markets:1ms 976µs 921ns, dataV38_economy_macro:1ms 117µs 838ns, dataV38_economy_fiscal:1ms 10µs 973ns
+FX Performance stats (avg): dataV62:114ms 169µs 78ns, dataV65:72ms 64µs 599ns, dataV15:135µs 890ns, dataV14:66µs 588ns, dataV76:18µs 104ns
+FX Performance stats (avg): dataV62:214ms 426µs 749ns, dataV65:80ms 468µs 437ns, dataV86:999µs 687ns, dataV38_financial_markets:620µs 989ns, dataV38_economy_macro:277µs 218ns
+G-2025 loaded 12m 55s 711ms
+B-2019 loaded 16m 26s 489ms
+FX Performance stats (avg): dataV62:160ms 918µs 472ns, dataV65:56ms 720µs 560ns, dataV38_financial_markets:1ms 839µs 657ns, dataV38_economy_macro:1ms 51µs 638ns, dataV38_economy_fiscal:948µs 550ns
+FX Performance stats (avg): dataV62:164ms 221µs 958ns, dataV65:89ms 911µs 533ns, dataV14:151µs 208ns, dataV15:112µs 179ns, dataV76:18µs 95ns
+D-2017 loaded 13m 7s 811ms
+C-2022 loaded 35m 14s 756ms
+F-2023 loaded 23m 15s 881ms
+J-2022 loaded 16m 45s 38ms
+I-2014 loaded 16m 48s 146ms
+FX Performance stats (avg): dataV62:171ms 141µs 325ns, dataV65:86ms 51µs 162ns, dataV38_technology:1ms 704µs 375ns, dataV14:589µs 378ns, dataV38_economy_monetary:184µs 632ns
+FX Performance stats (avg): dataV62:171ms 550µs 116ns, dataV65:64ms 375µs 741ns, dataV38_energy_transportation:4ms 922µs 441ns, dataV38_economy_macro:4ms 270µs 700ns, dataV38_finance:1ms 153µs 958ns
+FX Performance stats (avg): dataV62:165ms 420µs 795ns, dataV65:57ms 414µs 670ns, dataV38_financial_markets:1ms 647µs 594ns, dataV38_economy_fiscal:959µs 340ns, dataV38_economy_macro:929µs 227ns
+E-2020 loaded 25m 41s 39ms
+G-2013 loaded 18m 24s 621ms
+FX Performance stats (avg): dataV62:65ms 943µs 215ns, dataV65:36ms 779µs 451ns, dataV38_energy_transportation:784µs 930ns, dataV38_economy_macro:439µs 305ns, dataV38_economy_fiscal:379µs 204ns
+FX Performance stats (avg): dataV62:50ms 654µs 72ns, dataV65:22ms 492µs 260ns, dataV38_technology:4ms 989µs 791ns, dataV38_finance:3ms 103µs 541ns, dataV38_financial_markets:876µs 969ns
+J-2017 loaded 9m 43s 229ms
+FX Performance stats (avg): dataV62:67ms 897µs 479ns, dataV65:31ms 170µs 458ns, dataV38_economy_fiscal:63µs 62ns, dataV14:29µs 611ns, dataV76:28µs 521ns
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+FX Performance stats (avg): dataV62:192ms 459µs 464ns, dataV65:115ms 473µs 494ns, dataV14:2ms 489µs 911ns, dataV81:11µs 809ns, dataV15:11µs 482ns
+H-2021 loaded 29m 3s 540ms
+FX Performance stats (avg): dataV62:211ms 741µs 249ns, dataV65:89ms 970µs 722ns, dataV38_energy_transportation:4ms 271µs 708ns, dataV38_economy_macro:3ms 768µs 576ns, dataV38_financial_markets:1ms 392µs 208ns
+FX Performance stats (avg): dataV62:94ms 157µs 779ns, dataV65:44ms 940µs 976ns, dataV38_energy_transportation:673µs 169ns, dataV38_economy_macro:376µs 922ns, dataV38_economy_fiscal:325µs 419ns
+D-2019 loaded 21m 42s 424ms
+J-2020 loaded 9m 4s 843ms
+FX Performance stats (avg): dataV62:93ms 934µs 408ns, dataV65:51ms 953µs 575ns, dataV38_technology:3ms 992µs 16ns, dataV38_finance:2ms 483µs 16ns, dataV38_financial_markets:702µs 225ns
+F-2019 loaded 20m 22s 182ms
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+FX Performance stats (avg): dataV62:183ms 957µs 277ns, dataV65:78ms 687µs 128ns, dataV38_financial_markets:1ms 510µs 979ns, dataV38_economy_fiscal:879µs 836ns, dataV38_economy_macro:852µs 225ns
+Failed to load normalized FX data for USDKYD: Error: No valid FX data found for USDKYD on or before 2008-11-10
+I-2020 loaded 22m 4s 483ms
+E-2017 loaded 17m 3s 279ms
+J-2016 loaded 5m 29s 836ms
+FX Performance stats (avg): dataV62:101ms 571µs 908ns, dataV65:50ms 858µs 336ns, dataV38_energy_transportation:628µs 402ns, dataV38_economy_macro:351µs 902ns, dataV38_economy_fiscal:303µs 841ns
+H-2016 loaded 14m 38s 636ms
+C-2016 loaded 31m 47s 54ms
+D-2011 loaded 10m 32s 214ms
+FX Performance stats (avg): dataV62:52ms 681µs 803ns, dataV65:23ms 392µs 803ns, dataV14:1ms 159µs 323ns, dataV38_economy_macro:1ms 127µs 101ns, dataV38_economy_fiscal:1ms 56µs 946ns
+FX Performance stats (avg): dataV62:144ms 438µs 138ns, dataV65:96ms 686µs 152ns, dataV38_economy_fiscal:43µs 180ns, dataV14:30µs 10ns, dataV76:24µs 930ns
+FX Performance stats (avg): dataV62:195ms 510µs 10ns, dataV65:75ms 394µs 765ns, dataV38_energy_transportation:3ms 323µs 713ns, dataV38_economy_macro:2ms 988µs 671ns, dataV38_financial_markets:1ms 272µs 698ns
+FX Performance stats (avg): dataV62:113ms 801µs 513ns, dataV65:59ms 776µs 312ns, dataV38_technology:3ms 326µs 805ns, dataV38_finance:2ms 69µs 319ns, dataV38_financial_markets:585µs 597ns
+FX Performance stats (avg): dataV62:209ms 899µs 805ns, dataV65:94ms 118µs 149ns, dataV38_technology:1ms 669µs 34ns, dataV14:614µs 221ns, dataV38_financial_markets:344µs 517ns
+F-2008 loaded 10m 15s 564ms
+J-2015 loaded 5m 56s 147ms
+FX Performance stats (avg): dataV62:173ms 787µs 226ns, dataV65:67ms 17µs 796ns, dataV38_energy_transportation:3ms 20µs 208ns, dataV38_economy_macro:2ms 702µs 46ns, dataV38_financial_markets:1ms 164µs 88ns
+B-2023 loaded 44m 19s 22ms
+I-2011 loaded 12m 305ms
+G-2021 loaded 28m 26s 502ms
+FX Performance stats (avg): dataV62:214ms 283µs 862ns, dataV65:93ms 774µs 653ns, dataV38_technology:1ms 598µs 419ns, dataV38_energy_transportation:1ms 412µs 448ns, dataV38_economy_monetary:1ms 281µs 657ns
+H-2007 loaded 12m 23s 703ms
+A-2024 loaded 1h 5m 18s 159ms
+FX Performance stats (avg): dataV62:193ms 587µs 721ns, dataV65:79ms 415µs 996ns, dataV38_financial_markets:1ms 395µs 208ns, dataV38_economy_fiscal:812µs 426ns, dataV38_economy_macro:786µs 919ns
+J-2019 loaded 11m 38s 585ms
+D-2025 loaded 17m 51s 889ms
+E-2025 loaded 20m 11s 264ms
+FX Performance stats (avg): dataV62:191ms 773µs 636ns, dataV65:83ms 197µs, dataV38_financial_markets:1ms 315µs 158ns, dataV38_economy_fiscal:704µs 411ns, dataV38_economy_macro:683µs 33ns
+FX Performance stats (avg): dataV62:156ms 411µs 479ns, dataV65:60ms 316µs 341ns, dataV38_energy_transportation:8ms 931µs 775ns, dataV38_economy_macro:8ms 535µs 845ns, dataV38_finance:7ms 34µs 41ns
+FX Performance stats (avg): dataV62:220ms 227µs 968ns, dataV65:98ms 453µs 427ns, dataV38_technology:1ms 298µs 854ns, dataV38_energy_transportation:1ms 148µs 539ns, dataV38_economy_monetary:1ms 41µs 487ns
+FX Performance stats (avg): dataV62:104ms 137µs 296ns, dataV65:54ms 624µs 88ns, dataV38_energy_transportation:589µs 330ns, dataV38_economy_macro:330µs 112ns, dataV38_economy_fiscal:285µs 62ns
+J-2012 loaded 8m 51s 495ms
+I-2012 loaded 16m 35s 625ms
+FX Performance stats (avg): dataV62:207ms 192µs 976ns, dataV65:85ms 760µs 299ns, dataV38_financial_markets:1ms 233µs 242ns, dataV38_economy_fiscal:660µs 492ns, dataV38_economy_macro:640µs 544ns
+FX Performance stats (avg): dataV62:214ms 335µs 635ns, dataV65:105ms 189µs 93ns, dataV14:59µs 383ns, dataV38_economy_fiscal:32µs 979ns, dataV76:21µs 948ns
+B-2012 loaded 20m 38s 187ms
+F-2018 loaded 25m 43s 57ms
+FX Performance stats (avg): dataV62:142ms 241µs 844ns, dataV65:55ms 803µs 473ns, dataV38_energy_transportation:8ms 140µs 492ns, dataV38_economy_macro:7ms 791µs 382ns, dataV38_finance:6ms 430µs 238ns
+FX Performance stats (avg): dataV62:97ms 908µs 708ns, dataV65:51ms 237µs 863ns, dataV38_technology:2ms 851µs 678ns, dataV38_finance:1ms 773µs 839ns, dataV38_financial_markets:502µs 601ns
+FX Performance stats (avg): dataV38_economy_fiscal:289ms 837µs 408ns, dataV62:205ms 16µs 791ns, dataV65:69ms 72µs 200ns, dataV38_financial_markets:1ms 116µs 874ns, dataV38_economy_macro:1ms 11µs 824ns
+J-2008 loaded 6m 36s 945ms
+FX Performance stats (avg): dataV62:191ms 254µs 760ns, dataV65:114ms 103µs 234ns, dataV14:2ms 674µs 518ns, dataV81:11µs 895ns, dataV15:11µs 338ns
+FX Performance stats (avg): dataV62:227ms 471µs 259ns, dataV65:101ms 161µs 37ns, dataV38_technology:1ms 154µs 673ns, dataV38_energy_transportation:1ms 23µs 965ns, dataV38_economy_monetary:925µs 902ns
+C-2014 loaded 36m 43s 383ms
+FX Performance stats (avg): dataV62:98ms 12µs 750ns, dataV65:51ms 411µs 529ns, dataV38_economy_monetary:1ms 54µs 154ns, dataV38_energy_transportation:586µs 838ns, dataV38_financial_markets:581µs 311ns
+FX Performance stats (avg): dataV62:88ms 437µs 778ns, dataV65:44ms 196µs 25ns, dataV38_technology:1ms 996µs 537ns, dataV14:1ms 484µs 920ns, dataV38_finance:1ms 242µs 216ns
+FX Performance stats (avg): dataV62:108ms 907µs 634ns, dataV65:44ms 213µs 129ns, dataV14:951µs 916ns, dataV38_economy_macro:877µs 180ns, dataV38_economy_fiscal:822µs 569ns
+F-2007 loaded 12m 52s 308ms
+FX Performance stats (avg): dataV62:109ms 155µs 409ns, dataV65:57ms 800µs 97ns, dataV38_technology:2ms 789µs 974ns, dataV38_energy_transportation:1ms 377µs 914ns, dataV38_economy_fiscal:1ms 320µs 493ns
+FX Performance stats (avg): dataV62:264ms 469µs 392ns, dataV38_economy_fiscal:207ms 27µs 428ns, dataV65:71ms 284µs 666ns, dataV38_financial_markets:799µs 59ns, dataV38_economy_macro:723µs 416ns
+FX Performance stats (avg): dataV62:215ms 500µs 190ns, dataV65:95ms 836µs 881ns, dataV38_technology:1ms 93µs 940ns, dataV38_energy_transportation:970µs 109ns, dataV38_economy_monetary:877µs 208ns
+FX Performance stats (avg): dataV62:227ms 37µs 861ns, dataV65:86ms 478µs 606ns, dataV38_financial_markets:1ms 97µs 44ns, dataV38_economy_fiscal:588µs 83ns, dataV38_economy_macro:569µs 599ns
+J-2021 loaded 12m 53s 771ms
+B-2008 loaded 16m 43s 84ms
+FX Performance stats (avg): dataV62:101ms 408µs 306ns, dataV65:51ms 808µs 579ns, dataV38_technology:1ms 815µs 102ns, dataV14:1ms 362µs 364ns, dataV38_finance:1ms 129µs 356ns
+Failed to load normalized FX data for USDKYD: Error: No valid FX data found for USDKYD on or before 2010-08-06
+FX Performance stats (avg): dataV62:101ms 501µs 956ns, dataV65:61ms 96µs 402ns, dataV38_technology:2ms 548µs 200ns, dataV38_economy_fiscal:1ms 751µs 314ns, dataV38_energy_transportation:1ms 401µs 827ns
+H-2022 loaded 36m 48s 982ms
+D-2024 loaded 31m 35s 914ms
+G-2024 loaded 39m 38s 550ms
+J-2014 loaded 5m 15s 531ms
+FX Performance stats (avg): dataV62:248ms 610µs 958ns, dataV65:127ms 914µs 366ns, dataV38_technology:2ms 549µs 150ns, dataV38_economy_macro:268µs 866ns, dataV14:177µs 368ns
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+E-2023 loaded 34m 48s 898ms
+A-2025 loaded 40m 29s 984ms
+I-2021 loaded 28m 22s 410ms
+FX Performance stats (avg): dataV62:120ms 849µs 227ns, dataV65:59ms 633µs 141ns, dataV38_technology:1ms 536µs 16ns, dataV14:1ms 172µs 681ns, dataV38_finance:955µs 769ns
+J-2010 loaded 5m 31s 101ms
+FX Performance stats (avg): dataV62:186ms 736µs 889ns, dataV65:83ms 491µs 817ns, dataV38_technology:903µs 817ns, dataV38_energy_transportation:801µs 523ns, dataV38_economy_monetary:724µs 780ns
+FX Performance stats (avg): dataV62:250ms 166µs 694ns, dataV65:126ms 635µs 722ns, dataV38_technology:2ms 273µs 312ns, dataV38_economy_macro:307µs 944ns, dataV38_financial_markets:236µs 479ns
+C-2010 loaded 25m 22s 777ms
+FX Performance stats (avg): dataV62:148ms 498µs 870ns, dataV65:71ms 913µs 370ns, dataV14:1ms 265µs 881ns, dataV38_technology:1ms 174µs 877ns, dataV38_finance:731µs 127ns
+B-2013 loaded 19m 11s 638ms
+F-2020 loaded 22m 16s 674ms
+FX Performance stats (avg): dataV62:180ms 71µs 553ns, dataV65:79ms 825µs 938ns, dataV38_technology:831µs 566ns, dataV38_energy_transportation:737µs 458ns, dataV38_economy_monetary:666µs 858ns
+J-2018 loaded 10m 30s 678ms
+FX Performance stats (avg): dataV62:231ms 412µs 161ns, dataV38_economy_fiscal:181ms 149µs 224ns, dataV65:62ms 375µs 547ns, dataV38_financial_markets:699µs 614ns, dataV38_economy_macro:633µs 208ns
+FX Performance stats (avg): dataV62:129ms 964µs 445ns, dataV65:52ms 220µs 654ns, dataV14:867µs 886ns, dataV38_economy_macro:789µs 637ns, dataV38_economy_fiscal:741µs 287ns
+I-2008 loaded 14m 2s 261ms
+G-2014 loaded 18m 19s 50ms
+FX Performance stats (avg): dataV62:259ms 557µs 755ns, dataV65:138ms 535µs 630ns, dataV38_technology:2ms 378µs 875ns, dataV38_economy_macro:672µs 226ns, dataV38_finance:446µs 387ns
+E-2013 loaded 18m 10s 424ms
+J-2009 loaded 5m 11s 353ms
+FX Performance stats (avg): dataV62:113ms 340µs 136ns, dataV65:61ms 687µs 776ns, dataV38_technology:2ms 433µs 757ns, dataV38_economy_fiscal:1ms 727µs 174ns, dataV38_energy_transportation:1ms 311µs 416ns
+FX Performance stats (avg): dataV62:261ms 911µs 270ns, dataV65:125ms 71µs 213ns, dataV38_technology:2ms 135µs 625ns, dataV38_economy_macro:665µs 380ns, dataV38_financial_markets:495µs 83ns
+H-2023 loaded 30m 12s 186ms
+D-2022 loaded 30m 12s 424ms
+FX Performance stats (avg): dataV62:76ms 9µs 666ns, dataV65:35ms 783µs 979ns, dataV76:910µs 291ns, dataV14:45µs 360ns, dataV81:26µs 604ns
+F-2016 loaded 17m 14s 953ms
+J-2024 loaded 11m 59s 683ms
+FX Performance stats (avg): dataV62:211ms 48µs 325ns, dataV65:110ms 230µs 229ns, dataV14:2ms 215µs 458ns, dataV38_finance:945µs 466ns, dataV38_economy_monetary:541µs 737ns
+G-2011 loaded 15m 9s 795ms
+E-2007 loaded 12m 56s 555ms
+A-2018 loaded 32m 46s 741ms
+J-2007 loaded 3m 29s 735ms
+J loaded 2h 29m 19s 632ms
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+B-2025 loaded 26m 52s 821ms
+C-2025 loaded 30m 3s 632ms
+F-2011 loaded 10m 15s 287ms
+FX Performance stats (avg): dataV62:150ms 717µs 400ns, dataV65:72ms 249µs 18ns, dataV38_technology:1ms 204µs 321ns, dataV14:1ms 201µs 456ns, dataV38_financial_markets:984µs 796ns
+H-2025 loaded 13m 39s 271ms
+K-2020 loaded 7m 1s 155ms
+I-2024 loaded 26m 23s 98ms
+FX Performance stats (avg): dataV62:121ms 932µs 20ns, dataV65:68ms 247µs 39ns, dataV38_technology:2ms 328µs 60ns, dataV38_economy_fiscal:1ms 652µs 161ns, dataV38_energy_transportation:1ms 254µs 476ns
+FX Performance stats (avg): dataV62:240ms 791µs 157ns, dataV38_economy_fiscal:161ms 21µs 740ns, dataV65:73ms 355µs 750ns, dataV38_financial_markets:622µs 254ns, dataV38_economy_macro:563µs 60ns
+FX Performance stats (avg): dataV62:189ms 641µs 736ns, dataV65:65ms 621µs 434ns, dataV38_energy_transportation:7ms 757µs 687ns, dataV38_economy_macro:7ms 239µs 322ns, dataV38_financial_markets:6ms 93µs 66ns
+FX Performance stats (avg): dataV62:179ms 318µs 19ns, dataV65:79ms 916µs 434ns, dataV38_technology:822µs 296ns, dataV38_energy_transportation:735µs 423ns, dataV38_economy_monetary:668µs 269ns
+FX Performance stats (avg): dataV62:168ms 504µs 304ns, dataV65:70ms 581µs 368ns, dataV14:1ms 143µs 879ns, dataV38_technology:1ms 140µs 971ns, dataV38_financial_markets:933µs 87ns
+FX Performance stats (avg): dataV62:260ms 177µs 268ns, dataV65:118ms 964µs 717ns, dataV38_technology:2ms 54µs 564ns, dataV38_economy_macro:646µs 439ns, dataV38_financial_markets:537µs 185ns
+FX Performance stats (avg): dataV62:233ms 111µs 956ns, dataV65:88ms 888µs 554ns, dataV38_financial_markets:1ms 39µs 975ns, dataV38_economy_fiscal:557µs 221ns, dataV38_economy_macro:539µs 923ns
+D-2021 loaded 20m 5s 495ms
+G-2018 loaded 17m 17s 348ms
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+H-2009 loaded 10m 2s 659ms
+K-2025 loaded 8m 45s 480ms
+FX Performance stats (avg): dataV62:238ms 828µs 754ns, dataV65:90ms 974µs 141ns, dataV38_financial_markets:988µs 933ns, dataV38_economy_fiscal:529µs 454ns, dataV38_economy_macro:513µs 72ns
+I-2010 loaded 13m 24s 934ms
+F-2014 loaded 15m 38s 771ms
+FX Performance stats (avg): dataV62:164ms 926µs 408ns, dataV65:68ms 918µs 857ns, dataV14:1ms 105µs 590ns, dataV38_technology:1ms 32µs 371ns, dataV38_financial_markets:844µs 581ns
+K-2016 loaded 10m 58s 83ms
+E-2022 loaded 31m 38s 611ms
+A-2014 loaded 29m 51s 922ms
+FX Performance stats (avg): dataV62:168ms 979µs 749ns, dataV65:72ms 545µs 172ns, dataV14:1ms 149µs 922ns, dataV38_technology:985µs 477ns, dataV38_financial_markets:806µs 322ns
+FX Performance stats (avg): dataV62:190ms 326µs 57ns, dataV65:65ms 49µs 294ns, dataV38_energy_transportation:7ms 161µs, dataV38_economy_macro:6ms 682µs 522ns, dataV38_financial_markets:5ms 624µs 811ns
+D-2016 loaded 17m 14s 900ms
+FX Performance stats (avg): dataV62:127ms 616µs 222ns, dataV65:68ms 35µs 689ns, dataV38_technology:2ms 231µs 133ns, dataV38_economy_fiscal:1ms 583µs 388ns, dataV38_energy_transportation:1ms 202µs 274ns
+K-2011 loaded 6m 17s 110ms
+C-2011 loaded 27m 59s 708ms
+G-2019 loaded 26m 3s 125ms
+H-2019 loaded 24m 21s 485ms
+I-2018 loaded 19m 44s 607ms
+FX Performance stats (avg): dataV62:161ms 510µs 48ns, dataV65:81ms 862µs 715ns, dataV14:753µs 420ns, dataV38_economy_macro:658µs 600ns, dataV15:650µs 253ns
+E-2010 loaded 12m 51s 662ms
+FX Performance stats (avg): dataV62:172ms 774µs 440ns, dataV65:75ms 775µs 242ns, dataV14:1ms 103µs 262ns, dataV38_technology:942µs 661ns, dataV38_financial_markets:771µs 366ns
+FX Performance stats (avg): dataV62:240ms 133µs 670ns, dataV38_economy_fiscal:144ms 919µs 746ns, dataV65:72ms 645µs 696ns, dataV38_financial_markets:560µs 383ns, dataV38_economy_macro:506µs 937ns
+K-2024 loaded 11m 37s 550ms
+D-2018 loaded 15m 26s 234ms
+B-2022 loaded 42m 18s 53ms
+FX Performance stats (avg): dataV62:191ms 192µs 229ns, dataV65:80ms 975µs 462ns, dataV38_technology:945µs 482ns, dataV38_energy_transportation:923µs 822ns, dataV38_economy_monetary:676µs 489ns
+FX Performance stats (avg): dataV62:136ms 368µs 598ns, dataV65:71ms 363µs 688ns, dataV38_technology:2ms 142µs 70ns, dataV38_economy_fiscal:1ms 520µs 148ns, dataV38_energy_transportation:1ms 154µs 276ns
+Failed to load normalized FX data for USDKYD: Error: No valid FX data found for USDKYD on or before 2010-06-08
+FX Performance stats (avg): dataV62:159ms 485µs 974ns, dataV65:77ms 535µs 288ns, dataV14:701µs 541ns, dataV38_economy_macro:642µs 246ns, dataV38_economy_fiscal:621µs 487ns
+A-2010 loaded 22m 9s 138ms
+FX Performance stats (avg): dataV62:242ms 15µs 344ns, dataV38_economy_fiscal:131ms 745µs 390ns, dataV65:83ms 209µs 890ns, dataV38_financial_markets:509µs 776ns, dataV38_economy_macro:461µs 22ns
+FX Performance stats (avg): dataV62:188ms 748µs 330ns, dataV65:85ms 387µs 709ns, dataV38_technology:880µs 377ns, dataV38_energy_transportation:860µs 215ns, dataV38_economy_monetary:629µs 939ns
+F-2022 loaded 35m 31s 393ms
+G-2010 loaded 16m 44s 130ms
+FX Performance stats (avg): dataV62:188ms 583µs 583ns, dataV65:62ms 808µs 583ns, dataV76:483µs 218ns, dataV14:72µs 283ns, dataV81:35µs 93ns
+FX Performance stats (avg): dataV62:151ms 65µs 943ns, dataV65:80ms 173µs 694ns, dataV38_technology:2ms 59µs 748ns, dataV38_economy_fiscal:1ms 461µs 753ns, dataV38_energy_transportation:1ms 109µs 950ns
+I-2015 loaded 21m 6s 180ms
+D-2009 loaded 16m 15s 402ms
+FX Performance stats (avg): dataV62:176ms 737µs 869ns, dataV65:60ms 403µs 437ns, dataV38_energy_transportation:6ms 649µs 562ns, dataV38_economy_macro:6ms 205µs 258ns, dataV38_financial_markets:5ms 332µs 187ns
+FX Performance stats (avg): dataV62:173ms 785µs 991ns, dataV65:74ms 260µs 474ns, dataV38_technology:1ms 516µs 291ns, dataV14:1ms 98µs 580ns, dataV38_financial_markets:764µs 178ns
+E-2014 loaded 22m 27s 361ms
+FX Performance stats (avg): dataV62:199ms 422µs 214ns, dataV65:90ms 113µs 177ns, dataV38_technology:797µs 937ns, dataV38_energy_transportation:779µs 666ns, dataV38_economy_monetary:571µs 106ns
+H-2018 loaded 27m 28s 757ms
+K-2021 loaded 23m 31s 809ms
+FX Performance stats (avg): dataV62:188ms 835µs 282ns, dataV65:90ms 541µs 878ns, dataV14:660µs 969ns, dataV38_economy_macro:596µs 749ns, dataV38_economy_fiscal:577µs 375ns
+FX Performance stats (avg): dataV62:167ms 462µs 89ns, dataV65:89ms 894µs 682ns, dataV38_technology:1ms 983µs 620ns, dataV38_economy_fiscal:1ms 407µs 785ns, dataV38_energy_transportation:1ms 69µs 6ns
+FX Performance stats (avg): dataV62:214ms 562µs 957ns, dataV65:91ms 779µs 748ns, dataV38_technology:773µs 777ns, dataV38_energy_transportation:756µs 64ns, dataV38_economy_monetary:554µs 840ns
+G-2007 loaded 24m 27s 743ms
+FX Performance stats (avg): dataV62:225ms 89µs 727ns, dataV65:108ms 127µs 798ns, dataV38_technology:751µs 68ns, dataV38_energy_transportation:734µs 571ns, dataV38_economy_monetary:538µs 618ns
+FX Performance stats (avg): dataV62:247ms 195µs 102ns, dataV65:108ms 997µs 611ns, dataV76:937µs 436ns, dataV14:641µs 448ns, dataV38_economy_macro:557µs 333ns
+F-2013 loaded 28m 24s 865ms
+FX Performance stats (avg): dataV62:181ms 806µs 136ns, dataV65:76ms 616µs 631ns, dataV38_technology:2ms 458µs 5ns, dataV14:1ms 60µs 416ns, dataV38_financial_markets:826µs 50ns
+FX Performance stats (avg): dataV62:245ms 842µs 696ns, dataV65:113ms 306µs 473ns, dataV38_technology:729µs 657ns, dataV38_energy_transportation:713µs 629ns, dataV38_economy_monetary:523µs 288ns
+K-2019 loaded 20m 14s 441ms
+D-2015 loaded 27m 1s 114ms
+FX Performance stats (avg): dataV62:255ms 827µs 572ns, dataV65:104ms 25µs 251ns, dataV38_financial_markets:934µs 941ns, dataV38_economy_fiscal:891µs 191ns, dataV38_energy_transportation:721µs 708ns
+B-2017 loaded 44m 21s 153ms
+FX Performance stats (avg): dataV62:179ms 552µs 698ns, dataV65:74ms 871µs 72ns, dataV38_technology:2ms 411µs 165ns, dataV14:1ms 22µs 348ns, dataV38_financial_markets:851µs 548ns
+I-2025 loaded 34m 32s 729ms
+A-2013 loaded 45m 38s 615ms
+FX Performance stats (avg): dataV62:269ms 848µs 408ns, dataV65:115ms 930µs 72ns, dataV38_financial_markets:857µs 448ns, dataV38_economy_fiscal:817µs 92ns, dataV38_energy_transportation:661µs 723ns
+FX Performance stats (avg): dataV62:262ms 973µs 591ns, dataV65:115ms 710µs 18ns, dataV76:879µs 726ns, dataV15:750µs 885ns, dataV14:617µs 365ns
+FX Performance stats (avg): dataV62:195ms 949µs 430ns, dataV65:93ms 583µs 745ns, dataV38_technology:1ms 912µs 833ns, dataV38_economy_fiscal:1ms 358µs 129ns, dataV38_energy_transportation:1ms 31µs 17ns
+E-2018 loaded 37m 23s 601ms
+K-2017 loaded 13m 9s 48ms
+G-2012 loaded 21m 12s 133ms
+FX Performance stats (avg): dataV62:309ms 593µs 716ns, dataV65:85ms 182µs 783ns, dataV76:396µs 341ns, dataV14:63µs 291ns, dataV42:59µs 41ns
+FX Performance stats (avg): dataV62:204ms 513µs 127ns, dataV65:70ms 551µs 580ns, dataV38_energy_transportation:6ms 206µs 350ns, dataV38_economy_macro:5ms 791µs 663ns, dataV38_financial_markets:4ms 976µs 963ns
+F-2015 loaded 23m 32s 917ms
+FX Performance stats (avg): dataV62:312ms 735µs 939ns, dataV65:126ms 247µs 469ns, dataV38_technology:1ms 681µs 481ns, dataV38_economy_macro:529µs 223ns, dataV38_financial_markets:440µs 170ns
+FX Performance stats (avg): dataV62:214ms 285µs 66ns, dataV65:93ms 790µs 598ns, dataV38_technology:1ms 785µs 454ns, dataV38_economy_fiscal:1ms 267µs 741ns, dataV38_energy_transportation:962µs 425ns
+K-2014 loaded 9m 4s 503ms
+FX Performance stats (avg): dataV62:273ms 130µs 350ns, dataV65:119ms 998µs 784ns, dataV76:829µs 139ns, dataV15:722µs 696ns, dataV14:584µs 435ns
+FX Performance stats (avg): dataV62:250ms 148µs 770ns, dataV65:119ms 906µs 314ns, dataV38_technology:690µs 289ns, dataV38_energy_transportation:675µs 92ns, dataV38_economy_monetary:495µs 41ns
+H-2024 loaded 46m 30s 903ms
+D-2020 loaded 25m 15s 429ms
+FX Performance stats (avg): dataV62:312ms 538µs 996ns, dataV65:131ms 398µs 548ns, dataV38_technology:1ms 575µs 618ns, dataV38_financial_markets:881µs 635ns, dataV38_economy_macro:524µs 524ns
+K-2009 loaded 4m 23s 465ms
+FX Performance stats (avg): dataV62:209ms 475µs 893ns, dataV65:79ms 920µs 601ns, dataV38_energy_transportation:5ms 172µs 268ns, dataV38_economy_macro:4ms 826µs 571ns, dataV38_financial_markets:4ms 148µs 118ns
+C-2023 loaded 1h 23m 26s 582ms
+I-2019 loaded 22m 825ms
+FX Performance stats (avg): dataV62:269ms 638µs 642ns, dataV65:94ms 159µs 226ns, dataV76:285µs 59ns, dataV14:55µs 25ns, dataV42:44µs 208ns
+FX Performance stats (avg): dataV62:254ms 770µs 232ns, dataV65:114ms 449µs 565ns, dataV38_economy_fiscal:822µs 52ns, dataV76:746µs 570ns, dataV15:654µs 107ns
+F-2009 loaded 12m 23s 683ms
+G-2016 loaded 21m 20s 147ms
+FX Performance stats (avg): dataV62:202ms 856µs 130ns, dataV65:89ms 942µs 969ns, dataV38_technology:1ms 623µs 588ns, dataV38_economy_fiscal:1ms 152µs 705ns, dataV38_energy_transportation:875µs 136ns
+FX Performance stats (avg): dataV62:284ms 45µs 78ns, dataV65:104ms 713µs 937ns, dataV76:250µs 911ns, dataV14:110µs 351ns, dataV42:39µs 562ns
+D-2008 loaded 13m 42s 343ms
+FX Performance stats (avg): dataV62:275ms 145µs 923ns, dataV65:116ms 447µs 306ns, dataV38_financial_markets:823µs 286ns, dataV38_economy_fiscal:784µs 475ns, dataV38_energy_transportation:635µs 318ns
+FX Performance stats (avg): dataV62:172ms 903µs 768ns, dataV65:72ms 98µs 137ns, dataV38_technology:2ms 979µs 606ns, dataV38_finance:1ms 78µs 35ns, dataV14:1ms 139ns
+H-2008 loaded 14m 19s 762ms
+FX Performance stats (avg): dataV62:201ms 880µs 178ns, dataV65:73ms 932µs 519ns, dataV38_technology:2ms 873µs 367ns, dataV38_finance:1ms 39µs 558ns, dataV14:983µs 995ns
+FX Performance stats (avg): dataV62:203ms 933µs 650ns, dataV65:89ms 226µs 131ns, dataV38_technology:1ms 575µs 940ns, dataV38_economy_fiscal:1ms 118µs 915ns, dataV38_energy_transportation:849µs 503ns
+B-2021 loaded 48m 12s 301ms
+K-2023 loaded 24m 24s 570ms
+A-2019 loaded 47m 36s 968ms
+E-2024 loaded 43m 36s 493ms
+FX Performance stats (avg): dataV62:222ms 592µs 831ns, dataV65:94ms 389µs 475ns, dataV38_technology:1ms 530µs 954ns, dataV38_economy_fiscal:1ms 87µs 78ns, dataV38_energy_transportation:825µs 277ns
+F-2017 loaded 27m 4s 151ms
+FX Performance stats (avg): dataV62:261ms 832µs 59ns, dataV65:87ms 694µs 64ns, dataV38_technology:2ms 595µs 375ns, dataV38_finance:939µs 45ns, dataV14:908µs 74ns
+D-2014 loaded 21m 1s 465ms
+C-2007 loaded 32m 48s 592ms
+K-2015 loaded 11m 26s 512ms
+FX Performance stats (avg): dataV62:275ms 641µs 362ns, dataV65:115ms 54µs 535ns, dataV38_financial_markets:791µs 761ns, dataV38_economy_fiscal:754µs 368ns, dataV38_energy_transportation:610µs 943ns
+FX Performance stats (avg): dataV62:208ms 137µs 833ns, dataV65:80ms 659µs 925ns, dataV38_energy_transportation:4ms 900µs 81ns, dataV38_economy_macro:4ms 572µs 578ns, dataV38_financial_markets:3ms 930µs 212ns
+G-2020 loaded 34m 53s 110ms
+K-2013 loaded 8m 12s 284ms
+I-2023 loaded 42m 19s 406ms
+H-2020 loaded 32m 34s 406ms
+F-2012 loaded 15m 2s 347ms
+FX Performance stats (avg): dataV62:249ms 49µs 31ns, dataV65:126ms 565µs 510ns, dataV38_technology:654µs 925ns, dataV38_energy_transportation:640µs 545ns, dataV38_economy_monetary:469µs 710ns
+D-2013 loaded 14m 49s 869ms
+FX Performance stats (avg): dataV62:214ms 215µs 568ns, dataV65:129ms 535µs 386ns, dataV14:2ms 113µs 618ns, dataV38_finance:859µs 678ns, dataV38_economy_monetary:492µs 644ns
+E-2015 loaded 20m 6s 28ms
+K-2010 loaded 6m 9s 834ms
+FX Performance stats (avg): dataV62:212ms 544µs 527ns, dataV65:81ms 436µs 597ns, dataV38_energy_transportation:4ms 655µs 112ns, dataV38_economy_macro:4ms 343µs 987ns, dataV38_financial_markets:3ms 733µs 837ns
+K-2007 loaded 5m 29s 137ms
+FX Performance stats (avg): dataV62:231ms 89µs 428ns, dataV65:96ms 980µs 93ns, dataV38_technology:1ms 488µs 472ns, dataV38_economy_fiscal:1ms 56µs 925ns, dataV38_energy_transportation:802µs 395ns
+I-2013 loaded 16m 40s 14ms
+FX Performance stats (avg): dataV62:324ms 49µs 480ns, dataV65:136ms 812µs 557ns, dataV38_technology:1ms 454µs 554ns, dataV38_financial_markets:814µs 73ns, dataV38_economy_macro:484µs 327ns
+K-2012 loaded 8m 11s 500ms
+FX Performance stats (avg): dataV62:275ms 222µs 621ns, dataV65:92ms 125µs 173ns, dataV38_technology:2ms 514µs 293ns, dataV38_finance:909µs 725ns, dataV14:881µs 857ns
+FX Performance stats (avg): dataV62:252ms 486µs 189ns, dataV65:93ms 79µs 814ns, dataV76:223µs 528ns, dataV14:114µs 683ns, dataV42:35µs 532ns
+E-2011 loaded 17m 13s 140ms
+H-2017 loaded 22m 28s 852ms
+B-2024 loaded 47m 38s 616ms
+FX Performance stats (avg): dataV62:250ms 36µs 76ns, dataV38_economy_fiscal:120ms 766µs 757ns, dataV65:91ms 267µs 10ns, dataV38_financial_markets:467µs 600ns, dataV38_economy_macro:422µs 749ns
+FX Performance stats (avg): dataV62:284ms 476µs 61ns, dataV65:118ms 519µs 598ns, dataV38_financial_markets:762µs 618ns, dataV38_economy_fiscal:726µs 489ns, dataV38_energy_transportation:588µs 430ns
+K-2018 loaded 9m 18s 616ms
+C-2018 loaded 39m 50s 70ms
+FX Performance stats (avg): dataV62:246ms 235µs 484ns, dataV65:108ms 519µs 712ns, dataV38_economy_fiscal:798µs 718ns, dataV76:676µs 652ns, dataV15:594µs 174ns
+FX Performance stats (avg): dataV62:275ms 166µs 305ns, dataV65:96ms 448µs 123ns, dataV38_technology:2ms 438µs 205ns, dataV38_finance:882µs 179ns, dataV14:858µs 383ns
+I-2007 loaded 12m 25s 354ms
+FX Performance stats (avg): dataV62:230ms 386µs 396ns, dataV65:94ms 989µs 725ns, dataV38_technology:1ms 464µs 350ns, dataV38_economy_fiscal:1ms 111µs 748ns, dataV38_energy_transportation:792µs 479ns
+F-2021 loaded 28m 16s 571ms
+FX Performance stats (avg): dataV62:208ms 835µs 964ns, dataV65:81ms 341µs 978ns, dataV38_energy_transportation:4ms 433µs 472ns, dataV38_economy_macro:4ms 137µs 164ns, dataV38_financial_markets:3ms 556µs 160ns
+D-2023 loaded 28m 29s 549ms
+D loaded 5h 45m 59s 62ms
+FX Performance stats (avg): dataV62:244ms 536µs 712ns, dataV65:88ms 759µs 333ns, dataV38_technology:328µs 225ns, dataV38_finance:226µs 358ns, dataV76:207µs 29ns
+FX Performance stats (avg): dataV62:272ms 645µs 993ns, dataV38_economy_fiscal:111ms 477µs 410ns, dataV65:102ms 89µs 285ns, dataV38_financial_markets:432µs 237ns, dataV38_economy_macro:390µs 621ns
+A-2021 loaded 50m 16s 495ms
+H-2012 loaded 11m 43s 660ms
+G-2023 loaded 37m 5s 818ms
+FX Performance stats (avg): dataV62:246ms 495µs 62ns, dataV65:105ms 485µs 505ns, dataV38_economy_fiscal:830µs 505ns, dataV76:646µs 907ns, dataV38_economy_macro:580µs 367ns
+I-2009 loaded 8m 19s 561ms
+FX Performance stats (avg): dataV62:222ms 113µs 262ns, dataV65:90ms 609µs 972ns, dataV38_technology:1ms 387µs 451ns, dataV38_economy_fiscal:1ms 71µs 854ns, dataV38_energy_transportation:805µs 407ns
+K-2022 loaded 10m 47s 646ms
+B-2011 loaded 13m 16s 444ms
+FX Performance stats (avg): dataV62:275ms 347µs 326ns, dataV65:98ms 483µs 84ns, dataV38_technology:2ms 298µs 939ns, dataV38_finance:831µs 967ns, dataV14:830µs 99ns
+FX Performance stats (avg): dataV62:244ms 983µs 733ns, dataV38_economy_fiscal:96ms 613µs 975ns, dataV65:91ms 984µs 261ns, dataV38_financial_markets:375µs 183ns, dataV38_economy_macro:338µs 747ns
+K-2008 loaded 5m 52s 98ms
+K loaded 3h 24m 55s 543ms
+FX Performance stats (avg): dataV62:222ms 743µs 147ns, dataV65:90ms 428µs 942ns, dataV38_technology:1ms 353µs 647ns, dataV38_economy_fiscal:1ms 45µs 752ns, dataV38_energy_transportation:785µs 801ns
+E-2021 loaded 25m 17s 514ms
+L-2023 loaded 15m 35s 529ms
+FX Performance stats (avg): dataV62:317ms 154µs 395ns, dataV65:135ms 707µs 217ns, dataV38_technology:1ms 350µs 773ns, dataV38_financial_markets:756µs 181ns, dataV38_economy_macro:449µs 848ns
+FX Performance stats (avg): dataV62:258ms 383µs 531ns, dataV65:105ms 54µs 12ns, dataV38_economy_fiscal:85ms 248µs 299ns, dataV14:511µs 986ns, dataV38_financial_markets:332µs 7ns
+FX Performance stats (avg): dataV62:194ms 284µs 670ns, dataV65:76ms 15µs 954ns, dataV38_energy_transportation:4ms 48µs 14ns, dataV38_economy_macro:3ms 777µs 474ns, dataV38_financial_markets:3ms 247µs 213ns
+FX Performance stats (avg): dataV62:275ms 636µs 85ns, dataV65:100ms 118µs 844ns, dataV38_technology:2ms 235µs 99ns, dataV14:810µs 730ns, dataV38_finance:808µs 874ns
+H-2014 loaded 17m 2s 576ms
+G-2015 loaded 21m 47s 934ms
+FX Performance stats (avg): dataV62:220ms 421µs 88ns, dataV65:92ms 114µs 131ns, dataV38_technology:1ms 321µs 455ns, dataV38_economy_fiscal:1ms 20µs 891ns, dataV38_energy_transportation:767µs 128ns
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+I-2016 loaded 22m 27s 428ms
+B-2009 loaded 20m 29s 738ms
+C-2013 loaded 33m 39s 441ms
+FX Performance stats (avg): dataV62:202ms 925µs 295ns, dataV65:83ms 131µs 394ns, dataV38_energy_transportation:3ms 879µs 376ns, dataV38_economy_macro:3ms 620µs 107ns, dataV38_financial_markets:3ms 112µs 55ns
+A-2011 loaded 31m 28s 361ms
+L-2017 loaded 18m 19s 292ms
+F-2024 loaded 36m 3s 656ms
+FX Performance stats (avg): dataV62:227ms 659µs 1ns, dataV65:93ms 217µs 241ns, dataV38_technology:1ms 290µs 760ns, dataV38_economy_fiscal:997µs 471ns, dataV38_energy_transportation:749µs 405ns
+E-2009 loaded 19m 59s 689ms
+FX Performance stats (avg): dataV62:285ms 847µs 129ns, dataV65:104ms 790µs 289ns, dataV38_technology:2ms 174µs 745ns, dataV14:790µs 173ns, dataV38_finance:787µs 63ns
+H-2010 loaded 17m 49s 852ms
+M-2025 loaded 26m 43s 495ms
+FX Performance stats (avg): dataV62:225ms 246µs 531ns, dataV65:95ms 716µs 791ns, dataV38_technology:1ms 206µs 713ns, dataV38_economy_fiscal:932µs 560ns, dataV38_energy_transportation:700µs 670ns
+FX Performance stats (avg): dataV62:248ms 200µs 596ns, dataV65:126ms 109µs 889ns, dataV38_technology:653µs 660ns, dataV38_energy_transportation:637µs 297ns, dataV38_economy_monetary:474µs 688ns
+G-2008 loaded 17m 50s 477ms
+FX Performance stats (avg): dataV62:244ms 29µs 752ns, dataV65:99ms 220µs 162ns, dataV38_economy_fiscal:80ms 512µs 495ns, dataV14:486µs 50ns, dataV38_financial_markets:315µs 805ns
+FX Performance stats (avg): dataV62:221ms 930µs 927ns, dataV65:125ms 516µs 152ns, dataV14:1ms 978µs 403ns, dataV38_finance:788µs 267ns, dataV38_economy_monetary:451µs 809ns
+L-2025 loaded 11m 58s 813ms
+FX Performance stats (avg): dataV62:248ms 281µs, dataV65:125ms 731µs 904ns, dataV38_technology:637µs 758ns, dataV38_energy_transportation:621µs 792ns, dataV38_economy_monetary:463µs 153ns
+FX Performance stats (avg): dataV62:286ms 38µs 85ns, dataV65:113ms 788µs 565ns, dataV38_technology:2ms 63µs 258ns, dataV14:752µs 407ns, dataV38_finance:746µs 736ns
+I-2017 loaded 19m 31s 236ms
+I loaded 6h 30m 29s 670ms
+F-2010 loaded 12m 31s 739ms
+F loaded 6h 32m 38s 986ms
+E-2012 loaded 14m 47s 373ms
+FX Performance stats (avg): dataV62:241ms 582µs 61ns, dataV65:129ms 466µs 467ns, dataV14:1ms 855µs 964ns, dataV38_finance:727µs 759ns, dataV38_economy_monetary:417µs 186ns
+M-2008 loaded 11m 49s 783ms
+L-2011 loaded 7m 40s 911ms
+H-2013 loaded 16m 8s 140ms
+H loaded 6h 37m 41s 108ms
+B-2015 loaded 25m 27s 55ms
+FX Performance stats (avg): dataV62:247ms 939µs 131ns, dataV65:125ms 764µs 84ns, dataV38_technology:594µs 323ns, dataV38_energy_transportation:579µs 467ns, dataV38_economy_monetary:431µs 645ns
+FX Performance stats (avg): dataV62:245ms 862µs 825ns, dataV65:88ms 47µs 295ns, dataV42:1ms 114µs 954ns, dataV38_technology:343µs 765ns, dataV38_financial_markets:289µs 560ns
+FX Performance stats (avg): dataV62:251ms 648µs 697ns, dataV65:108ms 230µs 813ns, dataV38_economy_fiscal:76ms 275µs 81ns, dataV14:470µs 850ns, dataV38_financial_markets:299µs 355ns
+O-2016 loaded 7m 23s 94ms
+N-2010 loaded 8m 1s 824ms
+C-2008 loaded 25m 57s 873ms
+FX Performance stats (avg): dataV62:285ms 639µs 467ns, dataV65:113ms 525µs 76ns, dataV38_technology:2ms 11µs 695ns, dataV14:734µs 987ns, dataV38_finance:728µs 83ns
+FX Performance stats (avg): dataV62:239ms 402µs 613ns, dataV65:128ms 260µs 405ns, dataV14:1ms 635µs 539ns, dataV38_finance:631µs 83ns, dataV38_economy_monetary:361µs 919ns
+L-2014 loaded 6m 42s 232ms
+FX Performance stats (avg): dataV62:247ms 854µs 108ns, dataV65:102ms 660µs 208ns, dataV38_economy_fiscal:766µs 915ns, dataV38_economy_macro:593µs 70ns, dataV76:570µs 576ns
+A-2015 loaded 29m 54s 617ms
+M-2018 loaded 16m 17s 91ms
+FX Performance stats (avg): dataV62:244ms 7µs 197ns, dataV65:123ms 76µs 352ns, dataV38_technology:568µs 524ns, dataV38_energy_transportation:554µs 314ns, dataV38_economy_monetary:412µs 920ns
+FX Performance stats (avg): dataV62:232ms 114µs 973ns, dataV65:88ms 632µs 803ns, dataV38_energy_transportation:3ms 732µs 218ns, dataV38_economy_macro:3ms 475µs 333ns, dataV38_financial_markets:2ms 990µs 388ns
+O-2022 loaded 15m 17s 387ms
+L-2013 loaded 10m 58s 894ms
+E-2019 loaded 26m 3s 325ms
+E loaded 7h 1m 52s 627ms
+FX Performance stats (avg): dataV62:240ms 898µs 869ns, dataV65:120ms 670µs 493ns, dataV38_technology:544µs 863ns, dataV38_energy_transportation:531µs 247ns, dataV38_economy_monetary:395µs 746ns
+O-2008 loaded 8m 46s 988ms
+FX Performance stats (avg): dataV62:286ms 190µs 37ns, dataV65:113ms 201µs 669ns, dataV38_technology:1ms 828µs 875ns, dataV14:759µs 328ns, dataV38_finance:662µs 37ns
+Q-2022 loaded 9m 16s 608ms
+M-2012 loaded 19m 25s 921ms
+O-2009 loaded 7m 45s 863ms
+B-2018 loaded 33m 38s 522ms
+N-2023 loaded 31m 49s 109ms
+Q-2014 loaded 2m 16s 293ms
+C-2009 loaded 32m 5s 764ms
+FX Performance stats (avg): dataV62:223ms 187µs 931ns, dataV65:85ms 223µs 939ns, dataV38_energy_transportation:3ms 588µs 700ns, dataV38_economy_macro:3ms 341µs 697ns, dataV38_financial_markets:2ms 875µs 496ns
+L-2018 loaded 18m 21s 766ms
+P-2022 loaded 36m 59s 778ms
+A-2007 loaded 28m 22s 851ms
+FX Performance stats (avg): dataV62:254ms 47µs 895ns, dataV65:92ms 214µs 291ns, dataV42:1ms 22µs 916ns, dataV38_technology:315µs 336ns, dataV38_financial_markets:265µs 812ns
+Q-2024 loaded 6m 2s 309ms
+Q-2016 loaded 2m 48s 603ms
+N-2007 loaded 9m 17s 35ms
+Q-2013 loaded 1m 20s 692ms
+G-2022 loaded 55m 28s 810ms
+O-2018 loaded 12m 4s 287ms
+FX Performance stats (avg): dataV62:294ms 523µs 246ns, dataV65:101ms 636µs 756ns, dataV42:944µs 522ns, dataV38_technology:291µs 214ns, dataV38_financial_markets:245µs 724ns
+Q-2019 loaded 3m 12s 142ms
+L-2016 loaded 12m 33s 358ms
+M-2013 loaded 16m 44s 496ms
+Q-2020 loaded 2m 27s 670ms
+O-2010 loaded 5m 43s 362ms
+Q-2018 loaded 2m 29s 17ms
+FX Performance stats (avg): dataV62:232ms 984µs 63ns, dataV65:93ms 322µs 71ns, dataV38_energy_transportation:3ms 455µs 856ns, dataV38_economy_macro:3ms 218µs 339ns, dataV38_financial_markets:2ms 769µs 399ns
+FX Performance stats (avg): dataV62:296ms 14µs 977ns, dataV65:126ms 660µs 725ns, dataV38_technology:1ms 260µs 827ns, dataV38_financial_markets:706µs 55ns, dataV38_economy_macro:419µs 964ns
+Q-2015 loaded 2m 8s 925ms
+Q-2010 loaded 1m 16s 491ms
+Q-2012 loaded 1m 57s 673ms
+G-2009 loaded 15m 20s 855ms
+G loaded 7h 38m 15s 68ms
+Q-2025 loaded 2m 56s 583ms
+O-2017 loaded 10m 26s 487ms
+P-2021 loaded 26m 5s 977ms
+L-2020 loaded 15m 3s 474ms
+N-2021 loaded 20m 25s 822ms
+FX Performance stats (avg): dataV62:292ms 566µs 755ns, dataV65:102ms 953µs 672ns, dataV42:877µs 240ns, dataV38_technology:270µs 892ns, dataV38_financial_markets:228µs 934ns
+Q-2021 loaded 4m 2s 440ms
+Q-2017 loaded 2m 6s 518ms
+O-2013 loaded 6m 24s 135ms
+Q-2011 loaded 1m 12s 467ms
+FX Performance stats (avg): dataV62:294ms 984µs 860ns, dataV65:118ms 552µs 113ns, dataV38_technology:1ms 712µs 276ns, dataV14:731µs 392ns, dataV38_finance:619µs 876ns
+Q-2009 loaded 59s 854ms
+Q-2007 loaded 1m 8s 539ms
+M-2019 loaded 20m 36s 496ms
+B-2020 loaded 36m 48s 229ms
+FX Performance stats (avg): dataV62:250ms 160µs 886ns, dataV65:133ms 863µs 697ns, dataV38_technology:533µs 761ns, dataV38_energy_transportation:520µs 608ns, dataV38_economy_monetary:387µs 687ns
+A-2016 loaded 34m 52s 232ms
+O-2007 loaded 6m 28s 693ms
+Q-2023 loaded 4m 37s 199ms
+Q-2008 loaded 56s 594ms
+Q loaded 53m 17s 259ms
+FX Performance stats (avg): dataV62:293ms 432µs 154ns, dataV65:121ms 805µs 182ns, dataV38_technology:1ms 676µs 618ns, dataV14:717µs 278ns, dataV38_finance:606µs 975ns
+FX Performance stats (avg): dataV62:257ms 283µs 533ns, dataV65:105ms 536µs 687ns, dataV38_economy_fiscal:737µs 693ns, dataV38_economy_macro:570µs 376ns, dataV76:549µs 849ns
+N-2018 loaded 13m 46s 485ms
+R-2024 loaded 17m 23s 855ms
+FX Performance stats (avg): dataV62:230ms 725µs 747ns, dataV65:124ms 644µs 671ns, dataV14:1ms 551µs 31ns, dataV38_finance:591µs 752ns, dataV38_economy_monetary:339µs 411ns
+O-2011 loaded 5m 8s 99ms
+L-2022 loaded 17m 50s 940ms
+FX Performance stats (avg): dataV62:286ms 570µs 602ns, dataV65:102ms 799µs 461ns, dataV38_technology:1ms 209µs 127ns, dataV42:820µs 380ns, dataV38_financial_markets:580µs 511ns
+C-2020 loaded 46m 52s 212ms
+FX Performance stats (avg): dataV62:232ms 28µs 680ns, dataV65:95ms 913µs 764ns, dataV38_technology:1ms 178µs 27ns, dataV38_economy_fiscal:915µs 726ns, dataV38_economy_macro:689µs 62ns
+R-2014 loaded 5m 18s 366ms
+O-2012 loaded 3m 43s 116ms
+M-2017 loaded 13m 39s 999ms
+FX Performance stats (avg): dataV62:252ms 655µs 958ns, dataV65:132ms 455µs 931ns, dataV38_technology:523µs 100ns, dataV38_energy_transportation:510µs 210ns, dataV38_economy_monetary:379µs 948ns
+B-2010 loaded 14m 51s 429ms
+FX Performance stats (avg): dataV62:208ms 678µs 111ns, dataV65:111ms 497µs 935ns, dataV14:1ms 391µs 315ns, dataV38_finance:575µs 585ns, dataV38_economy_monetary:358µs 775ns
+R-2007 loaded 3m 40s 420ms
+L-2012 loaded 5m 1s 828ms
+N-2017 loaded 9m 50s 295ms
+P-2024 loaded 26m 24s 104ms
+L-2007 loaded 4m 42s 561ms
+FX Performance stats (avg): dataV62:254ms 891µs 339ns, dataV65:133ms 361µs 221ns, dataV38_technology:503µs 8ns, dataV38_energy_transportation:490µs 613ns, dataV38_economy_monetary:365µs 362ns
+O-2025 loaded 8m 22s 620ms
+FX Performance stats (avg): dataV62:261ms 463µs 634ns, dataV65:109ms 940µs 234ns, dataV38_economy_fiscal:710µs 436ns, dataV38_economy_macro:549µs 317ns, dataV76:529µs 798ns
+FX Performance stats (avg): dataV62:237ms 153µs 120ns, dataV65:93ms 21µs 144ns, dataV38_energy_transportation:3ms 332µs 458ns, dataV38_economy_macro:3ms 103µs 422ns, dataV38_financial_markets:2ms 670µs 764ns
+A-2008 loaded 20m 8s 365ms
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+L-2010 loaded 6m 29s 880ms
+R-2020 loaded 11m 28s 509ms
+O-2015 loaded 6m 33s 603ms
+FX Performance stats (avg): dataV62:252ms 409µs 787ns, dataV65:132ms 478µs 628ns, dataV38_technology:493µs 529ns, dataV38_energy_transportation:481µs 368ns, dataV38_economy_monetary:358µs 481ns
+FX Performance stats (avg): dataV62:197ms 696µs 765ns, dataV65:105ms 630µs 230ns, dataV38_technology:1ms 435µs 157ns, dataV14:1ms 343µs 723ns, dataV38_financial_markets:895µs 745ns
+L-2008 loaded 7m 51s 467ms
+N-2025 loaded 18m 26s 70ms
+O-2014 loaded 8m 29s 309ms
+FX Performance stats (avg): dataV62:293ms 202µs 510ns, dataV65:119ms 696µs 487ns, dataV38_technology:1ms 642µs 414ns, dataV14:752µs 102ns, dataV38_finance:594µs 603ns
+FX Performance stats (avg): dataV62:256ms 639µs 287ns, dataV65:111ms 320µs 472ns, dataV38_economy_fiscal:69ms 108µs 851ns, dataV14:582µs 492ns, dataV38_financial_markets:339µs 712ns
+R-2019 loaded 12m 41s 330ms
+FX Performance stats (avg): dataV62:257ms 436µs 760ns, dataV65:133ms 966µs 79ns, dataV38_technology:484µs 439ns, dataV38_energy_transportation:472µs 466ns, dataV38_economy_monetary:351µs 858ns
+S-2023 loaded 35m 10s 15ms
+B-2016 loaded 26m 7s 117ms
+P-2025 loaded 22m 32s 382ms
+FX Performance stats (avg): dataV62:256ms 939µs 955ns, dataV65:131ms 810µs 598ns, dataV38_technology:451µs 77ns, dataV38_energy_transportation:439µs 928ns, dataV38_economy_monetary:327µs 671ns
+N-2015 loaded 10m 43s 553ms
+A-2009 loaded 23m 41s 346ms
+O-2020 loaded 10m 25s 689ms
+FX Performance stats (avg): dataV62:241ms 331µs 255ns, dataV65:104ms 248µs 260ns, dataV38_energy_transportation:3ms 226µs 867ns, dataV38_economy_macro:2ms 997µs 600ns, dataV38_financial_markets:2ms 579µs 238ns
+M-2023 loaded 37m 17s 14ms
+R-2025 loaded 10m 50s 197ms
+L-2021 loaded 17m 22s 150ms
+FX Performance stats (avg): dataV62:227ms 294µs 107ns, dataV65:93ms 956µs 558ns, dataV38_technology:1ms 154µs 16ns, dataV38_economy_fiscal:897µs 70ns, dataV38_economy_macro:675µs 31ns
+N-2008 loaded 8m 8s 90ms
+P-2016 loaded 12m 40s 488ms
+FX Performance stats (avg): dataV62:210ms 542µs 591ns, dataV65:107ms 368µs 204ns, dataV38_finance:1ms 429µs 172ns, dataV38_technology:1ms 392µs 210ns, dataV38_financial_markets:1ms 313µs 754ns
+B-2007 loaded 16m 226ms
+B loaded 8h 48m 4s 762ms
+FX Performance stats (avg): dataV62:290ms 27µs 908ns, dataV65:123ms 387µs 625ns, dataV38_technology:1ms 182µs 125ns, dataV38_financial_markets:662µs 132ns, dataV38_economy_macro:393µs 815ns
+R-2012 loaded 7m 31s 765ms
+O-2021 loaded 12m 46s 331ms
+L-2009 loaded 7m 13s 449ms
+FX Performance stats (avg): dataV62:200ms 529µs 579ns, dataV65:102ms 256µs 8ns, dataV38_finance:1ms 361µs 194ns, dataV38_technology:1ms 326µs 39ns, dataV38_financial_markets:1ms 251µs 390ns
+FX Performance stats (avg): dataV62:252ms 139µs 241ns, dataV65:106ms 27µs 236ns, dataV38_financial_markets:1ms 91µs 238ns, dataV38_economy_fiscal:704µs 544ns, dataV38_economy_macro:545µs 809ns
+C-2021 loaded 52m 20s 144ms
+M-2011 loaded 14m 57s 557ms
+S-2020 loaded 25m 47s 727ms
+P-2007 loaded 13m 13s 415ms
+FX Performance stats (avg): dataV62:294ms 252µs 759ns, dataV65:124ms 50µs 949ns, dataV38_technology:1ms 50µs 946ns, dataV38_financial_markets:588µs 981ns, dataV38_economy_macro:350µs 233ns
+FX Performance stats (avg): dataV62:293ms 161µs 301ns, dataV65:116ms 293µs 137ns, dataV38_technology:1ms 547µs 699ns, dataV14:727µs 998ns, dataV38_finance:560µs 433ns
+R-2016 loaded 11m 24s 213ms
+L-2015 loaded 13m 45s 361ms
+N-2020 loaded 20m 49s 709ms
+FX Performance stats (avg): dataV62:244ms 976µs 481ns, dataV65:106ms 307µs 248ns, dataV38_economy_fiscal:65ms 967µs 619ns, dataV14:558µs 500ns, dataV38_financial_markets:324µs 615ns
+R-2010 loaded 8m 30s 373ms
+O-2023 loaded 21m 49s 436ms
+FX Performance stats (avg): dataV62:235ms 144µs 779ns, dataV65:99ms 644µs 417ns, dataV38_technology:1ms 108µs 820ns, dataV38_economy_fiscal:861µs 981ns, dataV14:749µs 978ns
+FX Performance stats (avg): dataV62:293ms 876µs 789ns, dataV65:124ms 867µs 522ns, dataV38_technology:1ms 113µs 304ns, dataV38_financial_markets:595µs 335ns, dataV38_economy_macro:369µs 530ns
+M-2010 loaded 16m 39s 139ms
+R-2013 loaded 8m 27s 362ms
+L-2019 loaded 16m 33s 897ms
+FX Performance stats (avg): dataV62:275ms 925µs 733ns, dataV65:116ms 413µs 629ns, dataV38_financial_markets:735µs 632ns, dataV38_economy_fiscal:700µs 709ns, dataV38_energy_transportation:567µs 569ns
+S-2016 loaded 23m 46s 954ms
+N-2016 loaded 15m 30s 62ms
+A-2017 loaded 44m 25s 392ms
+T-2022 loaded 35m 17s 704ms
+FX Performance stats (avg): dataV62:290ms 946µs 686ns, dataV65:117ms 524µs 561ns, dataV38_technology:1ms 110µs 85ns, dataV38_energy_transportation:882µs 482ns, dataV38_financial_markets:598µs 408ns
+FX Performance stats (avg): dataV62:247ms 810µs 662ns, dataV65:103ms 854µs 563ns, dataV38_energy_transportation:3ms 119µs 329ns, dataV38_economy_macro:2ms 897µs 705ns, dataV38_financial_markets:2ms 493µs 497ns
+O-2024 loaded 19m 18s 353ms
+P-2023 loaded 40m 42s 207ms
+T-2013 loaded 15m 33s 608ms
+O-2019 loaded 10m 49s 844ms
+O loaded 3h 7m 47s 544ms
+FX Performance stats (avg): dataV62:251ms 790µs 603ns, dataV65:101ms 668µs 913ns, dataV38_technology:1ms 87µs 524ns, dataV14:854µs 73ns, dataV38_economy_fiscal:845µs 533ns
+R-2022 loaded 25m 32s 754ms
+FX Performance stats (avg): dataV62:259ms 254µs 955ns, dataV65:105ms 782µs, dataV38_energy_transportation:3ms 18µs 727ns, dataV38_economy_macro:2ms 804µs 395ns, dataV38_financial_markets:2ms 413µs 525ns
+C-2019 loaded 50m 59s 609ms
+M-2021 loaded 33m 380ms
+S-2018 loaded 25m 57s 957ms
+FX Performance stats (avg): dataV62:267ms 74µs 77ns, dataV65:111ms 447µs 740ns, dataV38_economy_fiscal:1ms 160µs 776ns, dataV38_financial_markets:876µs 626ns, dataV38_energy_transportation:597µs 658ns
+L-2024 loaded 27m 14s 501ms
+L loaded 4h 1m 21s 208ms
+FX Performance stats (avg): dataV62:287ms 631µs 127ns, dataV65:114ms 101µs 114ns, dataV38_technology:1ms 518µs 512ns, dataV14:735µs 486ns, dataV38_finance:549µs 892ns
+V-2009 loaded 2m 50s 70ms
+U-2021 loaded 10m 34s 632ms
+N-2024 loaded 32m 19s 765ms
+U-2012 loaded 4m 38s 997ms
+T-2019 loaded 19m 1s 21ms
+P-2020 loaded 20m 32s 879ms
+FX Performance stats (avg): dataV62:256ms 905µs 686ns, dataV65:130ms 946µs 704ns, dataV38_technology:436µs 67ns, dataV38_energy_transportation:425µs 798ns, dataV38_economy_monetary:316µs 773ns
+V-2018 loaded 9m 5s 943ms
+FX Performance stats (avg): dataV62:251ms 162µs 459ns, dataV65:102ms 476µs 570ns, dataV38_energy_transportation:2ms 924µs 412ns, dataV38_economy_macro:2ms 716µs 780ns, dataV38_financial_markets:2ms 338µs 395ns
+R-2021 loaded 18m 45s 786ms
+FX Performance stats (avg): dataV62:282ms 304µs 719ns, dataV65:111ms 988µs 165ns, dataV38_technology:1ms 490µs 405ns, dataV14:722µs 543ns, dataV38_finance:539µs 733ns
+FX Performance stats (avg): dataV62:254ms 133µs 14ns, dataV65:102ms 787µs 737ns, dataV38_technology:1ms 77µs 668ns, dataV38_economy_fiscal:843µs 761ns, dataV14:838µs 870ns
+U-2016 loaded 7m 38s 949ms
+M-2016 loaded 18m 55s 149ms
+V-2015 loaded 7m 4s 918ms
+N-2019 loaded 16m 24s 676ms
+R-2011 loaded 8m 10s 67ms
+FX Performance stats (avg): dataV62:258ms 509µs 41ns, dataV65:105ms 451µs 846ns, dataV38_financial_markets:1ms 53µs 719ns, dataV38_economy_fiscal:680µs 304ns, dataV38_economy_macro:527µs 44ns
+P-2009 loaded 12m 1s 128ms
+S-2025 loaded 25m 43s 812ms
+U-2025 loaded 8m 9s 283ms
+T-2015 loaded 15m 17s 911ms
+FX Performance stats (avg): dataV62:264ms 180µs 225ns, dataV65:111ms 34µs 524ns, dataV38_economy_fiscal:1ms 123µs 383ns, dataV38_financial_markets:848µs 536ns, dataV38_energy_transportation:582µs 150ns
+FX Performance stats (avg): dataV62:249ms 940µs 642ns, dataV65:102ms 769µs 223ns, dataV38_energy_transportation:2ms 835µs 833ns, dataV38_economy_macro:2ms 634µs 501ns, dataV38_financial_markets:2ms 269µs 296ns
+M-2007 loaded 12m 34s 33ms
+FX Performance stats (avg): dataV62:280ms 700µs 458ns, dataV65:111ms 91µs 197ns, dataV38_technology:1ms 463µs 319ns, dataV14:714µs 506ns, dataV38_finance:529µs 931ns
+N-2009 loaded 9m 27s 22ms
+A-2020 loaded 57m 39s 868ms
+U-2017 loaded 8m 32s 744ms
+R-2018 loaded 12m 12s 778ms
+FX Performance stats (avg): dataV62:255ms 925µs 619ns, dataV65:107ms 565µs 544ns, dataV38_economy_fiscal:1ms 88µs 470ns, dataV38_financial_markets:822µs 203ns, dataV38_energy_transportation:564µs 123ns
+V-2022 loaded 17m 41s 675ms
+FX Performance stats (avg): dataV62:291ms 687µs 617ns, dataV65:102ms 929µs 749ns, dataV38_technology:1ms 133µs 752ns, dataV42:769µs 919ns, dataV38_financial_markets:544µs 627ns
+U-2010 loaded 6m 47s 266ms
+FX Performance stats (avg): dataV62:257ms 617µs 467ns, dataV65:108ms 261µs 633ns, dataV38_economy_fiscal:1ms 55µs 535ns, dataV38_financial_markets:797µs 406ns, dataV38_energy_transportation:547µs 76ns
+V-2008 loaded 3m 49s 232ms
+C-2017 loaded 43m 45s 151ms
+S-2010 loaded 16m 33s 853ms
+R-2009 loaded 7m 11s 623ms
+FX Performance stats (avg): dataV62:210ms 408µs 102ns, dataV65:102ms 813µs 933ns, dataV14:1ms 759µs 346ns, dataV38_finance:1ms 299µs 458ns, dataV38_technology:1ms 266µs 198ns
+P-2018 loaded 19m 4s 541ms
+T-2016 loaded 17m 33s 596ms
+N-2011 loaded 15m 1s 456ms
+U-2008 loaded 8m 5s 523ms
+FX Performance stats (avg): dataV62:262ms 703µs 184ns, dataV65:133ms 932µs 423ns, dataV14:1ms 629µs 90ns, dataV38_finance:1ms 191µs 357ns, dataV38_technology:1ms 160µs 878ns
+FX Performance stats (avg): dataV62:287ms 970µs 495ns, dataV65:101ms 601µs 50ns, dataV38_technology:1ms 7µs 963ns, dataV42:685µs 124ns, dataV87:622µs 386ns
+FX Performance stats (avg): dataV62:281ms 678µs 555ns, dataV65:111ms 88µs 866ns, dataV38_technology:1ms 437µs 260ns, dataV14:709µs 261ns, dataV38_finance:520µs 481ns
+FX Performance stats (avg): dataV62:294ms 666µs 608ns, dataV65:116ms 814µs 988ns, dataV38_financial_markets:1ms 844µs 492ns, dataV38_technology:1ms 639µs 657ns, dataV38_energy_transportation:877µs 159ns
+FX Performance stats (avg): dataV62:262ms 897µs 589ns, dataV65:109ms 538µs 911ns, dataV38_energy_transportation:2ms 674µs 458ns, dataV38_economy_macro:2ms 484µs 44ns, dataV38_financial_markets:2ms 140µs 189ns
+V-2019 loaded 15m 33s 457ms
+FX Performance stats (avg): dataV62:249ms 894µs 866ns, dataV65:101ms 937µs 591ns, dataV38_financial_markets:1ms 18µs 773ns, dataV38_economy_fiscal:657µs 737ns, dataV38_economy_macro:509µs 579ns
+U-2011 loaded 8m 50s 988ms
+FX Performance stats (avg): dataV62:234ms 397µs 126ns, dataV65:101ms 688µs 161ns, dataV38_economy_fiscal:63ms 99µs 538ns, dataV14:588µs 659ns, dataV38_financial_markets:310µs 820ns
+FX Performance stats (avg): dataV62:266ms 511µs 903ns, dataV65:134ms 47µs 686ns, dataV14:1ms 567µs 686ns, dataV38_finance:1ms 143µs 851ns, dataV38_financial_markets:1ms 122µs 810ns
+T-2007 loaded 16m 50s 315ms
+FX Performance stats (avg): dataV62:284ms 220µs 382ns, dataV65:117ms 287µs 52ns, dataV38_financial_markets:1ms 691µs 479ns, dataV38_technology:1ms 503µs 279ns, dataV38_energy_transportation:804µs 489ns
+R-2017 loaded 19m 54s 103ms
+FX Performance stats (avg): dataV62:290ms 650µs 96ns, dataV65:112ms 883µs 662ns, dataV38_technology:1ms 412µs 64ns, dataV14:711µs 323ns, dataV38_finance:511µs 829ns
+N-2012 loaded 15m 30s 40ms
+S-2007 loaded 20m 55s 972ms
+V-2012 loaded 5m 51s 941ms
+FX Performance stats (avg): dataV62:295ms 277µs 403ns, dataV65:113ms 196µs 212ns, dataV38_technology:1ms 387µs 732ns, dataV14:703µs 553ns, dataV38_finance:503µs 45ns
+U-2018 loaded 10m 9s 83ms
+P-2014 loaded 25m 8s 247ms
+V-2011 loaded 6m 13s 683ms
+FX Performance stats (avg): dataV62:260ms 434µs 742ns, dataV65:109ms 898µs 802ns, dataV38_economy_fiscal:1ms 24µs 538ns, dataV38_financial_markets:774µs 196ns, dataV38_energy_transportation:531µs 31ns
+FX Performance stats (avg): dataV62:325ms 905µs 816ns, dataV65:149ms 288µs 293ns, dataV14:1ms 479µs 698ns, dataV38_finance:1ms 59µs 239ns, dataV38_financial_markets:1ms 43µs 634ns
+R-2008 loaded 8m 31s 480ms
+FX Performance stats (avg): dataV62:272ms 887µs 148ns, dataV65:112ms 597µs 80ns, dataV38_financial_markets:1ms 624µs 323ns, dataV38_technology:1ms 443µs 215ns, dataV38_energy_transportation:772µs 391ns
+FX Performance stats (avg): dataV62:296ms 768µs 792ns, dataV65:115ms 930µs 293ns, dataV38_technology:1ms 364µs 223ns, dataV14:692µs 456ns, dataV38_financial_markets:495µs 660ns
+FX Performance stats (avg): dataV62:275ms 607µs 167ns, dataV65:114ms 551µs 353ns, dataV38_energy_transportation:2ms 667µs 642ns, dataV38_economy_macro:2ms 458µs 529ns, dataV38_technology:2ms 249µs 443ns
+U-2007 loaded 5m 54s 809ms
+FX Performance stats (avg): dataV62:251ms 891µs 168ns, dataV65:109ms 520µs 861ns, dataV38_economy_fiscal:60ms 472µs 869ns, dataV14:589µs 466ns, dataV38_financial_markets:300µs 906ns
+N-2013 loaded 15m 22s 240ms
+FX Performance stats (avg): dataV62:282ms 415µs 974ns, dataV65:110ms 329µs 59ns, dataV38_technology:1ms 298µs 311ns, dataV14:667µs 216ns, dataV38_financial_markets:472µs 842ns
+FX Performance stats (avg): dataV62:344ms 120µs 110ns, dataV65:163ms 404µs 687ns, dataV14:1ms 448µs 990ns, dataV38_finance:1ms 21µs 464ns, dataV38_financial_markets:1ms 6µs 611ns
+V-2020 loaded 12m 44s 598ms
+FX Performance stats (avg): dataV62:267ms 501µs 432ns, dataV65:107ms 809µs 751ns, dataV38_financial_markets:1ms 73µs 174ns, dataV38_economy_fiscal:713µs 345ns, dataV38_economy_macro:524µs 893ns
+S-2013 loaded 22m 10s 685ms
+V-2010 loaded 3m 41s 249ms
+U-2020 loaded 11m 58s 554ms
+T-2020 loaded 25m 52s 611ms
+P-2013 loaded 17m 50s 533ms
+C-2012 loaded 45m 4s 403ms
+M-2024 loaded 58m 40s 564ms
+FX Performance stats (avg): dataV62:347ms 505µs 931ns, dataV65:163ms 818µs 979ns, dataV14:1ms 401µs 927ns, dataV38_finance:986µs 295ns, dataV38_financial_markets:972µs 145ns
+V-2013 loaded 5m 21s 268ms
+N-2014 loaded 13m 37s 514ms
+R-2023 loaded 24m 1s 803ms
+T-2010 loaded 11m 971ms
+P-2010 loaded 11m 31s 444ms
+FX Performance stats (avg): dataV62:344ms 548µs 702ns, dataV65:160ms 369µs 552ns, dataV14:1ms 321µs 106ns, dataV38_finance:922µs 810ns, dataV38_financial_markets:909µs 856ns
+FX Performance stats (avg): dataV62:259ms 151µs 856ns, dataV65:104ms 490µs 695ns, dataV38_financial_markets:1ms 205µs 9ns, dataV38_economy_fiscal:857µs 161ns, dataV38_technology:774µs 326ns
+S-2008 loaded 13m 41s 528ms
+V-2025 loaded 8m 12s 635ms
+U-2022 loaded 13m 4s 658ms
+FX Performance stats (avg): dataV62:276ms 548µs 926ns, dataV65:114ms 211µs 804ns, dataV38_energy_transportation:2ms 614µs 69ns, dataV38_economy_macro:2ms 411µs 69ns, dataV38_technology:2ms 214µs 620ns
+FX Performance stats (avg): dataV62:322ms 5µs 848ns, dataV65:158ms 491µs 345ns, dataV14:1ms 185µs 235ns, dataV38_finance:817µs 609ns, dataV38_financial_markets:806µs 725ns
+R-2015 loaded 9m 3s 998ms
+R loaded 3h 50m 41s 612ms
+FX Performance stats (avg): dataV62:249ms 844µs 799ns, dataV65:101ms 359µs 62ns, dataV38_technology:1ms 38µs 539ns, dataV38_economy_fiscal:813µs 171ns, dataV14:810µs 417ns
+M-2015 loaded 16m 24s 361ms
+FX Performance stats (avg): dataV62:251ms 298µs 900ns, dataV65:101ms 324µs 363ns, dataV38_financial_markets:1ms 168µs 656ns, dataV38_economy_fiscal:831µs 238ns, dataV38_technology:750µs 909ns
+P-2011 loaded 12m 41s 48ms
+W-2017 loaded 9m 62ms
+U-2024 loaded 15m 55s 790ms
+S-2012 loaded 16m 54s 428ms
+FX Performance stats (avg): dataV62:274ms 758µs 801ns, dataV65:114ms 728µs 899ns, dataV38_financial_markets:1ms 562µs 68ns, dataV38_technology:1ms 387µs 769ns, dataV38_energy_transportation:743µs
+FX Performance stats (avg): dataV62:277ms 90µs 144ns, dataV65:113ms 332µs 869ns, dataV38_economy_fiscal:995µs 313ns, dataV38_financial_markets:752µs 195ns, dataV38_energy_transportation:515µs 903ns
+V-2024 loaded 18m 796ms
+FX Performance stats (avg): dataV62:277ms 718µs 106ns, dataV38_economy_macro:248ms 883µs 668ns, dataV65:110ms 777µs 761ns, dataV38_energy_transportation:2ms 583µs 350ns, dataV38_financial_markets:2ms 191µs 190ns
+FX Performance stats (avg): dataV62:243ms 909µs 492ns, dataV65:98ms 344µs 953ns, dataV38_financial_markets:1ms 134µs 655ns, dataV38_economy_fiscal:806µs 845ns, dataV38_technology:728µs 876ns
+M-2009 loaded 12m 54s 493ms
+FX Performance stats (avg): dataV62:294ms 18µs 291ns, dataV65:104ms 116µs 423ns, dataV38_technology:955µs 144ns, dataV42:649µs 223ns, dataV87:590µs 280ns
+N-2022 loaded 28m 7s 365ms
+N loaded 5h 12m 39s 104ms
+W-2015 loaded 7m 22s 995ms
+U-2013 loaded 5m 36s 295ms
+P-2008 loaded 11m 13s 191ms
+X-2025 loaded 2m 15s 724ms
+X-2012 loaded 56s 628ms
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+A-2023 loaded 1h 31m 37s 243ms
+X-2016 loaded 1m 5s 100ms
+U-2009 loaded 3m 40s 73ms
+T-2024 loaded 27m 12s 813ms
+FX Performance stats (avg): dataV62:277ms 607µs 826ns, dataV65:115ms 54µs 91ns, dataV38_economy_fiscal:916µs 876ns, dataV38_financial_markets:693µs 129ns, dataV38_energy_transportation:475µs 309ns
+FX Performance stats (avg): dataV62:270ms 57µs 306ns, dataV38_economy_macro:231ms 184µs 879ns, dataV65:110ms 41µs 168ns, dataV38_financial_markets:16ms 846µs 144ns, dataV38_energy_transportation:2ms 507µs 535ns
+X-2019 loaded 1m 20s 138ms
+FX Performance stats (avg): dataV62:252ms 700µs 982ns, dataV65:128ms 800µs 572ns, dataV38_technology:428µs 945ns, dataV38_energy_transportation:418µs 845ns, dataV38_economy_monetary:311µs 610ns
+W-2020 loaded 5m 39s 467ms
+X-2018 loaded 1m 3s 215ms
+X-2007 loaded 23s 628ms
+X-2008 loaded 25s 556ms
+X-2011 loaded 35s 581ms
+U-2015 loaded 3m 56s 656ms
+W-2012 loaded 3m 2s 801ms
+V-2023 loaded 12m 20s 91ms
+X-2024 loaded 1m 58s 478ms
+X-2010 loaded 21s 645ms
+P-2012 loaded 9m 7s 380ms
+X-2014 loaded 37s 432ms
+S-2017 loaded 15m 26s 743ms
+X-2015 loaded 31s 935ms
+X-2017 loaded 45s 474ms
+X-2009 loaded 22s 326ms
+FX Performance stats (avg): dataV62:260ms 277µs 536ns, dataV65:116ms 900µs 520ns, dataV38_economy_fiscal:58ms 54µs 25ns, dataV14:568µs 378ns, dataV38_financial_markets:289µs 114ns
+X-2020 loaded 1m 51s 839ms
+FX Performance stats (avg): dataV62:285ms 295µs 818ns, dataV65:115ms 266µs 773ns, dataV38_technology:1ms 277µs 713ns, dataV14:658µs 9ns, dataV38_financial_markets:465µs 541ns
+FX Performance stats (avg): dataV62:264ms 372µs 216ns, dataV38_economy_macro:220ms 733µs 495ns, dataV65:107ms 286µs 11ns, dataV38_financial_markets:16ms 143µs 974ns, dataV38_energy_transportation:2ms 432µs 66ns
+FX Performance stats (avg): dataV62:268ms 55µs 272ns, dataV65:110ms 557µs 796ns, dataV38_financial_markets:1ms 450µs 767ns, dataV38_technology:1ms 288µs 753ns, dataV38_energy_transportation:690µs 38ns
+U-2023 loaded 7m 51s 840ms
+FX Performance stats (avg): dataV62:245ms 340µs 846ns, dataV65:104ms 439µs 341ns, dataV38_financial_markets:1ms 166µs 651ns, dataV38_technology:941µs 713ns, dataV38_economy_fiscal:780µs 233ns
+FX Performance stats (avg): dataV62:245ms 385µs 37ns, dataV65:99ms 549µs 628ns, dataV38_technology:1ms 20µs 23ns, dataV38_economy_fiscal:798µs 678ns, dataV14:796µs 386ns
+X-2023 loaded 2m 41s 793ms
+V-2021 loaded 8m 3s 146ms
+X-2013 loaded 39s 832ms
+FX Performance stats (avg): dataV62:270ms 489µs 929ns, dataV65:112ms 104µs 104ns, dataV38_economy_fiscal:893µs 460ns, dataV38_financial_markets:675µs 612ns, dataV38_energy_transportation:463µs 215ns
+U-2014 loaded 5m 3s 883ms
+X-2022 loaded 4m 15s 529ms
+W-2023 loaded 13m 5s 305ms
+FX Performance stats (avg): dataV62:292ms 447µs 454ns, dataV65:104ms 484µs 872ns, dataV38_technology:1ms 285µs 750ns, dataV38_economy_fiscal:959µs 856ns, dataV38_energy_transportation:647µs 710ns
+C-2024 loaded 56m 16s 966ms
+FX Performance stats (avg): dataV62:276ms 997µs 939ns, dataV65:113ms 283µs 597ns, dataV38_economy_fiscal:871µs 163ns, dataV38_financial_markets:658µs 810ns, dataV38_energy_transportation:451µs 672ns
+P-2019 loaded 12m 25s 302ms
+V-2017 loaded 6m 10s 479ms
+FX Performance stats (avg): dataV62:258ms 815µs 794ns, dataV65:106ms 748µs 865ns, dataV38_financial_markets:1ms 400µs 867ns, dataV38_technology:1ms 244µs 365ns, dataV38_energy_transportation:666µs 300ns
+X-2021 loaded 4m 35s 930ms
+X loaded 26m 48s 171ms
+T-2023 loaded 22m 32s 616ms
+W-2009 loaded 5m 11s 493ms
+M-2022 loaded 31m 33s 456ms
+U-2019 loaded 8m 59s 884ms
+U loaded 2h 35m 30s 729ms
+FX Performance stats (avg): dataV62:243ms 553µs 99ns, dataV65:105ms 86µs 88ns, dataV38_financial_markets:1ms 168µs 540ns, dataV38_technology:929µs 166ns, dataV38_economy_fiscal:811µs 340ns
+FX Performance stats (avg): dataV62:312ms 808µs 348ns, dataV65:156ms 642µs 639ns, dataV14:1ms 276µs 775ns, dataV38_finance:753µs 247ns, dataV38_financial_markets:743µs 646ns
+Z-2009 loaded 48s 730ms
+Y-2021 loaded 6m 32s 218ms
+FX Performance stats (avg): dataV62:281ms 61µs 710ns, dataV65:113ms 465µs 844ns, dataV38_technology:1ms 263µs 963ns, dataV14:648µs 230ns, dataV38_financial_markets:464µs 387ns
+Z-2007 loaded 47s 75ms
+Y-2011 loaded 49s 117ms
+V-2016 loaded 10m 23s 402ms
+FX Performance stats (avg): dataV62:311ms 594µs 388ns, dataV65:106ms 858µs 424ns, dataV38_technology:1ms 169µs 96ns, dataV38_economy_fiscal:872µs 827ns, dataV38_energy_transportation:589µs 43ns
+Y-2008 loaded 1m 43s 641ms
+Z-2014 loaded 1m 52s 808ms
+FX Performance stats (avg): dataV62:252ms 638µs 72ns, dataV65:113ms 80µs 966ns, dataV38_economy_fiscal:55ms 821µs 240ns, dataV14:709µs 787ns, dataV38_financial_markets:278µs 137ns
+W-2016 loaded 9m 33s 667ms
+Z-2008 loaded 1m 19s 817ms
+Z-2012 loaded 34s 224ms
+V-2007 loaded 4m 26s 554ms
+Z-2010 loaded 1m 7s 885ms
+FX Performance stats (avg): dataV62:284ms 693µs 101ns, dataV65:113ms 89µs 869ns, dataV38_technology:1ms 244µs 528ns, dataV14:638µs 893ns, dataV38_financial_markets:457µs 344ns
+Y-2023 loaded 3m 19s 396ms
+Z-2016 loaded 1m 23s 992ms
+P-2015 loaded 17m 26s 540ms
+W-2007 loaded 4m 47s 244ms
+S-2021 loaded 31m 1s 264ms
+Y-2019 loaded 3m 37s 502ms
+Y-2016 loaded 1m 25s 275ms
+Z-2025 loaded 4m 948ms
+V-2014 loaded 5m 56s 199ms
+V loaded 2h 43m 32s 306ms
+T-2014 loaded 17m 38s 811ms
+Y-2013 loaded 2m 3s 606ms
+Z-2018 loaded 2m 3s 462ms
+W-2011 loaded 5m 15s 990ms
+Z-2015 loaded 1m 381ms
+Y-2025 loaded 2m 2s 589ms
+M-2014 loaded 19m 28s 186ms
+Z-2019 loaded 2m 39s 424ms
+Y-2017 loaded 2m 4s 755ms
+Z-2020 loaded 2m 31s 683ms
+FX Performance stats (avg): dataV62:263ms 488µs 39ns, dataV38_economy_macro:211ms 293µs 976ns, dataV65:108ms 72µs 152ns, dataV38_financial_markets:15ms 482µs 312ns, dataV38_energy_transportation:2ms 418µs 621ns
+Y-2022 loaded 2m 33s 860ms
+Y-2007 loaded 18s 642ms
+FX Performance stats (avg): dataV62:317ms 148µs 569ns, dataV65:157ms 384µs 380ns, dataV14:1ms 246µs 11ns, dataV38_finance:733µs 974ns, dataV38_financial_markets:724µs 990ns
+Y-2024 loaded 2m 5s 896ms
+Y-2010 loaded 37s 582ms
+W-2021 loaded 9m 665ms
+P-2017 loaded 15m 23s 183ms
+P loaded 6h 3m 4s 526ms
+T-2012 loaded 12m 17s 86ms
+Y-2015 loaded 1m 36s 692ms
+Z-2024 loaded 5m 6s 196ms
+S-2011 loaded 15m 31s 969ms
+Y-2018 loaded 1m 37s 493ms
+Y-2009 loaded 30s 398ms
+FX Performance stats (avg): dataV62:248ms 756µs 885ns, dataV65:126ms 723µs 516ns, dataV38_technology:433µs 603ns, dataV38_energy_transportation:424µs 592ns, dataV38_economy_monetary:321µs 621ns
+Z-2021 loaded 3m 23s 540ms
+Y-2020 loaded 2m 23s 927ms
+FX Performance stats (avg): dataV62:244ms 724µs 806ns, dataV65:99ms 473µs 779ns, dataV38_technology:1ms 39µs 968ns, dataV14:831µs 318ns, dataV38_economy_fiscal:795µs 275ns
+Y-2014 loaded 54s 933ms
+C-2015 loaded 40m 14s 340ms
+C loaded 12h 50m 32s 896ms
+FX Performance stats (avg): dataV62:243ms 319µs 441ns, dataV65:108ms 898µs 194ns, dataV38_economy_fiscal:53ms 776µs 896ns, dataV14:823µs 251ns, dataV38_financial_markets:300µs 672ns
+Y-2012 loaded 58s 34ms
+Y loaded 37m 16s 452ms
+Z-2022 loaded 3m 5s 142ms
+Z-2013 loaded 23s 118ms
+Z-2017 loaded 49s 994ms
+Z-2023 loaded 1m 52s 897ms
+M-2020 loaded 17m 46s 922ms
+M loaded 6h 55m 29s 238ms
+Z-2011 loaded 1m 4s 269ms
+Z loaded 35m 57s 254ms
+W-2024 loaded 12m 22s 24ms
+A-2022 loaded 1h 4m 54s 798ms
+A loaded 12h 56m 32s 152ms
+T-2018 loaded 11m 54s 516ms
+S-2014 loaded 11m 45s 568ms
+W-2022 loaded 3m 8s 609ms
+W-2008 loaded 1m 19s 927ms
+W-2013 loaded 1m 16s 119ms
+T-2021 loaded 5m 12s 702ms
+FX Performance stats (avg): dataV62:244ms 942µs 646ns, dataV65:99ms 452µs 163ns, dataV38_technology:1ms 30µs 404ns, dataV14:817µs 738ns, dataV38_economy_macro:812µs 418ns
+FX Performance stats (avg): dataV62:246ms 479µs 290ns, dataV65:127ms 294µs 988ns, dataV38_technology:413µs 648ns, dataV38_energy_transportation:405µs 32ns, dataV38_economy_monetary:306µs 816ns
+W-2019 loaded 2m 2s 17ms
+T-2008 loaded 2m 30s 364ms
+W-2010 loaded 59s 720ms
+W-2025 loaded 1m 20s 360ms
+S-2024 loaded 9m 48s 456ms
+W-2014 loaded 1m 7s 353ms
+T-2025 loaded 3m 4s 524ms
+FX Performance stats (avg): dataV62:315ms 241µs 471ns, dataV65:155ms 340µs 704ns, dataV14:1ms 219µs 587ns, dataV38_finance:715µs 663ns, dataV38_financial_markets:707µs 80ns
+W-2018 loaded 1m 2s 74ms
+W loaded 1h 36m 38s 299ms
+S-2009 loaded 1m 57s 344ms
+FX Performance stats (avg): dataV62:243ms 949µs 413ns, dataV65:125ms 921µs 837ns, dataV38_technology:407µs 391ns, dataV38_energy_transportation:398µs 906ns, dataV38_economy_monetary:302µs 178ns
+T-2017 loaded 2m 19s 132ms
+T-2009 loaded 2m 2s 678ms
+S-2015 loaded 3m 19s 560ms
+FX Performance stats (avg): dataV62:284ms 307µs 840ns, dataV65:140ms 67µs 128ns, dataV14:1ms 89µs 29ns, dataV38_finance:636µs 328ns, dataV38_financial_markets:629µs 65ns
+T-2011 loaded 1m 55s 867ms
+T loaded 4h 25m 9s 729ms
+S-2022 loaded 4m 50s 575ms
+S-2019 loaded 2m 31s 68ms
+S loaded 5h 22m 56s 83ms
+Checksum file is valid with      494 files.
+🔄 Rsync attempt 1 of 3: --include=* --exclude=checksum.sha256 . /Users/nigel/Training/trainData-binary_88/
+🔄 Rsync attempt 1 of 3: checksum.sha256 /Users/nigel/Training/trainData-binary_88/
+realpath: a8ad04caaa10ae24630f9f76769f3477de29373f8d42b5f43be47784d881a430.tgz: No such file or directory
+Symbolic link target is valid but points to a different file: 865a937de20688fc9f2530cbad267e7184a692f3b451c7adabded1b4e7df6e08.tgz not a8ad04caaa10ae24630f9f76769f3477de29373f8d42b5f43be47784d881a430.tgz
+Compressing training data to trainData-binary_88-next.tgz...
+Compression successful: trainData-binary_88-next.tgz
+Current compressed file: 865a937de20688fc9f2530cbad267e7184a692f3b451c7adabded1b4e7df6e08.tgz
+Deleting old previous file: trainData-binary_88-previous.tgz
+Moving current file to trainData-binary_88-previous.tgz
+Updated symbolic link: trainData-binary_88.tgz -> a8ad04caaa10ae24630f9f76769f3477de29373f8d42b5f43be47784d881a430.tgz
+Compression process completed successfully.
+New compressed file: a8ad04caaa10ae24630f9f76769f3477de29373f8d42b5f43be47784d881a430.tgz
+Previous compressed file: trainData-binary_88-previous.tgz
+Running trainDataIndustry.sh...
+Already up to date.
+From github.com:stSoftwareAU/GRQ-industryV2
+   e4009c9815..dfcc5f1884  main       -> origin/main
+HEAD is now at dfcc5f1884 GRQ-19 Improved Industry models (GRQ-19)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-shareprices2025Q3
+   c72e54e3d..162692419  Develop    -> origin/Develop
+Updating files:  13% (519/3892)Updating files:  14% (545/3892)Updating files:  15% (584/3892)Updating files:  16% (623/3892)Updating files:  17% (662/3892)Updating files:  18% (701/3892)Updating files:  19% (740/3892)Updating files:  20% (779/3892)Updating files:  21% (818/3892)Updating files:  22% (857/3892)Updating files:  23% (896/3892)Updating files:  23% (904/3892)Updating files:  24% (935/3892)Updating files:  25% (973/3892)Updating files:  26% (1012/3892)Updating files:  27% (1051/3892)Updating files:  28% (1090/3892)Updating files:  29% (1129/3892)Updating files:  30% (1168/3892)Updating files:  31% (1207/3892)Updating files:  32% (1246/3892)Updating files:  32% (1278/3892)Updating files:  33% (1285/3892)Updating files:  34% (1324/3892)Updating files:  35% (1363/3892)Updating files:  36% (1402/3892)Updating files:  37% (1441/3892)Updating files:  38% (1479/3892)Updating files:  39% (1518/3892)Updating files:  40% (1557/3892)Updating files:  41% (1596/3892)Updating files:  42% (1635/3892)Updating files:  43% (1674/3892)Updating files:  44% (1713/3892)Updating files:  45% (1752/3892)Updating files:  46% (1791/3892)Updating files:  47% (1830/3892)Updating files:  47% (1844/3892)Updating files:  48% (1869/3892)Updating files:  49% (1908/3892)Updating files:  50% (1946/3892)Updating files:  51% (1985/3892)Updating files:  52% (2024/3892)Updating files:  53% (2063/3892)Updating files:  54% (2102/3892)Updating files:  55% (2141/3892)Updating files:  56% (2180/3892)Updating files:  57% (2219/3892)Updating files:  58% (2258/3892)Updating files:  59% (2297/3892)Updating files:  60% (2336/3892)Updating files:  61% (2375/3892)Updating files:  62% (2414/3892)Updating files:  63% (2452/3892)Updating files:  63% (2463/3892)Updating files:  64% (2491/3892)Updating files:  65% (2530/3892)Updating files:  66% (2569/3892)Updating files:  67% (2608/3892)Updating files:  68% (2647/3892)Updating files:  69% (2686/3892)Updating files:  70% (2725/3892)Updating files:  71% (2764/3892)Updating files:  72% (2803/3892)Updating files:  73% (2842/3892)Updating files:  74% (2881/3892)Updating files:  75% (2919/3892)Updating files:  76% (2958/3892)Updating files:  77% (2997/3892)Updating files:  78% (3036/3892)Updating files:  78% (3057/3892)Updating files:  79% (3075/3892)Updating files:  80% (3114/3892)Updating files:  81% (3153/3892)Updating files:  82% (3192/3892)Updating files:  83% (3231/3892)Updating files:  84% (3270/3892)Updating files:  85% (3309/3892)Updating files:  86% (3348/3892)Updating files:  87% (3387/3892)Updating files:  88% (3425/3892)Updating files:  89% (3464/3892)Updating files:  90% (3503/3892)Updating files:  91% (3542/3892)Updating files:  92% (3581/3892)Updating files:  93% (3620/3892)Updating files:  94% (3659/3892)Updating files:  94% (3674/3892)Updating files:  95% (3698/3892)Updating files:  96% (3737/3892)Updating files:  97% (3776/3892)Updating files:  98% (3815/3892)Updating files:  99% (3854/3892)Updating files: 100% (3892/3892)Updating files: 100% (3892/3892), done.
+HEAD is now at 162692419 Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-companyreports
+   c6092c14f83..dfff6bbb27b  Develop    -> origin/Develop
+HEAD is now at dfff6bbb27b Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-FX
+   e87a8e20..06c3852d  Develop    -> origin/Develop
+HEAD is now at 06c3852d Refresh of history for 2025-11-06 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-location
+   64bafa508..283780d5b  Develop    -> origin/Develop
+HEAD is now at 283780d5b Mac-Ultra-M2 Improved location models (Mac-Ultra-M2)
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at dfcc5f1884 GRQ-19 Improved Industry models (GRQ-19)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-exchange
+   1ba4b47c..0fdc36c2  main       -> origin/main
+HEAD is now at 0fdc36c2 GRQ-16 Improved exchange models (GRQ-16)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 61282104 Daily {20251105} regression score 0.4140 -> 0.4133 {diff -7} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-sampler
+   c879a83b8..f0f643efa  main       -> origin/main
+HEAD is now at f0f643efa 🦠 GRQ-21 🎯, Score: 0.413314, Neurons: 451 & Synapses: 15,976
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
@@ -79,537 +1136,494 @@ Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-portfolio synced with remote (validation skipped)
-Starting sampler... Thu Nov  6 03:05:51 AEDT 2025
-Sampler mode
-🔄 Rsync attempt 1 of 3: /Users/nigel/Training/trainData-binary_88.tgz ../../.cache/trainData-binary_88.tgz
-Decompressing training data...
-Loop 1 of 5
+HEAD is now at 024a41ccae7 Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-tickers synced with remote (validation skipped)
+HEAD is now at 1fc2f15112b Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-topics synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-commodities
+   195f5ec..842af7a  Develop    -> origin/Develop
+HEAD is now at 842af7a Refresh of history on GRQ-11@2025-11-06
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-commodities synced with remote (validation skipped)
+HEAD is now at 3a3d927 Refresh of history on 2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-listing synced with remote (validation skipped)
+HEAD is now at 34be23db Insiders on GRQ-11@2025-03-08
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-insiders synced with remote (validation skipped)
+HEAD is now at d3cb677 Merge pull request #1 from stSoftwareAU/WIP
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-WorldUncertaintyIndex synced with remote (validation skipped)
+Duration: 10m 21s
+History Loaded
+Training years 20 days to rewind 1 total iterations 5200 
+Train date 2025-05-27 (day 27 ) { 49 of 5200 } 1s 186ms of 1m, expected 1h 46m progress 0.9%
+Train date 2025-04-14 (day 14 ) { 78 of 5200 } 1s 657ms of 2m 1s, expected 2h 14m progress 1.5%
+Train date 2025-03-20 (day 20 ) { 95 of 5200 } 4s 724ms of 3m 2s, expected 2h 46m progress 1.8%
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+Train date 2025-02-06 (day 6 ) { 124 of 5200 } 2s 365ms of 4m 4s, expected 2h 51m progress 2.4%
+Train date 2025-01-08 (day 8 ) { 143 of 5200 } 1s 722ms of 5m 4s, expected 3h 4m progress 2.8%
+Train date 2024-11-22 (day 22 ) { 173 of 5200 } 3s 392ms of 6m 6s, expected 3h 3m progress 3.3%
+Train date 2024-10-15 (day 15 ) { 201 of 5200 } 1s 736ms of 7m 7s, expected 3h 4m progress 3.9%
+Train date 2024-09-11 (day 11 ) { 225 of 5200 } 1s 427ms of 8m 7s, expected 3h 8m progress 4.3%
+Train date 2024-08-13 (day 13 ) { 245 of 5200 } 1s 552ms of 9m 7s, expected 3h 13m progress 4.7%
+Train date 2024-07-09 (day 9 ) { 270 of 5200 } 1s 501ms of 10m 7s, expected 3h 15m progress 5.2%
+Train date 2024-06-14 (day 14 ) { 285 of 5200 } 5s 204ms of 11m 11s, expected 3h 24m progress 5.5%
+Train date 2024-05-01 (day 1 ) { 316 of 5200 } 1s 802ms of 12m 13s, expected 3h 21m progress 6.1%
+Train date 2024-04-04 (day 4 ) { 335 of 5200 } 8s 983ms of 13m 19s, expected 3h 27m progress 6.4%
+Train date 2024-02-27 (day 27 ) { 361 of 5200 } 16s 688ms of 14m 22s, expected 3h 27m progress 6.9%
+Train date 2024-01-26 (day 26 ) { 382 of 5200 } 12s 89ms of 15m 26s, expected 3h 30m progress 7.3%
+Train date 2023-12-21 (day 21 ) { 405 of 5200 } 3s 484ms of 16m 27s, expected 3h 31m progress 7.8%
+Train date 2023-11-06 (day 6 ) { 437 of 5200 } 1s 828ms of 17m 28s, expected 3h 28m progress 8.4%
+Train date 2023-10-10 (day 10 ) { 456 of 5200 } 2s 588ms of 18m 30s, expected 3h 31m progress 8.8%
+Train date 2023-09-06 (day 6 ) { 480 of 5200 } 2s 359ms of 19m 32s, expected 3h 32m progress 9.2%
+Train date 2023-08-10 (day 10 ) { 498 of 5200 } 2s 624ms of 20m 33s, expected 3h 35m progress 9.6%
+Train date 2023-07-12 (day 12 ) { 519 of 5200 } 3s 901ms of 21m 37s, expected 3h 37m progress 10.0%
+Train date 2023-05-31 (day 31 ) { 547 of 5200 } 3s 96ms of 22m 40s, expected 3h 35m progress 10.5%
+Train date 2023-05-08 (day 8 ) { 563 of 5200 } 35s 488ms of 23m 49s, expected 3h 40m progress 10.8%
+Train date 2023-03-30 (day 30 ) { 589 of 5200 } 19s 265ms of 24m 56s, expected 3h 40m progress 11.3%
+Train date 2023-03-03 (day 3 ) { 608 of 5200 } 1s 885ms of 25m 56s, expected 3h 42m progress 11.7%
+Train date 2023-02-02 (day 2 ) { 628 of 5200 } 13s 361ms of 26m 59s, expected 3h 43m progress 12.1%
+Train date 2022-12-28 (day 28 ) { 652 of 5200 } 3s 545ms of 28m 2s, expected 3h 44m progress 12.5%
+Train date 2022-11-25 (day 25 ) { 674 of 5200 } 27s 270ms of 29m 15s, expected 3h 46m progress 12.9%
+Train date 2022-11-08 (day 8 ) { 686 of 5200 } 14s 126ms of 30m 16s, expected 3h 49m progress 13.2%
+Train date 2022-10-14 (day 14 ) { 703 of 5200 } 7s 691ms of 31m 19s, expected 3h 52m progress 13.5%
+Train date 2022-09-12 (day 12 ) { 727 of 5200 } 8s 391ms of 32m 24s, expected 3h 52m progress 14.0%
+Train date 2022-08-12 (day 12 ) { 747 of 5200 } 1s 411ms of 33m 24s, expected 3h 53m progress 14.3%
+Train date 2022-07-28 (day 28 ) { 758 of 5200 } 1s 695ms of 34m 25s, expected 3h 56m progress 14.6%
+Train date 2022-06-23 (day 23 ) { 782 of 5200 } 1s 836ms of 35m 27s, expected 3h 56m progress 15.0%
+Train date 2022-05-17 (day 17 ) { 807 of 5200 } 2s 440ms of 36m 27s, expected 3h 55m progress 15.5%
+Train date 2022-04-14 (day 14 ) { 829 of 5200 } 3s 392ms of 37m 27s, expected 3h 55m progress 15.9%
+Train date 2022-03-02 (day 2 ) { 860 of 5200 } 1s 391ms of 38m 28s, expected 3h 53m progress 16.5%
+Train date 2022-01-04 (day 4 ) { 899 of 5200 } 1s 231ms of 39m 28s, expected 3h 48m progress 17.3%
+Train date 2021-10-28 (day 28 ) { 945 of 5200 } 1s 465ms of 40m 30s, expected 3h 43m progress 18.2%
+Train date 2021-08-23 (day 23 ) { 992 of 5200 } 5s 210ms of 41m 34s, expected 3h 38m progress 19.1%
+Train date 2021-07-14 (day 14 ) { 1020 of 5200 } 1s 726ms of 42m 35s, expected 3h 37m progress 19.6%
+Train date 2021-06-10 (day 10 ) { 1043 of 5200 } 2s 801ms of 43m 36s, expected 3h 37m progress 20.1%
+Train date 2021-05-03 (day 3 ) { 1070 of 5200 } 1s 681ms of 44m 37s, expected 3h 37m progress 20.6%
+Train date 2021-03-12 (day 12 ) { 1105 of 5200 } 1s 153ms of 45m 37s, expected 3h 35m progress 21.2%
+Train date 2021-01-06 (day 6 ) { 1150 of 5200 } 1s 295ms of 46m 38s, expected 3h 31m progress 22.1%
+Train date 2020-11-23 (day 23 ) { 1179 of 5200 } 6s 896ms of 47m 38s, expected 3h 30m progress 22.7%
+Train date 2020-10-21 (day 21 ) { 1202 of 5200 } 2s 19ms of 48m 40s, expected 3h 31m progress 23.1%
+Train date 2020-09-21 (day 21 ) { 1224 of 5200 } 3s 6ms of 49m 41s, expected 3h 31m progress 23.5%
+Train date 2020-08-10 (day 10 ) { 1253 of 5200 } 2s 682ms of 50m 43s, expected 3h 30m progress 24.2%
+Train date 2020-07-09 (day 9 ) { 1275 of 5200 } 2s 723ms of 51m 45s, expected 3h 31m progress 24.5%
+Train date 2020-06-08 (day 8 ) { 1297 of 5200 } 3s 199ms of 52m 48s, expected 3h 32m progress 24.9%
+Train date 2020-03-19 (day 19 ) { 1352 of 5200 } 1s 14ms of 53m 48s, expected 3h 27m progress 26.0%
+Train date 2019-12-17 (day 17 ) { 1415 of 5200 } 973ms of 54m 49s, expected 3h 21m progress 27.3%
+Train date 2019-09-30 (day 30 ) { 1470 of 5200 } 1s 151ms of 55m 50s, expected 3h 18m progress 28.2%
+Train date 2019-07-11 (day 11 ) { 1526 of 5200 } 1s 60ms of 56m 51s, expected 3h 14m progress 29.3%
+Train date 2019-04-25 (day 25 ) { 1579 of 5200 } 994ms of 57m 51s, expected 3h 11m progress 30.3%
+Train date 2019-01-25 (day 25 ) { 1641 of 5200 } 743ms of 58m 51s, expected 3h 6m progress 31.6%
+Train date 2018-10-31 (day 31 ) { 1698 of 5200 } 972ms of 59m 52s, expected 3h 3m progress 32.7%
+Train date 2018-08-09 (day 9 ) { 1756 of 5200 } 751ms of 1h 52s, expected 3h progress 33.8%
+Train date 2018-05-23 (day 23 ) { 1810 of 5200 } 1s 115ms of 1h 1m 53s, expected 2h 58m progress 34.8%
+Train date 2018-03-02 (day 2 ) { 1867 of 5200 } 1s 34ms of 1h 2m 53s, expected 2h 55m progress 35.9%
+Train date 2017-11-29 (day 29 ) { 1930 of 5200 } 1s 78ms of 1h 3m 54s, expected 2h 52m progress 37.2%
+Train date 2017-09-08 (day 8 ) { 1987 of 5200 } 1s 434ms of 1h 4m 55s, expected 2h 50m progress 38.2%
+Train date 2017-06-12 (day 12 ) { 2049 of 5200 } 1s 23ms of 1h 5m 56s, expected 2h 47m progress 39.5%
+Train date 2017-03-20 (day 20 ) { 2107 of 5200 } 988ms of 1h 6m 56s, expected 2h 45m progress 40.6%
+Train date 2016-12-19 (day 19 ) { 2168 of 5200 } 699ms of 1h 7m 56s, expected 2h 43m progress 41.7%
+Train date 2016-09-23 (day 23 ) { 2228 of 5200 } 1s 220ms of 1h 8m 56s, expected 2h 41m progress 42.8%
+Train date 2016-06-28 (day 28 ) { 2289 of 5200 } 1s 354ms of 1h 9m 57s, expected 2h 39m progress 44.0%
+Train date 2016-03-31 (day 31 ) { 2351 of 5200 } 1s 33ms of 1h 10m 57s, expected 2h 37m progress 45.2%
+Train date 2015-12-29 (day 29 ) { 2414 of 5200 } 1s 432ms of 1h 11m 58s, expected 2h 35m progress 46.4%
+Train date 2015-10-01 (day 1 ) { 2475 of 5200 } 955ms of 1h 12m 58s, expected 2h 33m progress 47.7%
+Train date 2015-07-07 (day 7 ) { 2536 of 5200 } 1s 69ms of 1h 13m 59s, expected 2h 32m progress 48.7%
+Train date 2015-04-15 (day 15 ) { 2593 of 5200 } 1s 4ms of 1h 14m 59s, expected 2h 30m progress 50.0%
+Train date 2015-01-20 (day 20 ) { 2652 of 5200 } 1s 429ms of 1h 16m, expected 2h 29m progress 51.0%
+Train date 2014-10-23 (day 23 ) { 2711 of 5200 } 972ms of 1h 17m, expected 2h 28m progress 52.0%
+Train date 2014-08-04 (day 4 ) { 2768 of 5200 } 951ms of 1h 18m 1s, expected 2h 27m progress 53.1%
+Train date 2014-05-14 (day 14 ) { 2824 of 5200 } 1s 84ms of 1h 19m 1s, expected 2h 25m progress 54.5%
+Train date 2014-02-14 (day 14 ) { 2885 of 5200 } 970ms of 1h 20m 2s, expected 2h 24m progress 55.6%
+Train date 2013-11-26 (day 26 ) { 2939 of 5200 } 837ms of 1h 21m 2s, expected 2h 23m progress 56.7%
+Train date 2013-09-03 (day 3 ) { 2999 of 5200 } 922ms of 1h 22m 3s, expected 2h 22m progress 57.8%
+Train date 2013-06-19 (day 19 ) { 3051 of 5200 } 787ms of 1h 23m 3s, expected 2h 22m progress 58.5%
+Train date 2013-04-04 (day 4 ) { 3104 of 5200 } 965ms of 1h 24m 4s, expected 2h 21m progress 59.6%
+Train date 2012-12-28 (day 28 ) { 3169 of 5200 } 1s 102ms of 1h 25m 4s, expected 2h 20m progress 60.8%
+Train date 2012-10-03 (day 3 ) { 3227 of 5200 } 923ms of 1h 26m 4s, expected 2h 19m progress 61.9%
+Train date 2012-07-17 (day 17 ) { 3282 of 5200 } 1s 567ms of 1h 27m 5s, expected 2h 18m progress 63.1%
+Train date 2012-04-20 (day 20 ) { 3342 of 5200 } 664ms of 1h 28m 5s, expected 2h 17m progress 64.3%
+Train date 2012-02-01 (day 1 ) { 3397 of 5200 } 902ms of 1h 29m 6s, expected 2h 16m progress 65.5%
+Train date 2011-11-03 (day 3 ) { 3457 of 5200 } 1s 435ms of 1h 30m 7s, expected 2h 16m progress 66.3%
+Train date 2011-08-15 (day 15 ) { 3514 of 5200 } 958ms of 1h 31m 7s, expected 2h 15m progress 67.5%
+Train date 2011-05-23 (day 23 ) { 3572 of 5200 } 1s 11ms of 1h 32m 8s, expected 2h 14m progress 68.8%
+Train date 2011-03-01 (day 1 ) { 3630 of 5200 } 1s 355ms of 1h 33m 8s, expected 2h 13m progress 70.0%
+Train date 2010-11-29 (day 29 ) { 3693 of 5200 } 1s 189ms of 1h 34m 9s, expected 2h 13m progress 70.8%
+Train date 2010-09-07 (day 7 ) { 3751 of 5200 } 873ms of 1h 35m 9s, expected 2h 12m progress 72.1%
+Train date 2010-06-10 (day 10 ) { 3812 of 5200 } 1s 513ms of 1h 36m 11s, expected 2h 11m progress 73.4%
+Train date 2010-03-15 (day 15 ) { 3873 of 5200 } 959ms of 1h 37m 11s, expected 2h 10m progress 74.8%
+Train date 2009-12-14 (day 14 ) { 3934 of 5200 } 969ms of 1h 38m 11s, expected 2h 10m progress 75.5%
+Train date 2009-09-18 (day 18 ) { 3994 of 5200 } 1s 271ms of 1h 39m 11s, expected 2h 9m progress 76.9%
+Train date 2009-06-24 (day 24 ) { 4054 of 5200 } 1s 9ms of 1h 40m 12s, expected 2h 9m progress 77.7%
+Train date 2009-04-02 (day 2 ) { 4111 of 5200 } 1s 140ms of 1h 41m 12s, expected 2h 8m progress 79.1%
+Train date 2009-01-14 (day 14 ) { 4165 of 5200 } 1s 7ms of 1h 42m 13s, expected 2h 8m progress 79.9%
+Train date 2008-11-03 (day 3 ) { 4214 of 5200 } 1s 345ms of 1h 43m 13s, expected 2h 7m progress 81.3%
+Train date 2008-08-14 (day 14 ) { 4270 of 5200 } 1s 290ms of 1h 44m 14s, expected 2h 7m progress 82.1%
+Train date 2008-06-05 (day 5 ) { 4319 of 5200 } 973ms of 1h 45m 15s, expected 2h 7m progress 82.9%
+Train date 2008-03-18 (day 18 ) { 4374 of 5200 } 1s 375ms of 1h 46m 15s, expected 2h 6m progress 84.3%
+Train date 2008-01-02 (day 2 ) { 4426 of 5200 } 1s 315ms of 1h 47m 15s, expected 2h 6m progress 85.1%
+Train date 2007-10-26 (day 26 ) { 4471 of 5200 } 1s 577ms of 1h 48m 16s, expected 2h 6m progress 85.9%
+Train date 2007-09-05 (day 5 ) { 4508 of 5200 } 1s 927ms of 1h 49m 18s, expected 2h 6m progress 86.7%
+Train date 2007-07-19 (day 19 ) { 4541 of 5200 } 2s 315ms of 1h 50m 19s, expected 2h 6m progress 87.6%
+Train date 2007-06-14 (day 14 ) { 4565 of 5200 } 2s 204ms of 1h 51m 21s, expected 2h 7m progress 87.7%
+Train date 2007-04-23 (day 23 ) { 4602 of 5200 } 1s 372ms of 1h 52m 21s, expected 2h 7m progress 88.5%
+Train date 2007-02-14 (day 14 ) { 4648 of 5200 } 1s 540ms of 1h 53m 22s, expected 2h 7m progress 89.3%
+Stopping at year 2006 - reached minimum year limit
+Checksum file is valid with      218 files.
+🔄 Rsync attempt 1 of 3: --include=* --exclude=checksum.sha256 . /Users/nigel/Training/trainData-industry_88_v2/
+🔄 Rsync attempt 1 of 3: checksum.sha256 /Users/nigel/Training/trainData-industry_88_v2/
+realpath: 2d2aacbdbf410fef4acbf8a0eec7b0315d40f0c89b1a2316573475392df1e1c7.tgz: No such file or directory
+Symbolic link target is valid but points to a different file: f69bcd7ef27243b266e348a52cd6e07a1056dda270d294d20a7cde934643da28.tgz not 2d2aacbdbf410fef4acbf8a0eec7b0315d40f0c89b1a2316573475392df1e1c7.tgz
+Compressing training data to trainData-industry_88_v2-next.tgz...
+Compression successful: trainData-industry_88_v2-next.tgz
+Current compressed file: f69bcd7ef27243b266e348a52cd6e07a1056dda270d294d20a7cde934643da28.tgz
+Deleting old previous file: trainData-industry_88_v2-previous.tgz
+Moving current file to trainData-industry_88_v2-previous.tgz
+Updated symbolic link: trainData-industry_88_v2.tgz -> 2d2aacbdbf410fef4acbf8a0eec7b0315d40f0c89b1a2316573475392df1e1c7.tgz
+Compression process completed successfully.
+New compressed file: 2d2aacbdbf410fef4acbf8a0eec7b0315d40f0c89b1a2316573475392df1e1c7.tgz
+Previous compressed file: trainData-industry_88_v2-previous.tgz
+Running trainDataExchange.sh...
 Already up to date.
-1) Sample rate: 0.01, batch Size: 10000, timeout: 5
-Total time taken: 7s 940ms
-Liam Orn (Observations: 1,486, Neurons: 450, Synapses: 15,969 & Score: 0.413)
-9 mutations, mutation rate 5.0%, elitism 1, mutation FFW, selection POWER, timeout 5, PopSize 50 SAMPLER
-Initialized in 1s 698ms
-Remove neuron proximity-not-far-over-zero-DJIA-Exclusion-v3 as no longer connected
-Remove neuron proximity-just-over-zero-DJIA-Exclusion-v3 as no longer connected
-Remove neuron negative-fundamentals-v2-return-on-equity-check as no longer connected
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Can't deDuplicate creature at 17 of 50
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron trend-check-negative-nasdaq-100-v2 as no longer connected
-Remove neuron ab2901cf-0bc4-47f4-a1c5-19c45d8e1444 as no longer connected
-Remove neuron 7a40b9bb-5f75-4055-9263-939935e8ffb7 as no longer connected
-Remove neuron 879ce61d-8546-438a-8307-4129a5fe02bb as no longer connected
-Remove neuron 57a513ba-3dc9-43d2-a1e1-7b8152f6ccdd as no longer connected
-Remove neuron 4e76675e-8842-4514-b233-7657b483bcb0 as no longer connected
-Remove neuron 7f472afd-5b05-4c5d-ad3b-bb00140de13f as no longer connected
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron trend-check-negative-SP500-Exclusion-v2 as no longer connected
-Remove neuron proximity-not-far-over-zero-SP500-Exclusion-v2 as no longer connected
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron 3b8b89e7-5ceb-4383-a419-0f11c5541ddb as no longer connected
-Remove neuron 3b8b89e7-5ceb-4383-a419-0f11c5541ddb as no longer connected
-Remove neuron 56ebb559-3699-4426-b86c-4cc2f1595797 as no longer connected
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron 4e76675e-8842-4514-b233-7657b483bcb0 as no longer connected
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Remove neuron e70896fe-02d3-4ae9-a4a0-823ec7286d36 as no longer connected
-Remove neuron 02b96e74-5a73-43ba-8fcf-2348fa222536 as no longer connected
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Generation 1 score 0.4187655488309613 (avg: 0.3097) error 0.5812334282740768 time 48s 503ms
-Evolution of 1 generation in 5m 45s, averaging 5m 45s 48ms
-Loop 2 of 5
+From github.com:stSoftwareAU/GRQ-exchange
+   0fdc36c2..8357895a  main       -> origin/main
+HEAD is now at 8357895a GRQ-7 Improved exchange models (GRQ-7)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 162692419 Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at dfff6bbb27b Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at 06c3852d Refresh of history for 2025-11-06 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-location
+   283780d5b..8fa952569  Develop    -> origin/Develop
+HEAD is now at 8fa952569 Mac-Ultra-M2 Improved location models (Mac-Ultra-M2)
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-industryV2
+   dfcc5f1884..9bec5458da  main       -> origin/main
+HEAD is now at 9bec5458da Mac-Ultra-M2 Improved Industry models (Mac-Ultra-M2)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at 8357895a GRQ-7 Improved exchange models (GRQ-7)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-cluster
+   61282104..a4afe4b6  main       -> origin/main
+HEAD is now at a4afe4b6 Evolution score 0.4133 -> 0.4134 {diff 1} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-sampler
+   f0f643efa..fc795936f  main       -> origin/main
+HEAD is now at fc795936f 🦠 GRQ-19 🎯, Score: 0.413319, Neurons: 451 & Synapses: 15,977
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 08f89f18df REJECTED 13.25% -> 12.60% Delta -0.648
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 024a41ccae7 Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-tickers synced with remote (validation skipped)
+HEAD is now at 1fc2f15112b Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-topics synced with remote (validation skipped)
+HEAD is now at 842af7a Refresh of history on GRQ-11@2025-11-06
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-commodities synced with remote (validation skipped)
+HEAD is now at 3a3d927 Refresh of history on 2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-listing synced with remote (validation skipped)
+HEAD is now at 34be23db Insiders on GRQ-11@2025-03-08
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-insiders synced with remote (validation skipped)
+HEAD is now at d3cb677 Merge pull request #1 from stSoftwareAU/WIP
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-WorldUncertaintyIndex synced with remote (validation skipped)
+Duration: 8m 34s
+History Loaded
+Training years 20 days to rewind 1 total iterations 5200 
+Train date 2024-10-14 (day 14 ) { 202 of 5200 } 359ms of 1m, expected 26m progress 3.8%
+Train date 2024-02-14 (day 14 ) { 369 of 5200 } 371ms of 2m 1s, expected 28m progress 7.2%
+Train date 2023-03-13 (day 13 ) { 602 of 5200 } 254ms of 3m 1s, expected 26m progress 11.6%
+Train date 2022-06-03 (day 3 ) { 795 of 5200 } 177ms of 4m 1s, expected 26m progress 15.4%
+Train date 2021-07-07 (day 7 ) { 1025 of 5200 } 228ms of 5m 1s, expected 25m progress 20.1%
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F1.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/F2.csv
+Loading data from ../GRQ-WorldUncertaintyIndex/data/T1.csv
+Train date 2020-08-17 (day 17 ) { 1248 of 5200 } 391ms of 6m 1s, expected 25m progress 24.1%
+Train date 2019-10-31 (day 31 ) { 1447 of 5200 } 594ms of 7m 2s, expected 25m progress 28.1%
+Train date 2019-01-23 (day 23 ) { 1643 of 5200 } 85ms of 8m 2s, expected 25m progress 32.1%
+Train date 2018-01-02 (day 2 ) { 1908 of 5200 } 332ms of 9m 2s, expected 25m progress 36.1%
+Train date 2016-12-20 (day 20 ) { 2167 of 5200 } 214ms of 10m 2s, expected 24m progress 41.8%
+Train date 2015-12-30 (day 30 ) { 2413 of 5200 } 360ms of 11m 2s, expected 24m progress 46.0%
+Train date 2015-02-10 (day 10 ) { 2637 of 5200 } 252ms of 12m 3s, expected 24m progress 50.2%
+Train date 2014-01-02 (day 2 ) { 2915 of 5200 } 241ms of 13m 3s, expected 23m progress 56.7%
+Train date 2012-10-03 (day 3 ) { 3227 of 5200 } 224ms of 14m 3s, expected 23m progress 61.1%
+Train date 2011-08-25 (day 25 ) { 3506 of 5200 } 340ms of 15m 3s, expected 22m progress 68.4%
+Train date 2010-10-14 (day 14 ) { 3724 of 5200 } 393ms of 16m 4s, expected 22m progress 73.0%
+Train date 2009-12-29 (day 29 ) { 3924 of 5200 } 413ms of 17m 4s, expected 23m progress 74.2%
+Train date 2009-03-24 (day 24 ) { 4118 of 5200 } 360ms of 18m 4s, expected 23m progress 78.6%
+Train date 2008-05-30 (day 30 ) { 4323 of 5200 } 74ms of 19m 4s, expected 23m progress 82.9%
+Train date 2007-10-11 (day 11 ) { 4482 of 5200 } 567ms of 20m 4s, expected 23m progress 87.2%
+Train date 2007-04-19 (day 19 ) { 4604 of 5200 } 510ms of 21m 5s, expected 24m progress 87.8%
+Stopping at year 2006 - reached minimum year limit
+Checksum file is valid with       18 files.
+🔄 Rsync attempt 1 of 3: --include=* --exclude=checksum.sha256 . /Users/nigel/Training/trainData-exchange_88/
+🔄 Rsync attempt 1 of 3: checksum.sha256 /Users/nigel/Training/trainData-exchange_88/
+realpath: d16ea337117722f634662a0fb6c17de69a7185fd7650907d65cdab986a0d3666.tgz: No such file or directory
+Symbolic link target is valid but points to a different file: 5310a3340ac56a6efefeff84212384fe33f2cb3757f97b7518a0d1045476a419.tgz not d16ea337117722f634662a0fb6c17de69a7185fd7650907d65cdab986a0d3666.tgz
+Compressing training data to trainData-exchange_88-next.tgz...
+Compression successful: trainData-exchange_88-next.tgz
+Current compressed file: 5310a3340ac56a6efefeff84212384fe33f2cb3757f97b7518a0d1045476a419.tgz
+Deleting old previous file: trainData-exchange_88-previous.tgz
+Moving current file to trainData-exchange_88-previous.tgz
+Updated symbolic link: trainData-exchange_88.tgz -> d16ea337117722f634662a0fb6c17de69a7185fd7650907d65cdab986a0d3666.tgz
+Compression process completed successfully.
+New compressed file: d16ea337117722f634662a0fb6c17de69a7185fd7650907d65cdab986a0d3666.tgz
+Previous compressed file: trainData-exchange_88-previous.tgz
+Running trainDataLocation.sh...
 Already up to date.
-2) Sample rate: 0.05, batch Size: 10000, timeout: 9
-Total time taken: 9s 287ms
-Lexi Stracke (Observations: 1,486, Neurons: 450, Synapses: 15,966 & Score: 0.419)
-9 mutations, mutation rate 5.0%, elitism 1, mutation ALL, selection FITNESS_PROPORTIONATE, timeout 9, PopSize 40 SAMPLER
-Initialized in 2s 317ms
-Remove neuron 31ac96a4-fdc8-4ee8-9033-c2e0b1cb0fb1 as no longer connected
-Can't deDuplicate creature at 34 of 40
-Remove neuron 83e69715-d030-4532-b83a-4cc89fda9f93 as no longer connected
-Remove neuron 31ac96a4-fdc8-4ee8-9033-c2e0b1cb0fb1 as no longer connected
-Discovery 7b8ca468 scheduled
-[Neat] Discovery request sent to worker for 7b8ca468
-[WorkerHandler] Posting discovery request to worker (taskID: 6)
-Training 7b8ca468 scheduled
-Training 7b8ca468 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 30.0%, sparse: 7.5%
-[Worker] Starting discovery for creature (taskID: 6)...
-Discovery 7b8ca468 with 1 binary files, sample rate: 2.5%, batch size: 20
-Discovery 7b8ca468 initialize time 84ms
-Discovery 7b8ca468 processing .trainData-binary_88-sampler/sample-5.bin
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Training 7b8ca468 samples 663 of 105,992 0.6%( rate 30.0% ) error 0.553 time average: 90ms 583µs 710ns total: 1m 57ms
-Fine tuning increased fitness by 1.80813537475899e-8 to 0.41405777739617955 adjusted 2 weights 
-Training 7b8ca468 samples 1,196 of 105,992 1.1%( rate 30.0% ) error 0.568 time average: 100ms 390µs 468ns total: 2m 67ms
-Fine tuning increased fitness by 3.9574140853204653e-8 to 0.4140578169703204 adjusted 2 weights 
-Training 7b8ca468 samples 1,810 of 105,992 1.7%( rate 30.0% ) error 0.574 time average: 99ms 514µs 917ns total: 3m 122ms
-Fine tuning increased fitness by 8.247769456293241e-8 to 0.41405789944801497 adjusted 2 weights 
-Training 7b8ca468 samples 2,362 of 105,992 2.2%( rate 30.0% ) error 0.585 time average: 101ms 776µs 460ns total: 4m 396ms
-Skipping discovery: insufficient time (1m remaining, 2m estimated)
-Fine tuning increased fitness by 5.625176541235177e-7 to 0.4140584619656691 adjusted 2 weights 
-Training 7b8ca468 samples 2,893 of 105,992 2.7%( rate 30.0% ) error 0.577 time average: 103ms 855µs 859ns total: 5m 455ms
-Generation 6 score 0.4140584619656691 (avg: 0.3919) error 0.585939489844407 avg time 39s 333ms
-Set training/discovery clean up count to 2
-Avg time per generation: 90943ms, max wait: 3 generations in 5 minutes
-Discovery timeout set to 20 generations (based on limiting factor)
-[Neat] Waiting for discovery to complete (1/20) - In progress: 7b8ca468
-Training 7b8ca468 samples 3,511 of 105,992 3.3%( rate 30.0% ) error 0.579 time average: 102ms 689µs 262ns total: 6m 542ms
-Training 7b8ca468 timed out after 6m 542ms
-Training 7b8ca468 completed after 6m 921ms
-Training 7b8ca468 compacted
-Generation 7 score 0.4140584619656691 (avg: 0.4141) error 0.585939489844407 avg time 7s 244ms
-[Neat] Waiting for discovery to complete (2/20) - In progress: 7b8ca468
-Compact 7b8ca468 Score: 0.4133709760911305, Error: 0.5859401924952503 -> 0.5866269816189454, 👿 -0.000687
-Trained 7b8ca468 Score: 0.41035046243729734, Error: 0.5859401924952503 -> 0.5896474893727788, 👿 -0.00371
-Fine tuning increased fitness by 6.0034286430976636e-9 to 0.41405846796909773 adjusted 2 weights 
-Generation 8 score 0.41405846796909773 (avg: 0.4136) error 0.5859394838409784 avg time 5s 824ms
-[Neat] Waiting for discovery to complete (3/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 1.143009920046012e-8 to 0.41405847939919693 adjusted 2 weights 
-Generation 9 score 0.41405847939919693 (avg: 0.4141) error 0.5859394724108792 avg time 7s 850ms
-[Neat] Waiting for discovery to complete (4/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 2.1280131989875883e-8 to 0.4140585006793289 adjusted 2 weights 
-Generation 10 score 0.4140585006793289 (avg: 0.4141) error 0.5859394511307472 avg time 6s 876ms
-[Neat] Waiting for discovery to complete (5/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 4.247863605311153e-8 to 0.414058543157965 adjusted 2 weights 
-Generation 11 score 0.414058543157965 (avg: 0.4141) error 0.5859394086521111 avg time 17s 320ms
-[Neat] Waiting for discovery to complete (6/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 5.8941418190627815e-8 to 0.41405860209938317 adjusted 2 weights 
-Generation 12 score 0.41405860209938317 (avg: 0.4141) error 0.585939349710693 avg time 10s 79ms
-[Neat] Waiting for discovery to complete (7/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 1.0795713223377135e-7 to 0.4140587100565154 adjusted 2 weights 
-Generation 13 score 0.4140587100565154 (avg: 0.4141) error 0.5859392417535607 avg time 9s 251ms
-[Neat] Waiting for discovery to complete (8/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 1.3035419565987638e-7 to 0.41405884041071106 adjusted 2 weights 
-Generation 14 score 0.41405884041071106 (avg: 0.4141) error 0.585939111399365 avg time 6s 937ms
-[Neat] Waiting for discovery to complete (9/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 2.99024552896654e-8 to 0.41405887031316635 adjusted 2 weights 
-Generation 15 score 0.41405887031316635 (avg: 0.4141) error 0.5859390814969098 avg time 11s 536ms
-[Neat] Waiting for discovery to complete (10/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 1.1346226125308334e-8 to 0.4140588816593925 adjusted 2 weights 
-Generation 16 score 0.4140588816593925 (avg: 0.4141) error 0.5859390700506837 avg time 6s 243ms
-[Neat] Waiting for discovery to complete (11/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 1.4395894698537859e-8 to 0.4140588960552872 adjusted 1 weight 
-Generation 17 score 0.4140588960552872 (avg: 0.4141) error 0.585939055654789 avg time 11s 8ms
-[Neat] Waiting for discovery to complete (12/20) - In progress: 7b8ca468
-Remove neuron d097da06-4f65-4eb0-b3e0-a2d969185bd9 as no longer connected
-Generation 18 score 0.4140588960552872 (avg: 0.4141) error 0.585939055654789 avg time 10s 219ms
-[Neat] Waiting for discovery to complete (13/20) - In progress: 7b8ca468
-Discovery 7b8ca468 read time  for .trainData-binary_88-sampler/sample-5.bin with 20 records
-Discovery 7b8ca468 drained promises after file .trainData-binary_88-sampler/sample-5.bin
-⏲  Discovery 7b8ca468 timeout reached during file processing. Processed 20 records. Proceeding with partial results for analysis.
-Discovery 7b8ca468 scanning time 25m 28s 312ms
-Discovery 7b8ca468 recorded time 25m 28s 313ms
-Discovery 7b8ca468 analysis timeout extended by 3m
-Generation 19 score 0.4140588960552872 (avg: 0.4140) error 0.585939055654789 avg time 8s 508ms
-[Neat] Waiting for discovery to complete (14/20) - In progress: 7b8ca468
-Generation 20 score 0.4140588960552872 (avg: 0.4141) error 0.585939055654789 avg time 6s 709ms
-[Neat] Waiting for discovery to complete (15/20) - In progress: 7b8ca468
-Fine tuning increased fitness by 7.119538292243988e-10 to 0.414058896767241 adjusted 1 weight 
-Remove neuron ad2935d3-38fb-42b5-bc55-7cb1c2a23a19 as no longer connected
-Generation 21 score 0.414058896767241 (avg: 0.4140) error 0.5859390549428352 avg time 11s 534ms
-[Neat] Waiting for discovery to complete (16/20) - In progress: 7b8ca468
-Generation 22 score 0.414058896767241 (avg: 0.3229) error 0.5859390549428352 avg time 5s 885ms
-[Neat] Waiting for discovery to complete (17/20) - In progress: 7b8ca468
-Remove neuron 259618f1-9ea9-452c-bb7a-b89c13a05a2f as no longer connected
-Generation 23 score 0.414058896767241 (avg: 0.4141) error 0.5859390549428352 avg time 9s 602ms
-[Neat] Waiting for discovery to complete (18/20) - In progress: 7b8ca468
-Remove neuron fd22aa11-87f8-45a4-a245-42244e70ce69 as no longer connected
-Generation 24 score 0.414058896767241 (avg: 0.4095) error 0.5859390549428352 avg time 7s 239ms
-[Neat] Waiting for discovery to complete (19/20) - In progress: 7b8ca468
-Generation 25 score 0.414058896767241 (avg: 0.3895) error 0.5859390549428352 avg time 7s 820ms
-[Neat] Discovery timeout reached after 20 generations. Clearing stuck discoveries: 7b8ca468
-Remove neuron 2056b4d2-b807-4766-a02f-513f990b5d4f as no longer connected
-Discovered beneficial synapse from 8ba45ffc-f9d6-4bbf-b6a5-1538267c0599 to 952525ab-e9ea-4252-813e-b43896becc36 with weight -1.0000, helping 100.0% more records than it harms (20/20)
-Discovery 7b8ca468 analyze time 9m 32s 456ms found 1 candidates
-Discovery timeout reached while listing neurons (0/452 processed)
-Discovery 7b8ca468 analyze harmful time  found 0 candidates
-Discovery timeout reached while listing neurons (0/452 processed)
-Discovery 7b8ca468 analyze squashes time  found 0 candidates
-Discovery 7b8ca468 analysis complete, total time 35m 769ms, starting cleanup...
-Discovery 7b8ca468 performing cleanup...
-[Worker] Discovery complete for creature (taskID: 6), preparing response...
-[Worker] Returning discovery response (taskID: 6)...
-Discovery 7b8ca468 cleanup complete.
-Can't deDuplicate creature at 19 of 25
-Generation 26 score 0.414058896767241 (avg: 0.4132) error 0.5859390549428352 avg time 9s 516ms
-Waiting for training/discovery clean up 2
-[WorkerHandler] Received discovery response for taskID: 6
-[Neat] Discovery completed for 7b8ca468 after 2114.8s
-Can't deDuplicate creature at 9 of 18
-Generation 27 score 0.414058896767241 (avg: 0.4141) error 0.5859390549428352 avg time 8s 619ms
-Waiting for training/discovery clean up 1
-Generation 28 score 0.414058896767241 (avg: 0.4136) error 0.5859390549428352 avg time 7s 294ms
-Evolution of 28 generations in 41m 17s, averaging 1m 28s 472ms
-Loop 3 of 5
+From github.com:stSoftwareAU/GRQ-location
+   8fa952569..e2a39feba  Develop    -> origin/Develop
+HEAD is now at e2a39feba GRQ-16 Improved location models (GRQ-16)
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at 162692419 Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at dfff6bbb27b Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at 06c3852d Refresh of history for 2025-11-06 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+HEAD is now at e2a39feba GRQ-16 Improved location models (GRQ-16)
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-industryV2
+   9bec5458da..2754c32496  main       -> origin/main
+HEAD is now at 2754c32496 GRQ-7 Improved Industry models (GRQ-7)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at 8357895a GRQ-7 Improved exchange models (GRQ-7)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-cluster
+   a4afe4b6..19bf9336  main       -> origin/main
+HEAD is now at 19bf9336 Evolution score 0.4134 -> 0.4135 {diff 1} on GRQ-23
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
 From github.com:stSoftwareAU/GRQ-sampler
-   9d7a81334..d8cc5db98  main       -> origin/main
-Updating 9d7a81334..d8cc5db98
-Fast-forward
- TacitKnowledge/hive.json                 |     8 +-
- samples/Africa.json                      | 85809 +++++++++++++++++++++++++++++
- samples/GRQ-10-1.json                    | 85776 ++++++++++++++++++++++++++++
- samples/GRQ-15-1.json                    |   123 +-
- samples/GRQ-18-1.json                    |    26 +-
- samples/GRQ-19-1.json                    | 85760 ++++++++++++++++++++++++++++
- samples/GRQ-21-1.json                    |   127 +-
- samples/{GRQ-24-1.json => GRQ-22-1.json} |    72 +-
- samples/GRQ-3-1.json                     |    25 +-
- samples/Mac-Ultra-M2-1.json              |    16 +-
- 10 files changed, 257521 insertions(+), 221 deletions(-)
- create mode 100644 samples/Africa.json
- create mode 100644 samples/GRQ-10-1.json
- create mode 100644 samples/GRQ-19-1.json
- rename samples/{GRQ-24-1.json => GRQ-22-1.json} (99%)
-3) Sample rate: 0.46, batch Size: 10000, timeout: 4
-Total time taken: 13s 868ms
-Lois Reinger (Observations: 1,486, Neurons: 452, Synapses: 15,971 & Score: 0.414)
-1 mutation, mutation rate 16.6%, elitism 1, mutation ALL, selection TOURNAMENT, timeout 4, PopSize 40 SAMPLER
-Initialized in 3s 287ms
-Culling duplicate creature at 5 of 41
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-DeDuplication of 1 creatures to 40 in 9s 703ms (previous experiment 1ms)
-Fine tuning increased fitness by 0.000019238132747234626 to 0.41387427207689753 adjusted 1 weight Restored: 5
-Generation 1 score 0.41387427207689753 (avg: 0.3658) error 0.5861052550238638 time 6m 40s 640ms
-Evolution of 1 generation in 6m 51s, averaging 6m 50s 860ms
-Loop 4 of 5
-From github.com:stSoftwareAU/GRQ-sampler
-   d8cc5db98..326dfa049  main       -> origin/main
-Updating d8cc5db98..326dfa049
-Fast-forward
- TacitKnowledge/hive.json |   4 +-
- samples/GRQ-23-1.json    | 144 +++++++++++++++++++++++++++++++----------------
- 2 files changed, 98 insertions(+), 50 deletions(-)
-4) Sample rate: 0.16, batch Size: 10000, timeout: 15
-Total time taken: 11s 121ms
-Natalia Carroll (Observations: 1,486, Neurons: 451, Synapses: 15,971 & Score: 0.414)
-4 mutations, mutation rate 9.1%, elitism 1, mutation ALL, selection FITNESS_PROPORTIONATE, timeout 15, PopSize 40 SAMPLER
-Initialized in 2s 360ms
-Remove neuron 5910d135-00e1-44e9-8288-d129e1ee8f79 as no longer connected
-Remove neuron 52060b12-72d4-4ab3-950a-232aab2b630c as no longer connected
-Remove neuron 3e9b00e4-ef20-4fc6-80e7-f411d699f04a as no longer connected
-Remove neuron 3dacb3f7-f6af-4e8d-b939-b338b46845ef as no longer connected
-Remove neuron 929566c8-c4e8-4361-8e29-577326f6f816 as no longer connected
-Remove neuron 7b827eb4-7c37-4687-9076-ebca3b5a54c6 as no longer connected
-Remove neuron 879ce61d-8546-438a-8307-4129a5fe02bb as no longer connected
-Remove neuron 57a513ba-3dc9-43d2-a1e1-7b8152f6ccdd as no longer connected
-Remove neuron 4e76675e-8842-4514-b233-7657b483bcb0 as no longer connected
-Remove neuron 7f472afd-5b05-4c5d-ad3b-bb00140de13f as no longer connected
-Remove neuron 2056b4d2-b807-4766-a02f-513f990b5d4f as no longer connected
-Discovery b12126a6 scheduled
-[Neat] Discovery request sent to worker for b12126a6
-[WorkerHandler] Posting discovery request to worker (taskID: 6)
-Training b12126a6 scheduled
-Training b12126a6 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 15.0%, sparse: 7.5%
-[Worker] Starting discovery for creature (taskID: 6)...
-Discovery b12126a6 with 1 binary files, sample rate: 1.5%, batch size: 20
-Discovery b12126a6 initialize time 102ms
-Discovery b12126a6 processing .trainData-binary_88-sampler/sample-16.bin
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Generation 1 score 0.41481085301058107 (avg: 0.3782) error 0.5851686740901803 time 2m 44s 834ms
-Training b12126a6 samples 289 of 340,723 0.1%( rate 15.0% ) error 0.569 time average: 207ms 861µs 591ns total: 1m 72ms
-Fine tuning increased fitness by 0.0000063851666902703386 to 0.41481723817727134 adjusted 5 weights 
-Generation 2 score 0.41481723817727134 (avg: 0.4148) error 0.58516228692349 time 1m 27s 400ms
-Training b12126a6 samples 685 of 340,723 0.2%( rate 15.0% ) error 0.578 time average: 175ms 408µs 759ns total: 2m 155ms
-Training b12126a6 samples 908 of 340,723 0.3%( rate 15.0% ) error 0.563 time average: 198ms 485µs 682ns total: 3m 225ms
-Fine tuning increased fitness by 0.000014838199432265498 to 0.4148320763767036 adjusted 5 weights 
-Training b12126a6 samples 1,198 of 340,723 0.4%( rate 15.0% ) error 0.590 time average: 200ms 637µs 729ns total: 4m 364ms
-Remove neuron 82a081ce-7112-4ee3-bcf5-0564afee9090 as no longer connected
-Generation 3 score 0.4148320763767036 (avg: 0.4061) error 0.5851474487240578 time 2m 24s 881ms
-Training b12126a6 samples 1,481 of 340,723 0.4%( rate 15.0% ) error 0.603 time average: 202ms 849µs 426ns total: 5m 420ms
-Fine tuning increased fitness by 0.000009006002997358209 to 0.41484108237970096 adjusted 5 weights 
-Generation 4 score 0.41484108237970096 (avg: 0.4148) error 0.5851384427210604 time 1m 31s 229ms
-Training b12126a6 samples 1,849 of 340,723 0.5%( rate 15.0% ) error 0.608 time average: 194ms 979µs 989ns total: 6m 518ms
-Training b12126a6 samples 1,996 of 340,723 0.6%( rate 15.0% ) error 0.608 time average: 211ms 10µs 20ns total: 7m 1s 176ms
-Training b12126a6 samples 2,076 of 340,723 0.6%( rate 15.0% ) error 0.604 time average: 232ms 30µs 828ns total: 8m 1s 696ms
-Training b12126a6 samples 2,171 of 340,723 0.6%( rate 15.0% ) error 0.598 time average: 249ms 735µs 145ns total: 9m 2s 175ms
-Skipping discovery: insufficient time (1m remaining, 2m estimated)
-Fine tuning increased fitness by 0.000001926721442391255 to 0.41484300910114336 adjusted 5 weights 
-Training b12126a6 samples 2,353 of 340,723 0.7%( rate 15.0% ) error 0.594 time average: 255ms 942µs 626ns total: 10m 2s 233ms
-Training b12126a6 timed out after 10m 2s 233ms
-Generation 5 score 0.41484300910114336 (avg: 0.4148) error 0.585136515999618 time 4m 27s 157ms
-Training b12126a6 caused a higher error of 0.5939065309112016 from 0.5851686740901803
-Training b12126a6 completed after 10m 2s 627ms
-Training b12126a6 compacted
-Generation 6 score 0.41484300910114336 (avg: 0.4145) error 0.585136515999618 time 1m 56s 322ms
-Set training/discovery clean up count to 2
-Avg time per generation: 168030ms, max wait: 1 generations in 5 minutes
-Discovery timeout set to 20 generations (based on limiting factor)
-[Neat] Waiting for discovery to complete (1/20) - In progress: b12126a6
-Compact b12126a6 Score: 0.414776094551198, Error: 0.5851686740901803 -> 0.585203447549563, 👿 -0.0000348
-Trained b12126a6 Score: 0.4146997911338916, Error: 0.5851686740901803 -> 0.5852797409668695, 👿 -0.000111
-Fine tuning increased fitness by 3.4092107359384727e-7 to 0.41484335002221695 adjusted 5 weights 
-Generation 7 score 0.41484335002221695 (avg: 0.4148) error 0.5851361750785444 time 2m 58s 922ms
-[Neat] Waiting for discovery to complete (2/20) - In progress: b12126a6
-Fine tuning increased fitness by 0.000003078899745490027 to 0.41484642892196244 adjusted 5 weights 
-Generation 8 score 0.41484642892196244 (avg: 0.4145) error 0.5851330961787989 time 1m 34s 167ms
-[Neat] Waiting for discovery to complete (3/20) - In progress: b12126a6
-Fine tuning increased fitness by 6.276732718024647e-7 to 0.41484705659523424 adjusted 5 weights 
-Generation 9 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 4m 29s 462ms
-[Neat] Waiting for discovery to complete (4/20) - In progress: b12126a6
-Generation 10 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 2m 4s 477ms
-[Neat] Waiting for discovery to complete (5/20) - In progress: b12126a6
-Generation 11 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 3m 16s 854ms
-[Neat] Waiting for discovery to complete (6/20) - In progress: b12126a6
-Generation 12 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 1m 59s 211ms
-[Neat] Waiting for discovery to complete (7/20) - In progress: b12126a6
-Generation 13 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 2m 52s 651ms
-[Neat] Waiting for discovery to complete (8/20) - In progress: b12126a6
-Generation 14 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 1m 36s 569ms
-[Neat] Waiting for discovery to complete (9/20) - In progress: b12126a6
-Generation 15 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 3m 21s 170ms
-[Neat] Waiting for discovery to complete (10/20) - In progress: b12126a6
-Discovery b12126a6 read time  for .trainData-binary_88-sampler/sample-16.bin with 20 records
-Discovery b12126a6 drained promises after file .trainData-binary_88-sampler/sample-16.bin
-⏲  Discovery b12126a6 timeout reached during file processing. Processed 20 records. Proceeding with partial results for analysis.
-Discovery b12126a6 scanning time 37m 44s 463ms
-Discovery b12126a6 recorded time 37m 44s 463ms
-Discovery b12126a6 analysis timeout extended by 3m
-Generation 16 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 1m 38s 604ms
-[Neat] Waiting for discovery to complete (11/20) - In progress: b12126a6
-Discovery timeout reached while listing neurons (150/451 processed)
-Discovery timeout reached in analyzeSelectedNeurons
-Discovery b12126a6 analyze time 3m 11s 415ms found 0 candidates
-Discovery timeout reached while listing neurons (0/451 processed)
-Discovery b12126a6 analyze harmful time 1ms found 0 candidates
-Discovery timeout reached while listing neurons (0/451 processed)
-Discovery b12126a6 analyze squashes time  found 0 candidates
-Discovery b12126a6 analysis complete, total time 40m 55s 882ms, starting cleanup...
-Discovery b12126a6 performing cleanup...
-[Worker] Discovery complete for creature (taskID: 6), preparing response...
-[Worker] Returning discovery response (taskID: 6)...
-[WorkerHandler] Received discovery response for taskID: 6
-[Neat] Discovery completed for b12126a6 after 2456.6s
-Discovery b12126a6 cleanup complete.
-Generation 17 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 3m 18s 900ms
-Waiting for training/discovery clean up 2
-Generation 18 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 1m 30s 796ms
-Waiting for training/discovery clean up 1
-Generation 19 score 0.41484705659523424 (avg: 0.4148) error 0.5851324685055271 time 1m 58s 672ms
-Evolution of 19 generations in 49m 29s, averaging 2m 36s 268ms
-Loop 5 of 5
-From github.com:stSoftwareAU/GRQ-sampler
-   326dfa049..ad39750eb  main       -> origin/main
-Updating 326dfa049..ad39750eb
-Fast-forward
- TacitKnowledge/hive.json                 |    14 +-
- samples/Africa.json                      | 17317 ++++++++++++++++++++++++-----
- samples/GRQ-18-1.json                    |   110 +-
- samples/GRQ-22-1.json                    |    18 +-
- samples/{GRQ-13-1.json => GRQ-24-1.json} |    72 +-
- samples/Mac-Ultra-M2-1.json              |   128 +-
- 6 files changed, 14768 insertions(+), 2891 deletions(-)
- rename samples/{GRQ-13-1.json => GRQ-24-1.json} (99%)
-5) Sample rate: 1, batch Size: 10000, timeout: 14
-Total time taken: 21s 718ms
-Otto Wolf (Observations: 1,486, Neurons: 451, Synapses: 15,973 & Score: 0.415)
-1 mutation, mutation rate 7.1%, elitism 1, mutation ALL, selection FITNESS_PROPORTIONATE, timeout 14, PopSize 20 SAMPLER
-Initialized in 2s 191ms
-Over populated 25, expected 20.
-Culling duplicate creature at 5 of 25
-Culling duplicate creature at 7 of 24
-Culling duplicate creature at 8 of 23
-DeDuplication of 3 creatures to 22 in 2ms (previous experiment 2ms)
-Training 6761bac7 scheduled
-Training 6761bac7 with 1 binary file, target error: 0.002, iterations: 1, sample rate: 10.0%, sparse: 7.5%
-Fine tuning increased fitness by 0 to 0.4133057879513735 adjusted 2 weights, 1 bias Restored: 8
-Replacing HYPOT neuron 282be7ae-b5c4-4396-a640-7a56da325ac8
-Replacing HYPOT neuron bc41f7c5-a2e6-4097-8aec-ae1e223ff6b4
-Replacing HYPOT neuron 38bf7978-8c97-4cc6-b1d4-288eebe0c8c9
-Replacing HYPOT neuron f5e760f9-308e-449d-bc4b-6376f55471dc
-Replacing HYPOT neuron 1ceb4a37-6ec4-4ad4-9f48-ab15af6f6ec8
-Replacing HYPOT neuron 6206db4f-152f-48ec-b903-600951060c6d
-Replacing HYPOT neuron 1ef95b91-efe9-4bae-90e2-da3a165a011c
-Replacing HYPOT neuron 4a10f402-73d0-49db-b9ce-6fb3a2855a75
-Replacing HYPOT neuron 1668a56c-5506-4976-ad08-131f518cf3ac
-Generation 1 score 0.4133057879513735 (avg: 0.4100) error 0.58648947305624 time 10m 24s 967ms
-Training 6761bac7 samples 1,269 of 2,131,338 0.1%( rate 10.0% ) error 0.632 time average: 47ms 297µs 84ns total: 1m 20ms
-Training 6761bac7 samples 2,703 of 2,131,338 0.1%( rate 10.0% ) error 0.594 time average: 44ms 420µs 273ns total: 2m 68ms
-Skipping discovery: insufficient time (1m remaining, 2m estimated)
-Fine tuning increased fitness by 3.778174767488096e-8 to 0.4133058257331212 adjusted 2 weights, 1 bias 
-Generation 2 score 0.4133058257331212 (avg: 0.4133) error 0.5864894252744928 time 2m 37s 63ms
-Training 6761bac7 samples 4,151 of 2,131,338 0.2%( rate 10.0% ) error 0.609 time average: 43ms 381µs 353ns total: 3m 76ms
-Training 6761bac7 samples 5,063 of 2,131,338 0.2%( rate 10.0% ) error 0.599 time average: 47ms 441µs 635ns total: 4m 197ms
-Training 6761bac7 timed out after 4m 197ms
-compactUnused hidden neuron e2e7ffb6 has no outward connections
-Training 6761bac7 caused a higher error of 0.599069177091239 from 0.58648947305624
-Training 6761bac7 completed after 4m 1s 12ms
-Training 6761bac7 compacted
-Generation 3 score 0.4133058257331212 (avg: 0.4133) error 0.5864894252744928 time 7m 11s 483ms
-Waiting for additional generation
-Compact 6761bac7 Score: 0.4131679635769548, Error: 0.58648947305624 -> 0.5866286374307108, 👿 -0.000139
-Trained 6761bac7 Score: 0.1960699872647426, Error: 0.58648947305624 -> 0.8037253337428685, 👿 -0.217
-Generation 4 score 0.4133058257331212 (avg: 0.3819) error 0.5864894252744928 time 4m 11s 533ms
-Evolution of 4 generations in 24m 25s, averaging 6m 6s 372ms
-[05:16:09] 📦 checkin-sample.sh on host GRQ-11
-From github.com:stSoftwareAU/GRQ-sampler
-   ad39750eb..dc825ae66  main       -> origin/main
-Updating ad39750eb..dc825ae66
-Fast-forward
- samples/Africa.json   | 17422 ++--------
- samples/GRQ-10-1.json | 85776 -----------------------------------------------
- samples/GRQ-11-1.json | 85776 -----------------------------------------------
- samples/GRQ-15-1.json |   126 +-
- samples/GRQ-19-1.json | 85760 -----------------------------------------------
- samples/GRQ-21-1.json | 85812 ------------------------------------------------
- 6 files changed, 2840 insertions(+), 357832 deletions(-)
- delete mode 100644 samples/GRQ-10-1.json
- delete mode 100644 samples/GRQ-11-1.json
- delete mode 100644 samples/GRQ-19-1.json
- delete mode 100644 samples/GRQ-21-1.json
-[05:16:13] ✅ Committing 🦠 GRQ-11 🎯, Score: 0.413306
-[main 55fad7569] 🦠 GRQ-11 🎯, Score: 0.413306, Neurons: 451 & Synapses: 15,973
- 1 file changed, 85814 insertions(+)
- create mode 100644 samples/GRQ-11-1.json
-To github.com:stSoftwareAU/GRQ-sampler.git
-   dc825ae66..55fad7569  main -> main
+   fc795936f..7bdb1e939  main       -> origin/main
+HEAD is now at 7bdb1e939 🦠 GRQ-10 🎯, Score: 0.413444, Neurons: 451 & Synapses: 15,977
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 08f89f18df REJECTED 13.25% -> 12.60% Delta -0.648
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 024a41ccae7 Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-tickers synced with remote (validation skipped)
+HEAD is now at 1fc2f15112b Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-topics synced with remote (validation skipped)
+HEAD is now at 842af7a Refresh of history on GRQ-11@2025-11-06
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-commodities synced with remote (validation skipped)
+HEAD is now at 3a3d927 Refresh of history on 2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-listing synced with remote (validation skipped)
+HEAD is now at 34be23db Insiders on GRQ-11@2025-03-08
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-insiders synced with remote (validation skipped)
+HEAD is now at d3cb677 Merge pull request #1 from stSoftwareAU/WIP
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-WorldUncertaintyIndex synced with remote (validation skipped)
+Duration: 9m 2s
+Location Training data { _: [] }
+Training data directory exists: .trainData-location_88 (use --force to regenerate)
+Checksum file is valid with      132 files.
+Running trainDataFX.sh...
+Already up to date.
+Starting FX... HEAD is now at 06c3852d Refresh of history for 2025-11-06 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+HEAD is now at 162692419 Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at dfff6bbb27b Refresh of history on GRQ-11@2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at 06c3852d Refresh of history for 2025-11-06 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+HEAD is now at e2a39feba GRQ-16 Improved location models (GRQ-16)
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at 2754c32496 GRQ-7 Improved Industry models (GRQ-7)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at 8357895a GRQ-7 Improved exchange models (GRQ-7)
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 19bf9336 Evolution score 0.4134 -> 0.4135 {diff 1} on GRQ-23
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+HEAD is now at 7bdb1e939 🦠 GRQ-10 🎯, Score: 0.413444, Neurons: 451 & Synapses: 15,977
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 08f89f18df REJECTED 13.25% -> 12.60% Delta -0.648
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 024a41ccae7 Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-tickers synced with remote (validation skipped)
+HEAD is now at 1fc2f15112b Refresh of Sentiments on GRQ-11@2025-10-25
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-topics synced with remote (validation skipped)
+HEAD is now at 842af7a Refresh of history on GRQ-11@2025-11-06
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-commodities synced with remote (validation skipped)
+HEAD is now at 3a3d927 Refresh of history on 2025-11-05
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-listing synced with remote (validation skipped)
+HEAD is now at 34be23db Insiders on GRQ-11@2025-03-08
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-insiders synced with remote (validation skipped)
+HEAD is now at d3cb677 Merge pull request #1 from stSoftwareAU/WIP
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-WorldUncertaintyIndex synced with remote (validation skipped)
+Duration: 9m 11s
+Generating FX training data...
+FX Training data { _: [] }
+Discovered 54 currency pairs: USDTHB, USDMXN, USDZAR, USDPHP, EURJPY, EURUSD, USDSGD, USDEGP, USDCHF, USDVND, USDKYD, CADJPY, USDPLN, AUDCAD, USDILS, USDCNY, USDARS, AUDEUR, AUDGBP, USDCAD, GBPUSD, USDTWD, USDAED, CADAUD, USDINR, USDGBP, USDEUR, USDHKD, AUDCNY, USDRUB, USDTRY, EURCNY, USDKRW, USDDKK, USDKZT, USDIDR, USDCOP, USDBRL, USDJPY, USDCRC, USDPEN, CADCNY, USDSEK, AUDJPY, USDMYR, USDAUD, AUDUSD, USDNZD, CADGBP, USDNOK, USDSAR, GBPCNY, CADEUR, USDCLP
+Training data directory exists: .trainData-fx_c_88 (use --force to regenerate)
+Checksum file is valid with      108 files.
+🔄 Rsync attempt 1 of 3: --include=* --exclude=checksum.sha256 . /Users/nigel/Training/trainData-fx_c_88/
+🔄 Rsync attempt 1 of 3: checksum.sha256 /Users/nigel/Training/trainData-fx_c_88/
+Data training task completed at Thu Nov  6 13:41:26 AEDT 2025
+All data training tasks completed successfully
 HEAD is now at 53fd08c5 Increase retries and adjust verbosity (#262)
 From github.com:stSoftwareAU/GRQ-health
-   aa2d337e..b93647e4  Develop    -> origin/Develop
-HEAD is now at b93647e4 Update health status for GRQ-10 at Thu Nov  6 05:13:32 AEDT 2025
+   28258d2d..b71d607e  Develop    -> origin/Develop
+HEAD is now at b71d607e Update health status for Mac-Ultra-M2 at Thu Nov  6 13:33:17 AEDT 2025
 Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
