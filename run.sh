@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.51"
+VERSION="1.0.52"
 
 # Parse command line arguments
 FORCE_UPDATE=false
