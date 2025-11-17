@@ -1,11 +1,13 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.51";
+const VERSION = "1.0.55";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
 
 let currentFilter = 'all';
 let allHosts = [];
+let repoHealthData = { repos: [], generated_at: null };
+let lastRepoRefresh = 0;
 
 // Initialize PWA functionality when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -37,6 +39,101 @@ function formatTimestamp(timestamp) {
     if (diffHours < 1) return 'Just now';
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${Math.floor(diffHours / 24)}d ago`;
+}
+
+function getRepoStats() {
+    if (!repoHealthData || !Array.isArray(repoHealthData.repos)) {
+        return { total: 0, healthy: 0, warning: 0, error: 0 };
+    }
+    return repoHealthData.repos.reduce((acc, repo) => {
+        acc.total += 1;
+        if (repo.status === 'warning') acc.warning += 1;
+        else if (repo.status === 'error') acc.error += 1;
+        else acc.healthy += 1;
+        return acc;
+    }, { total: 0, healthy: 0, warning: 0, error: 0 });
+}
+
+async function fetchRepoHealth(timestamp = Date.now(), force = false) {
+    const now = Date.now();
+    if (!force && now - lastRepoRefresh < 5 * 60 * 1000) {
+        return;
+    }
+    try {
+        const response = await fetch(`./repos.json?t=${timestamp}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        repoHealthData = await response.json();
+        lastRepoRefresh = now;
+        renderRepoHealth();
+    } catch (error) {
+        console.warn('Unable to load repo health data:', error);
+        renderRepoHealth('Unable to load repo health data');
+    }
+}
+
+function renderRepoHealth(errorMessage = null) {
+    const section = document.getElementById('repoHealthSection');
+    if (!section) {
+        return;
+    }
+    const listElement = document.getElementById('repoHealthList');
+    const updatedAtElement = document.getElementById('repoUpdatedAt');
+    const healthyCountElement = document.getElementById('repoHealthyCount');
+    const warningCountElement = document.getElementById('repoWarningCount');
+    const errorCountElement = document.getElementById('repoErrorCount');
+    const repos = repoHealthData?.repos ?? [];
+
+    if (!repos.length && !errorMessage) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+
+    const repoStats = getRepoStats();
+    healthyCountElement.textContent = `${repoStats.healthy} good`;
+    warningCountElement.textContent = `${repoStats.warning} warning`;
+    errorCountElement.textContent = `${repoStats.error} error`;
+
+    if (repoHealthData.generated_at) {
+        updatedAtElement.textContent = `Updated ${formatTimestamp(repoHealthData.generated_at)}`;
+    } else if (errorMessage) {
+        updatedAtElement.textContent = errorMessage;
+    } else {
+        updatedAtElement.textContent = 'Awaiting data...';
+    }
+
+    if (!repos.length) {
+        listElement.innerHTML = `<p class="text-muted mb-0">${errorMessage || 'No market feed repos configured.'}</p>`;
+        return;
+    }
+
+    const statusBadge = (status) => {
+        if (status === 'error') return 'badge bg-danger';
+        if (status === 'warning') return 'badge bg-warning text-dark';
+        return 'badge bg-success';
+    };
+
+    const repoItemsHtml = repos.map((repo) => `
+        <div class="repo-health-item repo-${repo.status}">
+            <div class="repo-meta">
+                <div class="repo-name">${repo.name}</div>
+                <div class="repo-slug">${repo.repo}</div>
+            </div>
+            <div class="text-end">
+                <span class="${statusBadge(repo.status)} repo-status-badge">${repo.status}</span>
+                <div class="repo-time">Last commit ${formatTimestamp(repo.last_commit_ts)}</div>
+            </div>
+        </div>
+    `).join('');
+
+    const alertHtml = errorMessage
+        ? `<div class="alert alert-warning mb-3">${errorMessage}</div>`
+        : '';
+
+    listElement.innerHTML = `${alertHtml}${repoItemsHtml}`;
 }
 
 // Offline indicator functionality
@@ -540,6 +637,9 @@ function updateStats(hosts) {
         critical: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical').length,
         mia: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'mia').length
     };
+    const repoStats = getRepoStats();
+    const hasRepoError = repoStats.error > 0;
+    const hasRepoWarning = repoStats.warning > 0;
 
     document.getElementById('totalHosts').textContent = stats.total;
     document.getElementById('healthyHosts').textContent = stats.healthy;
@@ -548,7 +648,7 @@ function updateStats(hosts) {
 
     // Update page title and header based on overall health
     // Only count critical devices as unhealthy - MIA devices are just missing, not unhealthy
-    const isHealthy = stats.critical === 0;
+    const isHealthy = stats.critical === 0 && !hasRepoError;
     const healthStatus = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
     document.title = healthStatus;
     
@@ -567,12 +667,18 @@ function updateStats(hosts) {
     // Update the header subtitle
     const headerSubtitle = document.querySelector('.header p');
     if (headerSubtitle) {
-        if (stats.critical > 0) {
+        if (stats.critical > 0 && hasRepoError) {
+            headerSubtitle.textContent = "Hosts and market feed tasks need attention";
+        } else if (stats.critical > 0) {
             headerSubtitle.textContent = "Some hosts not responding";
+        } else if (hasRepoError) {
+            headerSubtitle.textContent = "Market feed tasks are stale";
         } else if (stats.mia > 0) {
             headerSubtitle.textContent = `All hosts responding normally (${stats.mia} mobile device${stats.mia > 1 ? 's' : ''} off the grid)`;
+        } else if (hasRepoWarning) {
+            headerSubtitle.textContent = "Market feed tasks require attention";
         } else {
-            headerSubtitle.textContent = "All hosts responding normally";
+            headerSubtitle.textContent = "All hosts and feed tasks responding normally";
         }
     }
 
@@ -920,6 +1026,7 @@ async function loadData() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
+        await fetchRepoHealth(timestamp, true);
         
         // Convert to array of [hostname, data] pairs
         allHosts = Object.entries(data);
@@ -957,6 +1064,7 @@ async function loadDataIncremental() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
+        await fetchRepoHealth(timestamp);
         
         // Convert to array of [hostname, data] pairs
         const newHosts = Object.entries(data);
