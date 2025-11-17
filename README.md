@@ -34,6 +34,17 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Permission errors**: "Permission denied", "access denied", "EACCES"
 - **All exceptions trigger health updates** regardless of heartbeat timing
 
+#### Market Feed Repository Freshness:
+- **Config**: `config/repo_feeds.json` lists every background repo to track with its git URL and short display name (usually the `GRQ-` prefix removed for readability)
+- **Generator**: `helpers/repo_feed_health.ts` (run with Deno) resolves the latest commit timestamp on the default branch for each configured repo and writes `docs/repos.json`
+- **Output**: `docs/repos.json` contains an array of records with the repo `name`, canonical `repo` slug, `last_commit_ts` (seconds since epoch) and derived `status`
+- **Thresholds**: 
+  - `healthy` when the last commit is within 36 hours
+  - `warning` when the last commit is older than 36 hours
+  - `error` when the last commit is older than 72 hours
+- **Deploy behaviour**: The GitHub Actions workflow logs `::warning`/`::error` annotations for stale repos but always continues deployment so Pages can surface the issue
+- **Visualisation**: `docs/dashboard.js` and `docs/simple.html` fetch `docs/repos.json` and show the warning/error counts alongside the standard host health metrics
+
 #### Version Management:
 - **Primary version**: Stored in `run.sh` VERSION variable
 - **Auto-sync**: `./update_version.sh` updates all HTML/JS files
@@ -150,6 +161,30 @@ The system uses a simple structure where each hostname is a key:
   }
 }
 ```
+
+### Repo Freshness JSON (`docs/repos.json`)
+
+```json
+{
+  "generated_at": 1752806400,
+  "repos": [
+    {
+      "name": "FX",
+      "repo": "stSoftwareAU/GRQ-FX",
+      "last_commit_ts": 1752806400,
+      "status": "healthy"
+    },
+    {
+      "name": "shareprices2025Q3",
+      "repo": "stSoftwareAU/GRQ-shareprices2025Q3",
+      "last_commit_ts": 1752720000,
+      "status": "warning"
+    }
+  ]
+}
+```
+
+The dashboard highlights entries more than 36 hours old as warnings and entries more than 72 hours old as errors.
 
 ### Enhanced Health Status Classification
 

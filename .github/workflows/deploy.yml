@@ -23,6 +23,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      
+      - name: Run repo feed tests
+        run: deno test --allow-read --allow-write --allow-env helpers/repo_feed_health_test.ts
+      
+      - name: Lint repo feed scripts
+        run: deno lint helpers/repo_feed_health.ts helpers/repo_feed_health_test.ts
+      
+      - name: Generate repo freshness data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: deno run --allow-net=api.github.com --allow-read=config --allow-write=docs helpers/repo_feed_health.ts
+        
       - name: Setup Pages
         uses: actions/configure-pages@v4
         

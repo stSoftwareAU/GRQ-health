@@ -26,23 +26,44 @@
             color: #6c757d;
             margin-top: 20px;
         }
+        .repo-summary {
+            margin-top: 30px;
+            font-size: 16px;
+            color: #343a40;
+        }
+        .repo-summary small {
+            display: block;
+            color: #6c757d;
+            margin-top: 4px;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
     <h1>GRQ Health Status</h1>
     <div id="status" class="status loading">Loading...</div>
     <div class="timestamp" id="timestamp"></div>
+    <div class="repo-summary" id="repoSummary"></div>
 
     <script>
         async function checkHealth() {
             try {
                 // Add timestamp to force fresh fetch and bypass cache
                 const timestamp = new Date().getTime();
-                const response = await fetch(`./index.json?t=${timestamp}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                const [hostsResponse, repoResponse] = await Promise.all([
+                    fetch(`./index.json?t=${timestamp}`),
+                    fetch(`./repos.json?t=${timestamp}`)
+                ]);
+                if (!hostsResponse.ok) {
+                    throw new Error(`HTTP error! status: ${hostsResponse.status}`);
                 }
-                const data = await response.json();
+                const data = await hostsResponse.json();
+                let repoData = { repos: [], generated_at: null };
+                if (repoResponse.ok) {
+                    repoData = await repoResponse.json();
+                } else {
+                    console.warn('Repo health data unavailable', repoResponse.status);
+                }
                 
                 // Convert to array of [hostname, data] pairs
                 const hosts = Object.entries(data);
@@ -70,15 +91,18 @@
                             break;
                     }
                 });
+                const repoStats = summariseRepoStats(repoData.repos || []);
+                const hasRepoError = repoStats.error > 0;
+                const hasRepoWarning = repoStats.warning > 0;
                 
                 // Determine overall status
                 let overallStatus = 'OK';
                 let statusClass = 'ok';
                 
-                if (critical > 0) {
+                if (critical > 0 || hasRepoError) {
                     overallStatus = 'ERROR';
                     statusClass = 'error';
-                } else if (warning > 0) {
+                } else if (warning > 0 || hasRepoWarning) {
                     overallStatus = 'WARNING';
                     statusClass = 'warning';
                 }
@@ -92,6 +116,8 @@
                 document.getElementById('timestamp').textContent = 
                     `Last updated: ${new Date().toLocaleString()}`;
                 
+                updateRepoSummary(repoStats, repoData.generated_at);
+                
             } catch (error) {
                 console.error('Health check failed:', error);
                 const statusElement = document.getElementById('status');
@@ -99,6 +125,7 @@
                 statusElement.className = 'status error';
                 document.getElementById('timestamp').textContent = 
                     `Error: ${error.message}`;
+                document.getElementById('repoSummary').textContent = 'Market feed status unavailable';
             }
         }
         
@@ -188,6 +215,65 @@
             }
             
             return 'healthy';
+        }
+
+        function summariseRepoStats(repos) {
+            return (repos || []).reduce((acc, repo) => {
+                acc.total += 1;
+                if (repo.status === 'error') {
+                    acc.error += 1;
+                    acc.errorNames.push(repo.name);
+                } else if (repo.status === 'warning') {
+                    acc.warning += 1;
+                    acc.warningNames.push(repo.name);
+                } else {
+                    acc.healthy += 1;
+                }
+                return acc;
+            }, { total: 0, healthy: 0, warning: 0, error: 0, warningNames: [], errorNames: [] });
+        }
+
+        function updateRepoSummary(repoStats, generatedAt) {
+            const summaryElement = document.getElementById('repoSummary');
+            if (!summaryElement) return;
+
+            if (repoStats.total === 0) {
+                summaryElement.textContent = 'Market feeds: no repos configured';
+                return;
+            }
+
+            const parts = [`${repoStats.healthy} good`];
+            if (repoStats.warning > 0) {
+                const warningNames = repoStats.warningNames.join(', ');
+                parts.push(`${repoStats.warning} warning${warningNames ? ` (${warningNames})` : ''}`);
+            }
+            if (repoStats.error > 0) {
+                const errorNames = repoStats.errorNames.join(', ');
+                parts.push(`${repoStats.error} error${errorNames ? ` (${errorNames})` : ''}`);
+            }
+
+            summaryElement.innerHTML = `
+                Market feeds: ${parts.join(' • ')}
+                ${generatedAt ? `<small>Repo data updated ${formatRelativeTime(generatedAt)}</small>` : ''}
+            `;
+        }
+
+        function formatRelativeTime(timestamp) {
+            if (!timestamp) {
+                return 'recently';
+            }
+            const now = Date.now();
+            const diffMs = now - (timestamp * 1000);
+            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            if (diffMinutes < 60) {
+                return `${diffMinutes}m ago`;
+            }
+            const diffHours = Math.floor(diffMinutes / 60);
+            if (diffHours < 24) {
+                return `${diffHours}h ago`;
+            }
+            const diffDays = Math.floor(diffHours / 24);
+            return `${diffDays}d ago`;
         }
         
         // Check health on page load
