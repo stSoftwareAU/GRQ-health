@@ -13,10 +13,12 @@ export type RepoStatus = "healthy" | "warning" | "error";
 
 export interface RepoConfigEntry {
   name: string;
-  repo: string;
+  repo?: string;
+  url?: string;
 }
 
 export interface RepoHealthEntry extends RepoConfigEntry {
+  repo: string;
   last_commit_ts: number;
   status: RepoStatus;
   error_message?: string;
@@ -51,7 +53,7 @@ export function classifyStatus(
 }
 
 export function createRepoEntry(
-  config: RepoConfigEntry,
+  config: RepoConfigEntry & { repo: string },
   lastCommitTs: number,
   nowTs = Math.floor(Date.now() / 1000),
 ): RepoHealthEntry {
@@ -113,21 +115,23 @@ export async function generateRepoHealth(options: GenerateOptions = {}) {
   const entries: RepoHealthEntry[] = [];
 
   for (const repoConfig of parsedConfig.repos as RepoConfigEntry[]) {
-    if (!repoConfig?.repo || !repoConfig?.name) {
-      throw new Error("Each repo config entry must include name and repo");
+    if (!repoConfig?.name) {
+      throw new Error("Each repo config entry must include a name");
     }
+    const repoSlug = deriveRepoSlug(repoConfig);
     let entry: RepoHealthEntry;
     try {
       const lastCommitTs = await fetchLatestCommitTs(
-        repoConfig.repo,
+        repoSlug,
         fetchImpl,
         token,
       );
-      entry = createRepoEntry(repoConfig, lastCommitTs, nowTs);
+      entry = createRepoEntry({ ...repoConfig, repo: repoSlug }, lastCommitTs, nowTs);
     } catch (error) {
       const fallbackTs = nowTs - (HOURS_ERROR * 3600 + 60);
       entry = {
         ...repoConfig,
+        repo: repoSlug,
         last_commit_ts: fallbackTs,
         status: "error",
         error_message: error instanceof Error ? error.message : String(error),
@@ -160,6 +164,77 @@ function annotateStatus(entry: RepoHealthEntry) {
   } else {
     console.log(`Repo feed healthy: ${details}`);
   }
+}
+
+export function deriveRepoSlug(config: RepoConfigEntry): string {
+  if (config.repo && config.repo.trim().length > 0) {
+    return sanitizeSlug(config.repo.trim());
+  }
+  if (config.url) {
+    const slug = extractSlugFromUrl(config.url);
+    if (slug) {
+      return slug;
+    }
+  }
+  throw new Error(
+    `Repo config "${config.name}" must specify either repo or a valid GitHub url`,
+  );
+}
+
+function sanitizeSlug(slug: string): string {
+  const trimmed = slug.replace(/\.git$/i, "");
+  if (trimmed.split("/").length !== 2) {
+    throw new Error(`Invalid repo slug: ${slug}`);
+  }
+  return trimmed;
+}
+
+function extractSlugFromUrl(rawUrl: string): string | null {
+  const value = rawUrl.trim();
+  if (!value) {
+    return null;
+  }
+  const httpsMatch = matchHttpsUrl(value);
+  if (httpsMatch) {
+    return httpsMatch;
+  }
+  const sshMatch = matchSshUrl(value);
+  if (sshMatch) {
+    return sshMatch;
+  }
+  if (value.includes("/")) {
+    // fallback for already formatted owner/repo values possibly missing schema
+    return sanitizeSlug(value);
+  }
+  return null;
+}
+
+function matchHttpsUrl(value: string): string | null {
+  if (!value.startsWith("http://") && !value.startsWith("https://")) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (!url.hostname.endsWith("github.com")) {
+      return null;
+    }
+    const pathParts = url.pathname.replace(/^\/|\/$/g, "").split("/");
+    if (pathParts.length >= 2) {
+      return sanitizeSlug(`${pathParts[0]}/${pathParts[1]}`);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function matchSshUrl(value: string): string | null {
+  const sshPattern = /^git@[^:]+:([^/]+)\/(.+)$/;
+  const match = value.match(sshPattern);
+  if (!match) {
+    return null;
+  }
+  return sanitizeSlug(`${match[1]}/${match[2]}`);
 }
 
 if (import.meta.main) {

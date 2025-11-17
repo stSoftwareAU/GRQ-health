@@ -4,6 +4,7 @@ import { assertRejects } from "https://deno.land/std/assert/assert_rejects.ts";
 import {
   classifyStatus,
   createRepoEntry,
+  deriveRepoSlug,
   generateRepoHealth,
   HOURS_ERROR,
   HOURS_WARNING,
@@ -50,8 +51,8 @@ Deno.test("generateRepoHealth writes docs and emits statuses", async () => {
 
   const config = {
     repos: [
-      { name: "FX", repo: "stSoftwareAU/GRQ-FX" },
-      { name: "commodities", repo: "stSoftwareAU/GRQ-commodities" },
+      { name: "FX", url: "https://github.com/stSoftwareAU/GRQ-FX" },
+      { name: "commodities", url: "git@github.com:stSoftwareAU/GRQ-commodities.git" },
     ],
   };
   await Deno.writeTextFile(configPath, JSON.stringify(config, null, 2));
@@ -106,7 +107,7 @@ Deno.test("generateRepoHealth tolerates fetch failures without crashing", async 
   const outputPath = `${tempDir}/repos-out.json`;
   await Deno.writeTextFile(
     configPath,
-    JSON.stringify({ repos: [{ name: "FX", repo: "stSoftwareAU/GRQ-FX" }] }),
+    JSON.stringify({ repos: [{ name: "FX", url: "https://github.com/stSoftwareAU/GRQ-FX" }] }),
   );
 
   const failingFetch: typeof fetch = () =>
@@ -138,6 +139,21 @@ Deno.test("generateRepoHealth fails when config missing repos array", async () =
       outputPath: `${tempDir}/out.json`,
       fetchImpl: () => Promise.resolve(new Response("[]", { status: 200 })),
     })
+  );
+});
+
+Deno.test("deriveRepoSlug parses repo, https and ssh URLs", () => {
+  assertEquals(
+    deriveRepoSlug({ name: "slug", repo: "stSoftwareAU/RepoOne" }),
+    "stSoftwareAU/RepoOne",
+  );
+  assertEquals(
+    deriveRepoSlug({ name: "https", url: "https://github.com/stSoftwareAU/RepoTwo" }),
+    "stSoftwareAU/RepoTwo",
+  );
+  assertEquals(
+    deriveRepoSlug({ name: "ssh", url: "git@github.com:stSoftwareAU/RepoThree.git" }),
+    "stSoftwareAU/RepoThree",
   );
 });
 
