@@ -37,7 +37,7 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 #### Market Feed Repository Freshness:
 - **Config**: `config/repo_feeds.json` lists every background repo to track with its git URL and short display name (usually the `GRQ-` prefix removed for readability)
 - **Generator**: `helpers/repo_feed_health.ts` (run with Deno) resolves the latest commit timestamp on the default branch for each configured repo and writes `docs/repos.json`
-- **Output**: `docs/repos.json` contains an array of records with the repo `name`, canonical `repo` slug, `last_commit_ts` (seconds since epoch) and derived `status`
+- **Output**: `docs/repos.json` contains an array of records with the repo `name`, canonical `repo` slug, `last_commit_ts` (seconds since epoch), derived `status`, and optional `error_message` when the GitHub API could not be queried
 - **Thresholds**: 
   - `healthy` when the last commit is within 36 hours
   - `warning` when the last commit is older than 36 hours
@@ -179,12 +179,19 @@ The system uses a simple structure where each hostname is a key:
       "repo": "stSoftwareAU/GRQ-shareprices2025Q3",
       "last_commit_ts": 1752720000,
       "status": "warning"
+    },
+    {
+      "name": "commodities",
+      "repo": "stSoftwareAU/GRQ-commodities",
+      "last_commit_ts": 1752600000,
+      "status": "error",
+      "error_message": "Failed to fetch commits (404 Not Found)"
     }
   ]
 }
 ```
 
-The dashboard highlights entries more than 36 hours old as warnings and entries more than 72 hours old as errors.
+The dashboard highlights entries more than 36 hours old as warnings and entries more than 72 hours old as errors. When the GitHub API cannot be reached, the tool records the failure (with `error_message`) but keeps deployment running so the dashboard can report the outage.
 
 ### Enhanced Health Status Classification
 

@@ -223,6 +223,9 @@
                 if (repo.status === 'error') {
                     acc.error += 1;
                     acc.errorNames.push(repo.name);
+                    if (repo.error_message) {
+                        acc.errorMessages.push(`${repo.name}: ${repo.error_message}`);
+                    }
                 } else if (repo.status === 'warning') {
                     acc.warning += 1;
                     acc.warningNames.push(repo.name);
@@ -230,7 +233,7 @@
                     acc.healthy += 1;
                 }
                 return acc;
-            }, { total: 0, healthy: 0, warning: 0, error: 0, warningNames: [], errorNames: [] });
+            }, { total: 0, healthy: 0, warning: 0, error: 0, warningNames: [], errorNames: [], errorMessages: [] });
         }
 
         function updateRepoSummary(repoStats, generatedAt) {
@@ -255,11 +258,12 @@
             summaryElement.innerHTML = `
                 Market feeds: ${parts.join(' • ')}
                 ${generatedAt ? `<small>Repo data updated ${formatRelativeTime(generatedAt)}</small>` : ''}
+                ${repoStats.errorMessages.length ? `<small>Issues: ${repoStats.errorMessages.join(' • ')}</small>` : ''}
             `;
         }
 
         function formatRelativeTime(timestamp) {
-            if (!timestamp) {
+            if (!timestamp || Number.isNaN(timestamp) || timestamp <= 0) {
                 return 'recently';
             }
             const now = Date.now();
