@@ -32,6 +32,9 @@ function formatUptime(seconds) {
 }
 
 function formatTimestamp(timestamp) {
+    if (!timestamp || Number.isNaN(timestamp) || timestamp <= 0) {
+        return 'Unknown';
+    }
     const date = new Date(timestamp * 1000);
     const now = new Date();
     const diffMs = now - date;
@@ -124,7 +127,8 @@ function renderRepoHealth(errorMessage = null) {
             </div>
             <div class="text-end">
                 <span class="${statusBadge(repo.status)} repo-status-badge">${repo.status}</span>
-                <div class="repo-time">Last commit ${formatTimestamp(repo.last_commit_ts)}</div>
+                <div class="repo-time">${repo.last_commit_ts > 0 ? `Last commit ${formatTimestamp(repo.last_commit_ts)}` : 'Commit time unavailable'}</div>
+                ${repo.error_message ? `<div class="repo-error text-danger"><small>${repo.error_message}</small></div>` : ''}
             </div>
         </div>
     `).join('');

@@ -100,6 +100,33 @@ Deno.test("generateRepoHealth writes docs and emits statuses", async () => {
   assertEquals(hasError, true);
 });
 
+Deno.test("generateRepoHealth tolerates fetch failures without crashing", async () => {
+  const tempDir = await Deno.makeTempDir();
+  const configPath = `${tempDir}/repos.json`;
+  const outputPath = `${tempDir}/repos-out.json`;
+  await Deno.writeTextFile(
+    configPath,
+    JSON.stringify({ repos: [{ name: "FX", repo: "stSoftwareAU/GRQ-FX" }] }),
+  );
+
+  const failingFetch: typeof fetch = () =>
+    Promise.resolve(new Response("{}", { status: 404 }));
+
+  await generateRepoHealth({
+    configPath,
+    outputPath,
+    fetchImpl: failingFetch,
+    nowTs: 1_700_000_000,
+  });
+
+  const output = JSON.parse(await Deno.readTextFile(outputPath));
+  assertEquals(output.repos.length, 1);
+  const entry = output.repos[0];
+  assertEquals(entry.status, "error");
+  assertEquals(typeof entry.error_message, "string");
+  assertEquals(entry.error_message.includes("Failed to fetch commits"), true);
+});
+
 Deno.test("generateRepoHealth fails when config missing repos array", async () => {
   const tempDir = await Deno.makeTempDir();
   const badConfigPath = `${tempDir}/bad.json`;

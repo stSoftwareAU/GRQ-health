@@ -19,6 +19,7 @@ export interface RepoConfigEntry {
 export interface RepoHealthEntry extends RepoConfigEntry {
   last_commit_ts: number;
   status: RepoStatus;
+  error_message?: string;
 }
 
 interface GenerateOptions {
@@ -115,12 +116,23 @@ export async function generateRepoHealth(options: GenerateOptions = {}) {
     if (!repoConfig?.repo || !repoConfig?.name) {
       throw new Error("Each repo config entry must include name and repo");
     }
-    const lastCommitTs = await fetchLatestCommitTs(
-      repoConfig.repo,
-      fetchImpl,
-      token,
-    );
-    const entry = createRepoEntry(repoConfig, lastCommitTs, nowTs);
+    let entry: RepoHealthEntry;
+    try {
+      const lastCommitTs = await fetchLatestCommitTs(
+        repoConfig.repo,
+        fetchImpl,
+        token,
+      );
+      entry = createRepoEntry(repoConfig, lastCommitTs, nowTs);
+    } catch (error) {
+      const fallbackTs = nowTs - (HOURS_ERROR * 3600 + 60);
+      entry = {
+        ...repoConfig,
+        last_commit_ts: fallbackTs,
+        status: "error",
+        error_message: error instanceof Error ? error.message : String(error),
+      };
+    }
     entries.push(entry);
     annotateStatus(entry);
     options.onStatus?.(entry);
@@ -135,14 +147,18 @@ export async function generateRepoHealth(options: GenerateOptions = {}) {
 }
 
 function annotateStatus(entry: RepoHealthEntry) {
-  const iso = new Date(entry.last_commit_ts * 1000).toISOString();
-  const message = `${entry.name} (${entry.repo}) last commit ${iso}`;
+  const iso = entry.last_commit_ts > 0
+    ? new Date(entry.last_commit_ts * 1000).toISOString()
+    : "Unknown";
+  const details = entry.error_message
+    ? `${entry.name} (${entry.repo}) last commit ${iso} – ${entry.error_message}`
+    : `${entry.name} (${entry.repo}) last commit ${iso}`;
   if (entry.status === "error") {
-    console.error(`::error title=Repo feed stale::${message}`);
+    console.error(`::error title=Repo feed stale::${details}`);
   } else if (entry.status === "warning") {
-    console.warn(`::warning title=Repo feed warning::${message}`);
+    console.warn(`::warning title=Repo feed warning::${details}`);
   } else {
-    console.log(`Repo feed healthy: ${message}`);
+    console.log(`Repo feed healthy: ${details}`);
   }
 }
 
