@@ -35,7 +35,7 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **All exceptions trigger health updates** regardless of heartbeat timing
 
 #### Market Feed Repository Freshness:
-- **Config**: `config/repo_feeds.json` lists every background repo to track with its git URL and short display name (usually the `GRQ-` prefix removed for readability)
+- **Config**: `config/repo_feeds.json` lists every background repo to track with a friendly `name` plus either the canonical `owner/repo` slug or a full GitHub `url` (https or SSH). The generator automatically extracts the slug from the URL formats you provided.
 - **Generator**: `helpers/repo_feed_health.ts` (run with Deno 2) resolves the latest commit timestamp on the default branch for each configured repo and writes `docs/repos.json`. Always run the script with `--allow-env --allow-net=api.github.com --allow-read=config --allow-write=docs`.
 - **Output**: `docs/repos.json` contains an array of records with the repo `name`, canonical `repo` slug, `last_commit_ts` (seconds since epoch), derived `status`, and optional `error_message` when the GitHub API could not be queried
 - **Thresholds**: 
