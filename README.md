@@ -35,16 +35,26 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **All exceptions trigger health updates** regardless of heartbeat timing
 
 #### Market Feed Repository Freshness:
-- **Config**: `config/repo_feeds.json` lists every background repo to track with a friendly `name` plus either the canonical `owner/repo` slug or a full GitHub `url` (https or SSH). The generator automatically extracts the slug from the URL formats you provided.
-- **Auth**: Create a classic PAT (fine-grained is OK) with at least **read-only access** to the upstream data repos and store it as `REPO_FEED_TOKEN` in the repository secrets. This token is only used to call the GitHub API and prevents 404 responses from private repos. Locally you can export `REPO_FEED_TOKEN` before running the script; CI falls back to the built-in `GITHUB_TOKEN` if no secret is provided (which only works for public repos).
-- **Generator**: `helpers/repo_feed_health.ts` (run with Deno 2) resolves the latest commit timestamp on the default branch for each configured repo and writes `docs/repos.json`. Always run the script with `--allow-env --allow-net=api.github.com --allow-read=config --allow-write=docs`.
-- **Output**: `docs/repos.json` contains an array of records with the repo `name`, canonical `repo` slug, `last_commit_ts` (seconds since epoch), derived `status`, and optional `error_message` when the GitHub API could not be queried
-- **Thresholds**: 
-  - `healthy` when the last commit is within 36 hours
-  - `warning` when the last commit is older than 36 hours
-  - `error` when the last commit is older than 72 hours
-- **Deploy behaviour**: The GitHub Actions workflow logs `::warning`/`::error` annotations for stale repos but always continues deployment so Pages can surface the issue
-- **Visualisation**: `docs/dashboard.js` and `docs/simple.html` fetch `docs/repos.json` and show the warning/error counts alongside the standard host health metrics
+- **Manual updates**: Each background task updates `docs/repos.json` immediately after it finishes, recording its latest commit/publish timestamp.
+- **Helper script**: Use `helpers/update_repo_timestamp.sh` to update (or create) the entry for a service.
+  ```bash
+  # Record the current run for the dividends service
+  ./helpers/update_repo_timestamp.sh --name "dividends"
+
+  # Back-fill with an explicit unix timestamp
+  ./helpers/update_repo_timestamp.sh --name "FX" --timestamp 1752806400
+  ```
+- **Output**: `docs/repos.json` keeps a simple list of objects with `name` and `last_commit_ts`. Example:
+  ```json
+  {
+    "generated_at": 1752806400,
+    "repos": [
+      { "name": "dividends", "last_commit_ts": 1752806400 },
+      { "name": "FX", "last_commit_ts": 1752720000 }
+    ]
+  }
+  ```
+- **Visualisation**: `docs/dashboard.js` and `docs/simple.html` fetch `docs/repos.json` and classify warning/error states (36h/72h thresholds) entirely on the client. The helper script intentionally does no health scoring.
 
 #### Version Management:
 - **Primary version**: Stored in `run.sh` VERSION variable
