@@ -104,7 +104,9 @@ export async function generateRepoHealth(options: GenerateOptions = {}) {
     new URL("../docs/repos.json", import.meta.url).pathname;
   const fetchImpl = options.fetchImpl ?? fetch;
   const nowTs = options.nowTs ?? Math.floor(Date.now() / 1000);
-  const token = options.token ?? Deno.env.get("GITHUB_TOKEN");
+  const token = options.token ??
+    Deno.env.get("REPO_FEED_TOKEN") ??
+    Deno.env.get("GITHUB_TOKEN");
 
   const rawConfig = await Deno.readTextFile(configPath);
   const parsedConfig = JSON.parse(rawConfig);
