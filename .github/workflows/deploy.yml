@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main, Develop ]
+    branches: [ Develop ]
     paths:
       - 'docs/**'
   workflow_dispatch:
@@ -22,23 +22,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: v2.x
-      
-      - name: Run repo feed tests
-        run: deno test --allow-read --allow-write --allow-env helpers/repo_feed_health_test.ts
-      
-      - name: Lint repo feed scripts
-        run: deno lint helpers/repo_feed_health.ts helpers/repo_feed_health_test.ts
-      
-      - name: Generate repo freshness data
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REPO_FEED_TOKEN: ${{ secrets.REPO_FEED_TOKEN }}
-        run: deno run --allow-env --allow-net=api.github.com --allow-read=config --allow-write=docs helpers/repo_feed_health.ts
         
       - name: Setup Pages
         uses: actions/configure-pages@v4
