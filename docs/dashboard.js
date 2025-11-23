@@ -6,7 +6,7 @@ document.title = `GRQ Health Dashboard v${VERSION}`;
 
 let currentFilter = 'all';
 let allHosts = [];
-let repoHealthData = { repos: [], generated_at: null };
+let repoHealthData = { repos: [] };
 let lastRepoRefresh = 0;
 
 // Initialize PWA functionality when DOM is loaded
@@ -44,14 +44,34 @@ function formatTimestamp(timestamp) {
     return `${Math.floor(diffHours / 24)}d ago`;
 }
 
+function getRepoStatus(repo) {
+    // Calculate status based on last_commit_ts
+    // ERROR if > 48 hours ago, WARN if > 24 hours ago, else OK
+    if (!repo.last_commit_ts || repo.last_commit_ts <= 0) {
+        return 'error'; // No timestamp means error
+    }
+    
+    const now = Math.floor(Date.now() / 1000);
+    const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
+    
+    if (hoursSinceCommit > 48) {
+        return 'error';
+    } else if (hoursSinceCommit > 24) {
+        return 'warning';
+    } else {
+        return 'healthy';
+    }
+}
+
 function getRepoStats() {
     if (!repoHealthData || !Array.isArray(repoHealthData.repos)) {
         return { total: 0, healthy: 0, warning: 0, error: 0 };
     }
     return repoHealthData.repos.reduce((acc, repo) => {
         acc.total += 1;
-        if (repo.status === 'warning') acc.warning += 1;
-        else if (repo.status === 'error') acc.error += 1;
+        const status = getRepoStatus(repo);
+        if (status === 'warning') acc.warning += 1;
+        else if (status === 'error') acc.error += 1;
         else acc.healthy += 1;
         return acc;
     }, { total: 0, healthy: 0, warning: 0, error: 0 });
@@ -100,8 +120,14 @@ function renderRepoHealth(errorMessage = null) {
     warningCountElement.textContent = `${repoStats.warning} warning`;
     errorCountElement.textContent = `${repoStats.error} error`;
 
-    if (repoHealthData.generated_at) {
-        updatedAtElement.textContent = `Updated ${formatTimestamp(repoHealthData.generated_at)}`;
+    // Calculate last update from most recent last_commit_ts
+    if (repos.length > 0) {
+        const mostRecentTs = Math.max(...repos.map(r => r.last_commit_ts || 0));
+        if (mostRecentTs > 0) {
+            updatedAtElement.textContent = `Updated ${formatTimestamp(mostRecentTs)}`;
+        } else {
+            updatedAtElement.textContent = 'Awaiting data...';
+        }
     } else if (errorMessage) {
         updatedAtElement.textContent = errorMessage;
     } else {
@@ -119,19 +145,23 @@ function renderRepoHealth(errorMessage = null) {
         return 'badge bg-success';
     };
 
-    const repoItemsHtml = repos.map((repo) => `
-        <div class="repo-health-item repo-${repo.status}">
+    const repoItemsHtml = repos.map((repo) => {
+        // Calculate status from last_commit_ts
+        const status = getRepoStatus(repo);
+        return `
+        <div class="repo-health-item repo-${status}">
             <div class="repo-meta">
                 <div class="repo-name">${repo.name}</div>
-                <div class="repo-slug">${repo.repo}</div>
+                <div class="repo-slug">${repo.repo || ''}</div>
             </div>
             <div class="text-end">
-                <span class="${statusBadge(repo.status)} repo-status-badge">${repo.status}</span>
+                <span class="${statusBadge(status)} repo-status-badge">${status}</span>
                 <div class="repo-time">${repo.last_commit_ts > 0 ? `Last commit ${formatTimestamp(repo.last_commit_ts)}` : 'Commit time unavailable'}</div>
                 ${repo.error_message ? `<div class="repo-error text-danger"><small>${repo.error_message}</small></div>` : ''}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     const alertHtml = errorMessage
         ? `<div class="alert alert-warning mb-3">${errorMessage}</div>`
