@@ -47,7 +47,6 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Output**: `docs/repos.json` keeps a simple list of objects with `name` and `last_commit_ts`. Example:
   ```json
   {
-    "generated_at": 1752806400,
     "repos": [
       { "name": "dividends", "last_commit_ts": 1752806400 },
       { "name": "FX", "last_commit_ts": 1752720000 }
@@ -177,32 +176,29 @@ The system uses a simple structure where each hostname is a key:
 
 ```json
 {
-  "generated_at": 1752806400,
   "repos": [
     {
       "name": "FX",
-      "repo": "stSoftwareAU/GRQ-FX",
-      "last_commit_ts": 1752806400,
-      "status": "healthy"
+      "last_commit_ts": 1752806400
     },
     {
       "name": "shareprices2025Q3",
-      "repo": "stSoftwareAU/GRQ-shareprices2025Q3",
-      "last_commit_ts": 1752720000,
-      "status": "warning"
+      "last_commit_ts": 1752720000
     },
     {
       "name": "commodities",
-      "repo": "stSoftwareAU/GRQ-commodities",
-      "last_commit_ts": 1752600000,
-      "status": "error",
-      "error_message": "Failed to fetch commits (404 Not Found)"
+      "last_commit_ts": 1752600000
     }
   ]
 }
 ```
 
-The dashboard highlights entries more than 36 hours old as warnings and entries more than 72 hours old as errors. When the GitHub API cannot be reached, the tool records the failure (with `error_message`) but keeps deployment running so the dashboard can report the outage.
+The dashboard calculates status from `last_commit_ts`:
+- **ERROR** (red): Last commit more than 48 hours ago
+- **WARNING** (yellow): Last commit more than 24 hours ago
+- **OK** (green): Last commit within 24 hours
+
+The "last updated" timestamp shown in the dashboard is calculated from the most recent `last_commit_ts` among all repos.
 
 ### Enhanced Health Status Classification
 

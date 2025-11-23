@@ -58,7 +58,7 @@
                     throw new Error(`HTTP error! status: ${hostsResponse.status}`);
                 }
                 const data = await hostsResponse.json();
-                let repoData = { repos: [], generated_at: null };
+                let repoData = { repos: [] };
                 if (repoResponse.ok) {
                     repoData = await repoResponse.json();
                 } else {
@@ -116,7 +116,10 @@
                 document.getElementById('timestamp').textContent = 
                     `Last updated: ${new Date().toLocaleString()}`;
                 
-                updateRepoSummary(repoStats, repoData.generated_at);
+                // Calculate most recent update from repos
+                const repos = repoData.repos || [];
+                const mostRecentTs = repos.length > 0 ? Math.max(...repos.map(r => r.last_commit_ts || 0)) : null;
+                updateRepoSummary(repoStats, mostRecentTs);
                 
             } catch (error) {
                 console.error('Health check failed:', error);
