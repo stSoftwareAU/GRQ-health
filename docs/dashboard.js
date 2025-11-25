@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.55";
+const VERSION = "1.0.56";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -47,8 +47,8 @@ function formatTimestamp(timestamp) {
 function getRepoStatus(repo) {
     // Calculate status based on last_commit_ts
     // ERROR if > 48 hours ago, WARN if > 24 hours ago, else OK
-    if (!repo.last_commit_ts || repo.last_commit_ts <= 0) {
-        return 'error'; // No timestamp means error
+    if (!repo || !repo.last_commit_ts || repo.last_commit_ts <= 0) {
+        return 'error'; // No timestamp or invalid repo means error
     }
     
     const now = Math.floor(Date.now() / 1000);
@@ -124,7 +124,7 @@ function renderRepoHealth(errorMessage = null) {
     if (repos.length > 0) {
         const mostRecentTs = Math.max(...repos.map(r => r.last_commit_ts || 0));
         if (mostRecentTs > 0) {
-            updatedAtElement.textContent = `Updated ${formatTimestamp(mostRecentTs)}`;
+            updatedAtElement.textContent = formatTimestamp(mostRecentTs);
         } else {
             updatedAtElement.textContent = 'Awaiting data...';
         }
@@ -147,15 +147,17 @@ function renderRepoHealth(errorMessage = null) {
 
     const repoItemsHtml = repos.map((repo) => {
         // Calculate status from last_commit_ts
-        const status = getRepoStatus(repo);
+        const status = getRepoStatus(repo) || 'error';
+        const repoName = repo.name || 'Unknown';
+        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
         return `
         <div class="repo-health-item repo-${status}">
             <div class="repo-meta">
-                <div class="repo-name">${repo.name}</div>
+                <div class="repo-name">${repoName}</div>
                 <div class="repo-slug">${repo.repo || ''}</div>
             </div>
             <div class="text-end">
-                <span class="${statusBadge(status)} repo-status-badge">${status}</span>
+                <span class="${statusBadge(status)} repo-status-badge">${statusLabel}</span>
                 <div class="repo-time">${repo.last_commit_ts > 0 ? `Last commit ${formatTimestamp(repo.last_commit_ts)}` : 'Commit time unavailable'}</div>
                 ${repo.error_message ? `<div class="repo-error text-danger"><small>${repo.error_message}</small></div>` : ''}
             </div>
