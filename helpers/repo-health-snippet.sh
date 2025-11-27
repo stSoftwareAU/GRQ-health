@@ -6,8 +6,8 @@
 
 if [ $? -eq 0 ]; then
   ## Update health tracking
-  GRQ_HEALTH_DIR="../GRQ-health"  # Adjust if GRQ-health is elsewhere
-  GRQ_HEALTH_REPO="https://github.com/stSoftwareAU/GRQ-health.git"  # Use HTTPS for cloning
+  GRQ_HEALTH_DIR="../GRQ-health"
+  GRQ_HEALTH_REPO="git@github.com:stSoftwareAU/GRQ-health.git"
 
   # If GRQ-health doesn't exist, clone it
   if [ ! -d "$GRQ_HEALTH_DIR" ]; then
