@@ -9,9 +9,11 @@ if [ $? -eq 0 ]; then
   GRQ_HEALTH_DIR="../GRQ-health"
   GRQ_HEALTH_REPO="git@github.com:stSoftwareAU/GRQ-health.git"
 
-  # If GRQ-health doesn't exist, clone it
+  # If GRQ-health doesn't exist, clone it; otherwise pull latest
   if [ ! -d "$GRQ_HEALTH_DIR" ]; then
       git clone --depth=1 "$GRQ_HEALTH_REPO" "$GRQ_HEALTH_DIR"
+  else
+      git -C "$GRQ_HEALTH_DIR" pull
   fi
 
   # Update repo health
