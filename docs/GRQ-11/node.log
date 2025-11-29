@@ -13,20 +13,24 @@ devfs            206Ki   206Ki     0Bi   100%     712     0  100%   /dev
 /dev/disk1s3     500Mi   1.2Mi   482Mi     1%      60  4.9M    0%   /System/Volumes/Hardware
 /dev/disk3s5     460Gi   126Gi   312Gi    29%    659k  3.3G    0%   /System/Volumes/Data
 map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
-/dev/disk7s1     1.8Ti   478Gi   1.4Ti    26%     28M   15G    0%   /Volumes/DataGRQ
-Uptime: 12:14  up 19 days, 19:40, 7 users, load averages: 13.53 15.30 15.27
-Start: 12:14:45@AEDT
+/dev/disk7s1     1.8Ti   479Gi   1.4Ti    26%     28M   15G    0%   /Volumes/DataGRQ
+Uptime: 12:34  up 19 days, 20 hrs, 7 users, load averages: 19.09 22.47 20.17
+Start: 12:34:07@AEDT
 USER    PID  PPID COMMAND
+nigel  5055     1 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
+nigel  5072  5055 /bin/bash worker/node.sh
+nigel  5088 96426 (grep)
+root   5089  5072 ps -U nigel -o user,pid,ppid,command
 nigel 68057     1 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/run_fetch.sh
 nigel 68075 68057 /bin/bash /Volumes/DataGRQ/market/GRQ-marketdata/fetch.sh
-nigel 68118 68075 deno run --allow-read --allow-write --allow-env --allow-net src/Fetch.ts --sharesRepo=GRQ-shareprices2025Q3 --reportRepo=GRQ-companyreports
 nigel 74644     1 /bin/bash /Users/nigel/src/GRQ/run.sh
 nigel 81618 74644 /bin/bash worker/node.sh
 nigel 81654 81618 /bin/bash ./sampler.sh
 nigel 83956 81654 deno run --v8-flags=--max-old-space-size=16384 --allow-read --allow-write --allow-net --allow-ffi --allow-env src/Learn.ts --timeout=24 --log=1 --populationSize=40 --trainingSampleRate=0.15 --sparseRatio=0.075 --elitism=1 --sampler=true --verbose=true --disableCRISPR=false --traceStore=.trace --costOfGrowth=0.000_000_01 --focusList= --discoverySampleRate=0.015
-nigel 84108     1 /bin/bash /Volumes/DataGRQ/train/GRQ/run.sh --run-once
-nigel 84118 84108 /bin/bash worker/node.sh
-root  84129 84118 ps -U nigel -o user,pid,ppid,command
+nigel 84594     1 /bin/bash /Volumes/DataGRQ/market/GRQ-sentiment/run_sentiment.sh
+nigel 84607 84594 /bin/bash ./sentiment.sh
+nigel 84640 84607 deno run --v8-flags=--max-old-space-size=8192 --allow-read --allow-write --allow-env --allow-net src/Sentiment.ts --mode=LOAD
+nigel 96426 68075 find ../GRQ-shareprices2025Q3/data -name *.json -exec grep -H Thank you for using Alpha Vantage {} ;
 root  96140 96139 login -pfl nigel /bin/bash -c exec -la zsh /bin/zsh
 nigel 96141 96140 -zsh
 root  96148 96139 login -pfl nigel /bin/bash -c exec -la zsh /bin/zsh
@@ -50,7 +54,7 @@ IP: 169.254.18.187
 10.0.0.11
 100.107.196.16
 Number of CPUs: 10
-Available Memory: 21G
+Available Memory: 31G
 ================ Clean up ENDED ================
 PATH: /Users/nigel/.deno/bin:/Users/nigel/Applications/GRQ11Runner.app/Contents/MacOS:/Users/nigel/.deno/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/bin
 deno 2.5.6 (stable, release, aarch64-apple-darwin)
@@ -58,7 +62,7 @@ v8 14.0.365.5-rusty
 typescript 5.9.2
 aws-cli/2.18.15 Python/3.12.7 Darwin/25.1.0 source/arm64
 Option: data
-Starting data training task at Sat Nov 29 12:14:45 AEDT 2025
+Starting data training task at Sat Nov 29 12:34:09 AEDT 2025
 Logs are current, appending to existing files
 Running trainDataStocks.sh...
 Already up to date.
@@ -67,9 +71,7 @@ Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-cluster synced with remote (validation skipped)
-From github.com:stSoftwareAU/GRQ-sampler
-   6d41e74fa..d866d4ed9  main       -> origin/main
-HEAD is now at d866d4ed9 🦠 GRQ-22 🎯, Score: 0.415520, Neurons: 460 & Synapses: 16,428
+HEAD is now at 97639128e 🦠 GRQ-18 🎯, Score: 0.415518, Neurons: 460 & Synapses: 16,426
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
@@ -79,7 +81,7 @@ Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-portfolio synced with remote (validation skipped)
-Starting default... Sat Nov 29 12:15:11 AEDT 2025
+Starting default... Sat Nov 29 12:34:35 AEDT 2025
 Cluster mode
 HEAD is now at a231a343c4 Refresh of history on GRQ-11@2025-11-29
 Reset branch 'Develop'
@@ -109,21 +111,23 @@ Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
 ✅ GRQ-FX synced with remote (validation skipped)
-HEAD is now at 3d72153d0 GRQ-22 Improved location models
+From github.com:stSoftwareAU/GRQ-location
+   3d72153d0..c17b4a99f  Develop    -> origin/Develop
+HEAD is now at c17b4a99f GRQ-16 Improved location models
 Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
 ✅ GRQ-location synced with remote (validation skipped)
 From github.com:stSoftwareAU/GRQ-industryV2
-   1768b4a373..26ab640e69  main       -> origin/main
-HEAD is now at 26ab640e69 GRQ-19 Improved Industry models
+   26ab640e69..28d9b05c69  main       -> origin/main
+HEAD is now at 28d9b05c69 GRQ-24 Improved Industry models
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-industryV2 synced with remote (validation skipped)
 From github.com:stSoftwareAU/GRQ-exchange
-   2ff59c75..dc5b900d  main       -> origin/main
-HEAD is now at dc5b900d GRQ-7 Improved exchange models
+   dc5b900d..6892f7c4  main       -> origin/main
+HEAD is now at 6892f7c4 GRQ-19 Improved exchange models
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
@@ -133,8 +137,6 @@ Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
 Your branch is up to date with 'origin/main'.
 ✅ GRQ-cluster synced with remote (validation skipped)
-From github.com:stSoftwareAU/GRQ-sampler
-   d866d4ed9..97639128e  main       -> origin/main
 HEAD is now at 97639128e 🦠 GRQ-18 🎯, Score: 0.415518, Neurons: 460 & Synapses: 16,426
 Reset branch 'main'
 branch 'main' set up to track 'origin/main'.
@@ -175,36 +177,40 @@ Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
 ✅ GRQ-WorldUncertaintyIndex synced with remote (validation skipped)
-Duration: 10m 7s
-HEAD is now at c1b7ebe4 GRQ-24 Improved FX models
+Duration: 11m 7s
+From github.com:stSoftwareAU/GRQ-FX-models
+   c1b7ebe4..d9cdf0c8  Develop    -> origin/Develop
+HEAD is now at d9cdf0c8 GRQ-22 Improved FX models
 Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
 ✅ GRQ-FX-models synced with remote (validation skipped)
 Checksum file is valid with      494 files.
 1.1.0: 🔄 Rsync attempt 1 of 3 using rsync: --include=* --exclude=checksum.sha256 /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/ /Users/nigel/Training/trainData-binary_88/
-rsync(84752): error: open /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/: Operation not permitted
+rsync(9000): error: open /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/: Operation not permitted
 1.1.0: 🔄 Rsync failed with exit code 23 on attempt 1
 1.1.0: 📁 Partial files preserved with temporary extensions - will resume from where it left off
-1.1.0: ⏳ Waiting 87 seconds before retry (exponential backoff)...
+1.1.0: ⏳ Waiting 40 seconds before retry (exponential backoff)...
 1.1.0: 🔄 Rsync attempt 2 of 3 using rsync: --include=* --exclude=checksum.sha256 /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/ /Users/nigel/Training/trainData-binary_88/
-rsync(84793): error: open /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/: Operation not permitted
+rsync(9011): error: open /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/: Operation not permitted
 1.1.0: 🔄 Rsync failed with exit code 23 on attempt 2
 1.1.0: 📁 Partial files preserved with temporary extensions - will resume from where it left off
-1.1.0: ⏳ Waiting 67 seconds before retry (exponential backoff)...
+1.1.0: ⏳ Waiting 113 seconds before retry (exponential backoff)...
 1.1.0: 🔄 Rsync attempt 3 of 3 using rsync: --include=* --exclude=checksum.sha256 /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/ /Users/nigel/Training/trainData-binary_88/
-rsync(84818): error: open /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/: Operation not permitted
+rsync(9039): error: open /Volumes/DataGRQ/train/GRQ/.trainData-binary_88/: Operation not permitted
 1.1.0: 🔄 Rsync failed with exit code 23 on attempt 3
 1.1.0: 📁 Partial files preserved with temporary extensions - will resume from where it left off
 1.1.0: ❌ Rsync failed after 3 attempts - giving up
 1.1.0: 📁 Partial files remain with temporary extensions for manual recovery
 Cloning into 'GRQ-logs'...
-[Develop 391e9a8] GRQ-11 status 1
- 1 file changed, 29 insertions(+), 27 deletions(-)
+[Develop d7ad5bd] GRQ-11 status 1
+ 1 file changed, 31 insertions(+), 27 deletions(-)
 To github.com:stSoftwareAU/GRQ-logs.git
-   febc345..391e9a8  Develop -> Develop
+   4cf2aad..d7ad5bd  Develop -> Develop
 HEAD is now at 5ee8ffb8 Update deno.json (#382)
-HEAD is now at 7fa87982 Update health status for GRQ-11 at Sat Nov 29 12:09:29 AEDT 2025
+From github.com:stSoftwareAU/GRQ-health
+   70a276c9..c73232cd  Develop    -> origin/Develop
+HEAD is now at c73232cd Update health status for GRQ-22 at Sat Nov 29 12:46:07 AEDT 2025
 Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
