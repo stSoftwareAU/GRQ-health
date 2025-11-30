@@ -46,17 +46,25 @@ function formatTimestamp(timestamp) {
 
 function getRepoStatus(repo) {
     // Calculate status based on last_commit_ts
-    // ERROR if > 48 hours ago, WARN if > 24 hours ago, else OK
+    // Uses per-repo warning_days and error_days if provided, otherwise defaults to 1 day (warning) and 2 days (error)
     if (!repo || !repo.last_commit_ts || repo.last_commit_ts <= 0) {
         return 'error'; // No timestamp or invalid repo means error
     }
     
+    // Get thresholds (default: 1 day warning, 2 days error)
+    const warningDays = repo.warning_days !== undefined ? repo.warning_days : 1;
+    const errorDays = repo.error_days !== undefined ? repo.error_days : 2;
+    
+    // Convert days to hours
+    const warningHours = warningDays * 24;
+    const errorHours = errorDays * 24;
+    
     const now = Math.floor(Date.now() / 1000);
     const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
     
-    if (hoursSinceCommit > 48) {
+    if (hoursSinceCommit > errorHours) {
         return 'error';
-    } else if (hoursSinceCommit > 24) {
+    } else if (hoursSinceCommit > warningHours) {
         return 'warning';
     } else {
         return 'healthy';
