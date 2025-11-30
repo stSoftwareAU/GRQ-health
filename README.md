@@ -188,15 +188,23 @@ The system uses a simple structure where each hostname is a key:
     {
       "name": "commodities",
       "last_commit_ts": 1752600000
+    },
+    {
+      "name": "Listings",
+      "last_commit_ts": 1752806400,
+      "warning_days": 5,
+      "error_days": 6
     }
   ]
 }
 ```
 
 The dashboard calculates status from `last_commit_ts`:
-- **ERROR** (red): Last commit more than 48 hours ago
-- **WARNING** (yellow): Last commit more than 24 hours ago
-- **OK** (green): Last commit within 24 hours
+- **ERROR** (red): Last commit more than the error threshold (default: 2 days / 48 hours)
+- **WARNING** (yellow): Last commit more than the warning threshold (default: 1 day / 24 hours)
+- **OK** (green): Last commit within the warning threshold
+
+**Per-repo thresholds**: Each repo can optionally specify `warning_days` and `error_days` to customise the thresholds. If not specified, defaults to 1 day (warning) and 2 days (error). For example, the "Listings" repo uses 5 days for warning and 6 days for error.
 
 The "last updated" timestamp shown in the dashboard is calculated from the most recent `last_commit_ts` among all repos.
 
