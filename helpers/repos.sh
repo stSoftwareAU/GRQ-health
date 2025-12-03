@@ -43,9 +43,22 @@ update_repos_json() {
     # Read current repos array
     REPOS=$(jq -c '.repos // []' "$REPOS_JSON")
     
-    # Check if repo already exists
+    # Check if repo already exists and get its last commit timestamp
     EXISTING_REPO=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .name // empty")
+    LAST_UPDATE_TS=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .last_commit_ts // empty")
     
+    # If repo exists, check if it was updated within the last hour (3600 seconds)
+    if [ -n "$EXISTING_REPO" ] && [ -n "$LAST_UPDATE_TS" ]; then
+        TIME_DIFF=$((CURRENT_TS - LAST_UPDATE_TS))
+        if [ "$TIME_DIFF" -lt 3600 ]; then
+            # Updated within the last hour, skip update
+            MINUTES_AGO=$((TIME_DIFF / 60))
+            echo "Skipping update for '${REPO_NAME}' - last updated ${MINUTES_AGO} minutes ago (within 1 hour threshold)"
+            return 0
+        fi
+    fi
+    
+    # Proceed with update (either new repo or last update was more than 1 hour ago)
     if [ -n "$EXISTING_REPO" ]; then
         # Update existing repo
         jq --arg name "$REPO_NAME" \
