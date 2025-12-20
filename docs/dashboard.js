@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.57";
+const VERSION = "1.0.58";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -41,7 +41,10 @@ function formatTimestamp(timestamp) {
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     if (diffHours < 1) return 'Just now';
     if (diffHours < 24) return `${diffHours}h ago`;
-    return `${Math.floor(diffHours / 24)}d ago`;
+    const days = Math.floor(diffHours / 24);
+    const hoursRemainder = diffHours % 24;
+    if (hoursRemainder === 0) return `${days}d ago`;
+    return `${days}d ${hoursRemainder}h ago`;
 }
 
 function getRepoStatus(repo) {
