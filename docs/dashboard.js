@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.69";
+const VERSION = "1.0.70";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -86,8 +86,9 @@ function getWorstUserHeartbeatTs(data) {
 }
 
 function getUserHeartbeatWarningHours(data) {
-    // Use the script cadence if present, otherwise default to 8 hours.
-    // (Script currently uses HEARTBEAT_THRESHOLD_HOURS=8.)
+    // Prefer per-host configured threshold emitted by run.sh, otherwise default to 8h.
+    const h = Number(data?.user_stale_hours);
+    if (Number.isFinite(h) && h > 0) return h;
     return 8;
 }
 
