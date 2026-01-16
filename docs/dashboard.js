@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.71";
+const VERSION = "1.0.72";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -778,13 +778,15 @@ function createHostCard(hostname, data) {
                     <div class="text-center">
                         ${data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}
                     </div>
+                    ${!showUserTable ? `
                     <div class="position-absolute" style="right: 0;">
-                        <a href="${logUrl}" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}" 
+                        <a href="${logUrl}" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}"
                            ${data.exception_count && parseInt(data.exception_count) > 0 ? `title="${data.exception_summary}" data-bs-toggle="tooltip" data-bs-placement="top"` : ''}>
-                            <i class="bi ${data.exception_count && parseInt(data.exception_count) > 0 ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> 
+                            <i class="bi ${data.exception_count && parseInt(data.exception_count) > 0 ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i>
                             ${data.exception_count && parseInt(data.exception_count) > 0 ? 'View Log ⚠️' : 'View Log'}
                         </a>
                     </div>
+                    ` : ''}
                 </div>
             </div>
         </div>
