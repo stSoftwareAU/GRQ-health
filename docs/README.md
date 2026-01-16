@@ -40,6 +40,21 @@ Currently active machines that report health data:
 }
 ```
 
+### Multi-user Hosts
+Some machines run multiple automated users (e.g. `sloth`, `rocket`, `elephant`). In this case the host entry contains a `users` map. The dashboard **treats the host heartbeat as unhealthy if any discovered user is stale**, so one user's updates can't mask another user's stuck state.
+
+```json
+{
+  "GRQ-21": {
+    "heart_beat_ts": 1752728062,
+    "users": {
+      "sloth": { "heart_beat_ts": 1752728000, "version": "1.0.64" },
+      "rocket": { "heart_beat_ts": 1752728062, "version": "1.0.64" }
+    }
+  }
+}
+```
+
 ### Dead Machines
 Machines that have died (don't affect system health):
 ```json
@@ -176,7 +191,8 @@ docs/
 ├── styles.css          # Styling
 ├── medical-check.png   # Favicon
 └── [hostname]/         # Individual host log directories
-    └── node.log        # Host log files
+    ├── node.log        # Most recent host log file (latest run)
+    └── node-<user>.log # Per-user logs for multi-user hosts
 ```
 
 ## Browser Compatibility

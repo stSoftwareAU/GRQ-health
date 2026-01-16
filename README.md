@@ -34,6 +34,12 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Permission errors**: "Permission denied", "access denied", "EACCES"
 - **All exceptions trigger health updates** regardless of heartbeat timing
 
+#### Multi-user Hosts (per-user heartbeats):
+- **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
+- **Storage**: `docs/index.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
+- **Health logic**: The dashboard treats the host as unhealthy if **any discovered user** is stale (uses the *oldest* user heartbeat for host health classification).
+- **Logs**: `run.sh` writes `docs/<HOST>/node-<user>.log` in addition to the usual `docs/<HOST>/node.log`.
+
 #### Market Feed Repository Freshness:
 - **Manual updates**: Each background task updates `docs/repos.json` immediately after it finishes, recording its latest commit/publish timestamp.
 - **Helper script**: Use `helpers/update_repo_timestamp.sh` to update (or create) the entry for a service.

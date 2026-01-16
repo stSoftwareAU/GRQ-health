@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.63"
+VERSION="1.0.64"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -50,6 +50,19 @@ CURRENT_TS=$(date +%s)
 HOST=$(uname -n)
 HOST=${HOST%%.*} # Trim everything after the first period
 HOSTNAME=$HOST
+
+# Current user (supports multi-user hosts where multiple unix accounts run this script)
+# We record a heartbeat per user under the host entry to avoid one user's updates masking another user's stuck state.
+RAW_USER="$(id -un 2>/dev/null || echo "${USER:-unknown}")"
+if [[ -z "${RAW_USER}" ]]; then
+    RAW_USER="unknown"
+fi
+USER_KEY="${RAW_USER}"
+# Sanitize for filenames (keep alnum, underscore, hyphen)
+USER_SLUG="$(echo "${RAW_USER}" | tr ' ' '_' | tr -cd '[:alnum:]_-')"
+if [[ -z "${USER_SLUG}" ]]; then
+    USER_SLUG="unknown"
+fi
 
 # Function to detect if this is an AWS instance (all AWS instances are spot/temporary)
 is_aws_instance() {
@@ -839,22 +852,56 @@ update_json() {
     # Update or create JSON file
     if [ -f "$JSON_FILE" ]; then
         # Update existing file - preserve existing attributes
-
         jq --arg host "$HOSTNAME" \
+           --arg user "$USER_KEY" \
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
            --argjson info "$system_info" \
-           '.[$host] = ((.[$host] // {}) + $info
-             | .heart_beat_ts = ($ts | tonumber)
-             | .version = $version)' \
+           '
+           # Host-level info (shared machine info), preserve existing manual fields like location/emoji
+           .[$host] = ((.[$host] // {}) + $info)
+           # Ensure users map exists and update this user entry
+           | .[$host].users = (.[$host].users // {})
+           | .[$host].users[$user] = ((.[$host].users[$user] // {}) + $info
+               | .heart_beat_ts = ($ts | tonumber)
+               | .version = $version)
+           # Aggregate across users so dashboard can flag a stuck user
+           | .[$host].user_count = (.[$host].users | length)
+           | .[$host].worst_user_heart_beat_ts = ([.[$host].users[]? | (.heart_beat_ts // 0)] | min // 0)
+           | .[$host].best_user_heart_beat_ts  = ([.[$host].users[]? | (.heart_beat_ts // 0)] | max // 0)
+           | .[$host].heart_beat_ts = (.[$host].best_user_heart_beat_ts // ($ts | tonumber))
+           | .[$host].version = $version
+           | .[$host].exception_count = ([.[$host].users[]? | (.exception_count // 0)] | add // 0)
+           | .[$host].exception_summary =
+               (if (.[$host].exception_count // 0) > 0 then
+                   ( .[$host].users
+                     | to_entries
+                     | map(select((.value.exception_count // 0) > 0) | "\(.key): \(.value.exception_summary // \"\")")
+                     | join("; ")
+                   ) as $details
+                   | "\(.[$host].exception_count) errors across \(.[$host].user_count) user(s)" + (if ($details | length) > 0 then " (" + $details + ")" else "" end)
+                else
+                   "No errors found"
+                end)
+           ' \
            "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
     else
         # Create new file
         jq --arg host "$HOSTNAME" \
+           --arg user "$USER_KEY" \
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
            --argjson info "$system_info" \
-           '{($host): ($info + {"heart_beat_ts": ($ts | tonumber), "version": $version})}' \
+           '{($host): ($info + {
+               "heart_beat_ts": ($ts | tonumber),
+               "version": $version,
+               "users": {
+                   ($user): ($info + {"heart_beat_ts": ($ts | tonumber), "version": $version})
+               },
+               "user_count": 1,
+               "worst_user_heart_beat_ts": ($ts | tonumber),
+               "best_user_heart_beat_ts": ($ts | tonumber)
+           })}' \
            > "$JSON_FILE"
     fi
     # Clean up tmp backup
@@ -903,10 +950,15 @@ main() {
             LOG_SRC="${HOME}/logs/node-${NODE_PID}.log"
         fi
         
-        LOG_DEST="docs/$HOSTNAME/node.log"
+        LOG_DEST_DIR="docs/$HOSTNAME"
+        # Keep a per-user log copy so multi-user hosts can be debugged independently,
+        # and also keep node.log as the most-recent log for backwards compatibility.
+        LOG_DEST_USER="${LOG_DEST_DIR}/node-${USER_SLUG}.log"
+        LOG_DEST_LATEST="${LOG_DEST_DIR}/node.log"
         if [ -f "$LOG_SRC" ]; then
-            mkdir -p "docs/$HOSTNAME"
-            cp "$LOG_SRC" "$LOG_DEST"
+            mkdir -p "$LOG_DEST_DIR"
+            cp "$LOG_SRC" "$LOG_DEST_USER"
+            cp "$LOG_SRC" "$LOG_DEST_LATEST"
         fi
         commit_and_push
     else
