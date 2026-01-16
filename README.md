@@ -359,9 +359,20 @@ sudo dnf install jq bc
 
 You can modify the following variables in `run.sh`:
 
-- `HEARTBEAT_THRESHOLD_HOURS`: How often to update (default: 12 hours)
-- `HEALTHY_THRESHOLD_HOURS`: What constitutes "healthy" status (default: 24 hours)
+- `HEARTBEAT_THRESHOLD_HOURS`: How often to update the heartbeat (default: 8 hours)
+- `USER_STALE_HOURS_DEFAULT`: How long before a user is marked as stale (default: 24 hours)
 - `JSON_FILE`: Path to the JSON data file (default: docs/index.json)
+
+### Heartbeat vs Stale Threshold
+
+**IMPORTANT**: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
+
+- **Heartbeat threshold (8 hours)**: How often `run.sh` updates the heartbeat timestamp
+- **Stale threshold (24 hours)**: How long before a user is marked as "stale" on the dashboard
+
+If processes run hourly but the heartbeat only updates every 8 hours, marking a user as stale after exactly 8 hours would cause false positives. The default stale threshold of 24 hours (3x the heartbeat threshold) provides adequate margin for timing variations.
+
+You can override the stale threshold per-host via the environment variable `GRQ_USER_STALE_HOURS`.
 
 ## Uptime Monitoring
 

@@ -15,12 +15,15 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.72"
+VERSION="1.0.73"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
-# Default: match the existing host update cadence unless overridden.
+# IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
+# If processes run hourly and heartbeats update every X hours, marking as stale after exactly X hours
+# would cause false positives. The stale threshold should be at least 3x the heartbeat threshold.
+# Default: 24 hours (3x the 8-hour heartbeat threshold)
 # Override via env var: GRQ_USER_STALE_HOURS
-USER_STALE_HOURS_DEFAULT="${HEARTBEAT_THRESHOLD_HOURS}"
+USER_STALE_HOURS_DEFAULT=24
 USER_STALE_HOURS="${GRQ_USER_STALE_HOURS:-$USER_STALE_HOURS_DEFAULT}"
 
 # Parse command line arguments

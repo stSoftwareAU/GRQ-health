@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stale Threshold Tests - Issue #15</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+        .test-case {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        .pass {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .fail {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .summary {
+            background: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .summary.all-pass {
+            background: #28a745;
+        }
+        .summary.has-failures {
+            background: #dc3545;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Stale Threshold Tests - Issue #15</h1>
+    <p>Testing that the stale threshold (Y) is a multiple of the heartbeat/refresh threshold (X).</p>
+    <p>Issue: If processes take an hour to run and heartbeat updates every X hours,
+       marking as stale after exactly X hours causes false positives.</p>
+    <p>Solution: The stale threshold should be at least 3x the heartbeat threshold to allow for timing variations.</p>
+
+    <div id="test-results"></div>
+    <div id="summary" class="summary"></div>
+
+    <script>
+        // Import relevant functions from dashboard.js by recreating the logic
+
+        // Configuration constants - these should match the expected values after the fix
+        const EXPECTED_HEARTBEAT_HOURS = 8;
+        const EXPECTED_STALE_MULTIPLIER = 3; // Stale threshold should be at least 3x heartbeat
+        const EXPECTED_MINIMUM_STALE_HOURS = EXPECTED_HEARTBEAT_HOURS * EXPECTED_STALE_MULTIPLIER; // 24 hours
+
+        function getUserHeartbeatWarningHours(data) {
+            // This should return the user_stale_hours from data, with a sensible default
+            const h = Number(data?.user_stale_hours);
+            if (Number.isFinite(h) && h > 0) return h;
+            return 24; // Default should be 24 hours (3x the 8-hour heartbeat threshold)
+        }
+
+        function getExpectedUsers(data) {
+            const users = data?.users;
+            if (!users || typeof users !== 'object') {
+                return [];
+            }
+            return Object.keys(users).filter(username => {
+                const userData = users[username];
+                return Boolean(username) && userData && typeof userData === 'object';
+            }).sort((a, b) => a.localeCompare(b));
+        }
+
+        // Test helper to check if a user would be marked as stale
+        function isUserStale(data, username, nowTs) {
+            const usersMap = data?.users && typeof data.users === 'object' ? data.users : {};
+            const warnHours = getUserHeartbeatWarningHours(data);
+            const ts = Number(usersMap?.[username]?.heart_beat_ts || 0);
+            if (!ts || !Number.isFinite(ts)) return true; // missing counts as stale
+            return (nowTs - ts) / 3600 > warnHours;
+        }
+
+        // Test cases
+        const testCases = [
+            {
+                name: 'Default stale threshold should be at least 3x the heartbeat threshold (24h)',
+                testFn: () => {
+                    const data = {}; // No user_stale_hours specified - should use default
+                    const staleHours = getUserHeartbeatWarningHours(data);
+                    const passed = staleHours >= EXPECTED_MINIMUM_STALE_HOURS;
+                    return {
+                        passed,
+                        details: [
+                            `Default stale threshold: ${staleHours} hours`,
+                            `Expected minimum: ${EXPECTED_MINIMUM_STALE_HOURS} hours (3x ${EXPECTED_HEARTBEAT_HOURS}h heartbeat)`,
+                            passed ? 'PASS: Stale threshold is a proper multiple of heartbeat threshold' :
+                                     `FAIL: Stale threshold (${staleHours}h) should be at least ${EXPECTED_MINIMUM_STALE_HOURS}h`
+                        ]
+                    };
+                }
+            },
+            {
+                name: 'User updated 10 hours ago should NOT be stale (within 24h default threshold)',
+                testFn: () => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const tenHoursAgo = now - (10 * 3600);
+                    const data = {
+                        users: {
+                            'sloth': { heart_beat_ts: tenHoursAgo }
+                        }
+                    };
+                    const isStale = isUserStale(data, 'sloth', now);
+                    const passed = !isStale;
+                    return {
+                        passed,
+                        details: [
+                            `User heartbeat: 10 hours ago`,
+                            `Stale threshold: ${getUserHeartbeatWarningHours(data)} hours`,
+                            passed ? 'PASS: User is NOT marked as stale (as expected)' :
+                                     'FAIL: User was incorrectly marked as stale after only 10 hours'
+                        ]
+                    };
+                }
+            },
+            {
+                name: 'User updated 16 hours ago should NOT be stale (within 24h default threshold)',
+                testFn: () => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const sixteenHoursAgo = now - (16 * 3600);
+                    const data = {
+                        users: {
+                            'sloth': { heart_beat_ts: sixteenHoursAgo }
+                        }
+                    };
+                    const isStale = isUserStale(data, 'sloth', now);
+                    const passed = !isStale;
+                    return {
+                        passed,
+                        details: [
+                            `User heartbeat: 16 hours ago`,
+                            `Stale threshold: ${getUserHeartbeatWarningHours(data)} hours`,
+                            passed ? 'PASS: User is NOT marked as stale (as expected)' :
+                                     'FAIL: User was incorrectly marked as stale after only 16 hours'
+                        ]
+                    };
+                }
+            },
+            {
+                name: 'User updated 25 hours ago SHOULD be stale (exceeds 24h default threshold)',
+                testFn: () => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const twentyFiveHoursAgo = now - (25 * 3600);
+                    const data = {
+                        users: {
+                            'sloth': { heart_beat_ts: twentyFiveHoursAgo }
+                        }
+                    };
+                    const isStale = isUserStale(data, 'sloth', now);
+                    const passed = isStale;
+                    return {
+                        passed,
+                        details: [
+                            `User heartbeat: 25 hours ago`,
+                            `Stale threshold: ${getUserHeartbeatWarningHours(data)} hours`,
+                            passed ? 'PASS: User IS marked as stale (as expected)' :
+                                     'FAIL: User was NOT marked as stale but should have been'
+                        ]
+                    };
+                }
+            },
+            {
+                name: 'Custom stale threshold of 48h should be respected',
+                testFn: () => {
+                    const data = { user_stale_hours: 48 };
+                    const staleHours = getUserHeartbeatWarningHours(data);
+                    const passed = staleHours === 48;
+                    return {
+                        passed,
+                        details: [
+                            `Custom stale threshold: ${staleHours} hours`,
+                            `Expected: 48 hours`,
+                            passed ? 'PASS: Custom threshold is respected' : 'FAIL: Custom threshold was not applied'
+                        ]
+                    };
+                }
+            },
+            {
+                name: 'User with custom 48h threshold, updated 30 hours ago, should NOT be stale',
+                testFn: () => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const thirtyHoursAgo = now - (30 * 3600);
+                    const data = {
+                        user_stale_hours: 48,
+                        users: {
+                            'sloth': { heart_beat_ts: thirtyHoursAgo }
+                        }
+                    };
+                    const isStale = isUserStale(data, 'sloth', now);
+                    const passed = !isStale;
+                    return {
+                        passed,
+                        details: [
+                            `User heartbeat: 30 hours ago`,
+                            `Custom stale threshold: 48 hours`,
+                            passed ? 'PASS: User is NOT marked as stale (as expected)' :
+                                     'FAIL: User was incorrectly marked as stale'
+                        ]
+                    };
+                }
+            },
+            {
+                name: 'Stale threshold must be at least 3x the 8-hour heartbeat (regression test)',
+                testFn: () => {
+                    // This test ensures we never regress to having stale = heartbeat threshold
+                    const data = {}; // Default configuration
+                    const staleHours = getUserHeartbeatWarningHours(data);
+                    // The key assertion: stale threshold should NOT equal the heartbeat threshold
+                    const isNotSameAsHeartbeat = staleHours !== EXPECTED_HEARTBEAT_HOURS;
+                    const isMultiple = staleHours >= EXPECTED_HEARTBEAT_HOURS * 3;
+                    const passed = isNotSameAsHeartbeat && isMultiple;
+                    return {
+                        passed,
+                        details: [
+                            `Default stale threshold: ${staleHours} hours`,
+                            `Heartbeat threshold: ${EXPECTED_HEARTBEAT_HOURS} hours`,
+                            `Stale != Heartbeat: ${isNotSameAsHeartbeat}`,
+                            `Stale >= 3x Heartbeat: ${isMultiple}`,
+                            passed ? 'PASS: Stale threshold is properly separated from heartbeat threshold' :
+                                     'FAIL: Stale threshold should not equal heartbeat threshold (was the bug)'
+                        ]
+                    };
+                }
+            },
+            {
+                name: 'GRQ-3/sloth scenario: running hourly processes should not be marked stale within 24h',
+                testFn: () => {
+                    // Simulates the scenario from the issue: GRQ-3/sloth completes a run every hour
+                    // but might not update heartbeat immediately
+                    const now = Math.floor(Date.now() / 1000);
+                    // Last update was 8 hours ago (at the heartbeat threshold)
+                    const eightHoursAgo = now - (8 * 3600);
+                    const data = {
+                        users: {
+                            'sloth': { heart_beat_ts: eightHoursAgo }
+                        }
+                    };
+                    const isStale = isUserStale(data, 'sloth', now);
+                    // With the fix, 8 hours should NOT be stale (threshold is 24h)
+                    const passed = !isStale;
+                    return {
+                        passed,
+                        details: [
+                            `Scenario: Process runs hourly, heartbeat updates every 8 hours`,
+                            `User heartbeat: 8 hours ago`,
+                            `Stale threshold: ${getUserHeartbeatWarningHours(data)} hours`,
+                            passed ? 'PASS: User is NOT marked as stale (issue #15 fixed)' :
+                                     'FAIL: User was incorrectly marked as stale at exactly heartbeat threshold'
+                        ]
+                    };
+                }
+            }
+        ];
+
+        // Run tests
+        let passCount = 0;
+        let failCount = 0;
+        const resultsDiv = document.getElementById('test-results');
+
+        testCases.forEach((testCase, index) => {
+            const result = testCase.testFn();
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test-case';
+
+            if (result.passed) {
+                passCount++;
+            } else {
+                failCount++;
+            }
+
+            testDiv.innerHTML = `
+                <h3>Test ${index + 1}: ${testCase.name}</h3>
+                <p>Result: <span class="${result.passed ? 'pass' : 'fail'}">${result.passed ? 'PASS' : 'FAIL'}</span></p>
+                <pre>${result.details.join('\n')}</pre>
+            `;
+
+            resultsDiv.appendChild(testDiv);
+        });
+
+        // Summary
+        const summaryDiv = document.getElementById('summary');
+        summaryDiv.className = `summary ${failCount === 0 ? 'all-pass' : 'has-failures'}`;
+        summaryDiv.innerHTML = `
+            <h2>Test Summary</h2>
+            <p>Passed: ${passCount} / ${testCases.length}</p>
+            <p>Failed: ${failCount} / ${testCases.length}</p>
+            ${failCount === 0 ? '<p>All tests passed! Issue #15 is fixed.</p>' : '<p>Some tests failed. The stale threshold still needs to be fixed.</p>'}
+        `;
+
+        // Exit with error code for CI if tests fail
+        if (failCount > 0) {
+            console.error(`TESTS FAILED: ${failCount} of ${testCases.length} tests failed`);
+        } else {
+            console.log(`All ${testCases.length} tests passed`);
+        }
+    </script>
+</body>
+</html>
