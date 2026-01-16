@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.61";
+const VERSION = "1.0.65";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -45,6 +45,36 @@ function formatTimestamp(timestamp) {
     const hoursRemainder = diffHours % 24;
     if (hoursRemainder === 0) return `${days}d ago`;
     return `${days}d ${hoursRemainder}h ago`;
+}
+
+function sanitizeUserSlug(user) {
+    const raw = String(user || 'unknown');
+    const slug = raw.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+    return slug || 'unknown';
+}
+
+function getUserEntries(data) {
+    const users = data?.users;
+    if (!users || typeof users !== 'object') {
+        return [];
+    }
+    return Object.entries(users).filter(([username, userData]) => {
+        return Boolean(username) && userData && typeof userData === 'object';
+    });
+}
+
+function getWorstUserHeartbeatTs(data) {
+    const entries = getUserEntries(data);
+    if (!entries.length) {
+        return data?.heart_beat_ts || 0;
+    }
+    const heartbeats = entries
+        .map(([_, userData]) => Number(userData.heart_beat_ts || 0))
+        .filter((ts) => Number.isFinite(ts) && ts > 0);
+    if (!heartbeats.length) {
+        return 0;
+    }
+    return Math.min(...heartbeats);
 }
 
 function getRepoStatus(repo) {
@@ -357,22 +387,25 @@ function getHealthStatus(_hostname, data) {
         return 'dead';
     }
     
+    // Multi-user hosts: consider the *worst* (oldest) user's heartbeat so one user's updates can't mask another user's stuck state.
+    const effectiveHeartbeatTs = getWorstUserHeartbeatTs(data);
+
     // Check if this is a mobile host without heartbeat
-    if (data.mobile && !data.heart_beat_ts) {
+    if (data.mobile && !effectiveHeartbeatTs) {
         // For mobile hosts without heartbeat, mark as historical
         return 'historical';
     }
     
     // For active hosts without heartbeat, mark as critical (unless mobile)
-    if (!data.heart_beat_ts) {
+    if (!effectiveHeartbeatTs) {
         return 'critical';
     }
     
     const now = Math.floor(Date.now() / 1000);
-    const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
+    const hoursSinceHeartbeat = (now - effectiveHeartbeatTs) / 3600;
     
     // Handle timezone issues - if heartbeat is in the future, assume it's recent
-    if (data.heart_beat_ts > now) {
+    if (effectiveHeartbeatTs > now) {
         return 'healthy';
     }
     
@@ -454,6 +487,56 @@ function createHostCard(hostname, data) {
     const logUrl = `./log-viewer.html?file=./${hostname}/node.log`;
     const emoji = data.emoji || '';
     const location = data.location || '';
+
+    const userEntries = getUserEntries(data);
+    const showUserTable = userEntries.length >= 2;
+    const displayHeartbeatTs = showUserTable ? getWorstUserHeartbeatTs(data) : data.heart_beat_ts;
+    const userTableHtml = showUserTable ? (() => {
+        const now = Math.floor(Date.now() / 1000);
+        const rows = userEntries
+            .slice()
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([username, userData]) => {
+                const ts = Number(userData.heart_beat_ts || 0);
+                const tsText = ts > 0 ? formatTimestamp(ts) : 'Unknown';
+                const hoursSince = ts > 0 ? (now - ts) / 3600 : Number.POSITIVE_INFINITY;
+                const isStale = hoursSince > 24;
+                const statusBadge = isStale
+                    ? '<span class="badge bg-danger">stale</span>'
+                    : '<span class="badge bg-success">ok</span>';
+                const slug = sanitizeUserSlug(username);
+                const userLogUrl = `./log-viewer.html?file=./${hostname}/node-${slug}.log`;
+                return `
+                    <tr>
+                        <td class="text-nowrap">${username}</td>
+                        <td class="text-nowrap">${tsText}</td>
+                        <td class="text-end text-nowrap">${statusBadge}</td>
+                        <td class="text-end text-nowrap"><a href="${userLogUrl}" class="btn btn-sm btn-outline-secondary">Log</a></td>
+                    </tr>
+                `;
+            })
+            .join('');
+        return `
+            <div class="row mt-2">
+                <div class="col-12">
+                    <small class="text-muted">Users</small>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Last heartbeat</th>
+                                    <th class="text-end">Status</th>
+                                    <th class="text-end">Log</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    })() : '';
     
     if (healthStatus === 'dead') {
         return `
@@ -656,9 +739,10 @@ function createHostCard(hostname, data) {
                         <div class="fw-bold">${data.timezone}</div>
                     </div>
                 </div>
+                ${userTableHtml}
                 ${data.config_warning ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Config</small><div class="fw-bold text-warning">${data.config_warning}</div></div></div>` : ''}
                 ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
-                <div class="last-seen">Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
+                <div class="last-seen">Last seen: ${displayHeartbeatTs ? formatTimestamp(displayHeartbeatTs) : 'Unknown'}</div>
                 <div class="d-flex justify-content-center align-items-center mt-2 position-relative">
                     <div class="text-center">
                         ${data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}
@@ -884,182 +968,29 @@ function displayHosts(hosts) {
 }
 
 function updateHostCard(hostname, data) {
-    // Find existing host card
-    const hostCard = document.querySelector(`[data-hostname="${hostname}"]`);
-    if (hostCard) {
-        // Add a subtle highlight effect
-        hostCard.style.transition = 'background-color 0.3s ease';
-        hostCard.style.backgroundColor = 'rgba(40, 167, 69, 0.1)';
+    const existingHostCard = document.querySelector(`[data-hostname="${hostname}"]`);
+    if (!existingHostCard) return;
+
+    const wrapper = existingHostCard.closest('.col-lg-6') || existingHostCard.parentElement;
+    if (!wrapper) return;
+
+    const temp = document.createElement('div');
+    temp.innerHTML = createHostCard(hostname, data).trim();
+    const newWrapper = temp.firstElementChild;
+    if (!newWrapper) return;
+
+    // Add a subtle highlight effect to the replaced card
+    const newHostCard = newWrapper.querySelector('.host-card');
+    if (newHostCard) {
+        newHostCard.style.transition = 'background-color 0.3s ease';
+        newHostCard.style.backgroundColor = 'rgba(40, 167, 69, 0.1)';
         setTimeout(() => {
-            hostCard.style.backgroundColor = '';
+            newHostCard.style.backgroundColor = '';
         }, 1000);
-        
-        // Update individual elements instead of replacing the entire card
-        const healthStatus = getHealthStatus(hostname, data);
-        
-        // Update health status
-        const statusElement = hostCard.querySelector('.health-status');
-        if (statusElement) {
-            statusElement.className = `health-status ${healthStatus}`;
-            statusElement.textContent = healthStatus;
-        }
-        
-        // Check if macOS version is outdated for the updated card
-        let outdatedMacClass = '';
-        if (data.os_info && data.os_info.includes('macOS') && data.os_version) {
-            const latestMacOSVersion = allHosts
-                .filter(([_, hostData]) => hostData.os_info && hostData.os_info.includes('macOS') && hostData.os_version)
-                .map(([_, hostData]) => hostData.os_version)
-                .sort()
-                .pop();
-            
-            if (latestMacOSVersion && data.os_version < latestMacOSVersion) {
-                outdatedMacClass = ' outdated-macos';
-            }
-        }
-        
-        // Update the card's CSS classes to reflect the new health status
-        hostCard.className = `host-card ${healthStatus}${data.mobile ? ' mobile' : ''}${outdatedMacClass}`;
-        hostCard.setAttribute('data-status', healthStatus);
-        
-        // Update hostname with machine type badge (version moved to bottom-left)
-        const hostnameElement = hostCard.querySelector('h5.mb-0');
-        if (hostnameElement) {
-            const emoji = hostCard.querySelector('h5.mb-0').textContent.match(/^[^\s]+/)?.[0] || '';
-            hostnameElement.className = 'mb-0 d-flex align-items-center';
-            hostnameElement.innerHTML = `${emoji} ${hostname}${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}`;
-        }
-        
-        // Update OS version display with update badge if needed
-        const osElement = hostCard.querySelector('.row:first-child .col-6:first-child .fw-bold');
-        if (osElement) {
-            osElement.innerHTML = `${data.os_info} ${data.os_version}${outdatedMacClass ? '<span class="badge bg-warning text-white ms-2" title="Update available"><i class="bi bi-arrow-up-circle"></i> Update</span>' : ''}`;
-        }
-        
-        // Update uptime
-        const uptimeElement = hostCard.querySelector('.row:first-child .col-6:last-child .fw-bold');
-        if (uptimeElement) {
-            uptimeElement.textContent = formatUptime(data.uptime);
-        }
-        
-        // Update disk usage
-        const diskElement = hostCard.querySelector('.row:nth-child(2) .col-6:first-child .fw-bold');
-        if (diskElement) {
-            let diskDisplay = data.used_disk_percent;
-            if (data.used_disk_percent && data.used_disk_percent !== 'unknown') {
-                diskDisplay = `${data.used_disk_percent}% used`;
-                if (data.total_disk_gb && data.total_disk_gb !== 'unknown' && data.total_disk_gb !== '0' && parseFloat(data.total_disk_gb) > 0) {
-                    diskDisplay += ` of ${data.total_disk_gb}GB`;
-                }
-            }
-            diskElement.textContent = diskDisplay;
-        }
-        
-        // Update memory
-        const memElement = hostCard.querySelector('.row:nth-child(2) .col-6:last-child .fw-bold');
-        if (memElement) {
-            let memDisplay = data.mem_usage_percent;
-            if (data.mem_usage_percent && data.mem_usage_percent !== 'unknown') {
-                memDisplay = `${data.mem_usage_percent}%`;
-                if (data.total_mem_gb && data.total_mem_gb !== 'unknown' && data.total_mem_gb !== '0' && parseFloat(data.total_mem_gb) > 0) {
-                    memDisplay += ` of ${data.total_mem_gb}GB`;
-                }
-            }
-            memElement.textContent = memDisplay;
-        }
-        
-        // Update CPU load
-        const cpuElement = hostCard.querySelector('.row:nth-child(3) .col-6:first-child .fw-bold');
-        if (cpuElement) {
-            let cpuDisplay = data.cpu_load;
-            if (data.cpu_load && data.cpu_load !== 'unknown') {
-                if (data.cpu_load.includes('%')) {
-                    cpuDisplay = data.cpu_load;
-                } else {
-                    const loadValue = parseFloat(data.cpu_load);
-                    if (!isNaN(loadValue)) {
-                        cpuDisplay = `${loadValue}%`;
-                    }
-                }
-            }
-            
-            if (data.cpu_cores && data.cpu_cores !== 'unknown' && data.cpu_cores !== '0') {
-                cpuDisplay += ` (${data.cpu_cores} cores`;
-                if (data.cpu_model && data.cpu_model !== 'unknown') {
-                    cpuDisplay += `, ${data.cpu_model}`;
-                }
-                cpuDisplay += ')';
-            }
-            
-            cpuElement.textContent = cpuDisplay;
-        }
-        
-        // Update network status and IP addresses
-        const networkElement = hostCard.querySelector('.row:nth-child(3) .col-6:last-child .fw-bold');
-        if (networkElement) {
-            networkElement.textContent = data.network_status;
-        }
-        
-        // Update IP addresses
-        const networkContainer = hostCard.querySelector('.row:nth-child(3) .col-6:last-child');
-        if (networkContainer) {
-            // Remove existing IP address display
-            const existingIpDisplay = networkContainer.querySelector('small.text-muted:last-child');
-            if (existingIpDisplay && existingIpDisplay.textContent.includes('WiFi:') || existingIpDisplay.textContent.includes('Eth:')) {
-                existingIpDisplay.remove();
-            }
-            
-            // Add new IP address display if available
-            if (data.ip_addresses) {
-                const ipDisplay = document.createElement('small');
-                ipDisplay.className = 'text-muted';
-                ipDisplay.textContent = data.ip_addresses;
-                networkContainer.appendChild(ipDisplay);
-            }
-        }
-        
-        // Update timezone
-        const timezoneElement = hostCard.querySelector('.row:nth-child(4) .col-6:first-child .fw-bold');
-        if (timezoneElement) {
-            timezoneElement.textContent = data.timezone;
-        }
-        
-        // Update last seen
-        const lastSeenElement = hostCard.querySelector('.last-seen');
-        if (lastSeenElement) {
-            lastSeenElement.textContent = `Last seen: ${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}`;
-        }
-        
-        // Update version badge (centered on same row as View Log button)
-        const versionContainer = hostCard.querySelector('.d-flex.justify-content-center.align-items-center.mt-2.position-relative > div:first-child');
-        if (versionContainer) {
-            versionContainer.innerHTML = data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : '';
-        }
-        
-        // Update the View Log button
-        const logButton = hostCard.querySelector('a[href*="node.log"]');
-        if (logButton) {
-            const hasExceptions = data.exception_count && parseInt(data.exception_count) > 0;
-            logButton.className = `btn btn-sm ${hasExceptions ? 'btn-danger' : 'btn-outline-primary'}`;
-            logButton.innerHTML = `<i class="bi ${hasExceptions ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i> ${hasExceptions ? 'View Log ⚠️' : 'View Log'}`;
-            // Remove target="_blank" to open in same tab for better mobile experience
-            logButton.removeAttribute('target');
-            logButton.removeAttribute('rel');
-            
-            if (hasExceptions) {
-                logButton.setAttribute('title', data.exception_summary);
-                logButton.setAttribute('data-bs-toggle', 'tooltip');
-                logButton.setAttribute('data-bs-placement', 'top');
-            } else {
-                logButton.removeAttribute('title');
-                logButton.removeAttribute('data-bs-toggle');
-                logButton.removeAttribute('data-bs-placement');
-            }
-        }
-        
-        // Reinitialize tooltips for the updated card
-        initializeTooltips();
     }
+
+    wrapper.replaceWith(newWrapper);
+    initializeTooltips();
 }
 
 async function loadData() {
