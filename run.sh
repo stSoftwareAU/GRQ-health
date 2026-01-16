@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.64"
+VERSION="1.0.65"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -831,7 +831,10 @@ should_update() {
         return 0
     fi
 
-    local last_heartbeat=$(jq -r ".\"$HOSTNAME\".heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
+    # For multi-user hosts, check this user's heartbeat first so one user's recent update
+    # doesn't prevent another user's heartbeat from being recorded.
+    local last_heartbeat
+    last_heartbeat=$(jq -r ".\"$HOSTNAME\".users.\"$USER_KEY\".heart_beat_ts // .\"$HOSTNAME\".heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
     local hours_since_last=$(( (CURRENT_TS - last_heartbeat) / 3600 ))
     if [ $hours_since_last -ge $HEARTBEAT_THRESHOLD_HOURS ]; then
         return 0  # Need to update
