@@ -879,7 +879,7 @@ update_json() {
                (if (.[$host].exception_count // 0) > 0 then
                    ( .[$host].users
                      | to_entries
-                     | map(select((.value.exception_count // 0) > 0) | "\(.key): \(.value.exception_summary // \"\")")
+                     | map(select((.value.exception_count // 0) > 0) | "\(.key): \(.value.exception_summary // empty)")
                      | join("; ")
                    ) as $details
                    | "\(.[$host].exception_count) errors across \(.[$host].user_count) user(s)" + (if ($details | length) > 0 then " (" + $details + ")" else "" end)
