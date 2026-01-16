@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.66"
+VERSION="1.0.67"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -884,7 +884,8 @@ update_json() {
            .[$host] = ((.[$host] // {}) + $info)
            # Ensure users map exists and update this user entry
            | .[$host].users = (.[$host].users // {})
-           | .[$host].users[$user] = ((.[$host].users[$user] // {}) + $info
+           | .[$host].users[$user] = ((.[$host].users[$user] // {})
+               + ($info | {exception_count, exception_summary, config_warning})
                | .heart_beat_ts = ($ts | tonumber)
                | .version = $version)
            # Aggregate across users so dashboard can flag a stuck user
@@ -918,7 +919,7 @@ update_json() {
                "heart_beat_ts": ($ts | tonumber),
                "version": $version,
                "users": {
-                   ($user): ($info + {"heart_beat_ts": ($ts | tonumber), "version": $version})
+                   ($user): (($info | {exception_count, exception_summary, config_warning}) + {"heart_beat_ts": ($ts | tonumber), "version": $version})
                },
                "user_count": 1,
                "worst_user_heart_beat_ts": ($ts | tonumber),
