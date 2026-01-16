@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.70";
+const VERSION = "1.0.71";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -64,11 +64,9 @@ function getUserEntries(data) {
 }
 
 function getExpectedUsers(data) {
-    const expected = Array.isArray(data?.expected_users) ? data.expected_users : [];
-    const discovered = getUserEntries(data).map(([u]) => u);
-    // Union + stable sort
-    const set = new Set([...expected, ...discovered].filter(Boolean));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    // "Discovery" model: a user becomes expected only after they've reported at least once.
+    // So expected users are the currently known keys in the host's users map.
+    return getUserEntries(data).map(([u]) => u).sort((a, b) => a.localeCompare(b));
 }
 
 function getWorstUserHeartbeatTs(data) {
