@@ -15,20 +15,36 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.65"
+VERSION="1.0.66"
 
 # Parse command line arguments
 FORCE_UPDATE=false
+NO_GIT=false
+USER_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --force|-f)
             FORCE_UPDATE=true
             shift
             ;;
+        --no-git)
+            NO_GIT=true
+            shift
+            ;;
+        --user)
+            USER_OVERRIDE="${2:-}"
+            if [[ -z "$USER_OVERRIDE" ]]; then
+                echo "Error: --user requires a value"
+                exit 1
+            fi
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
             echo "  --force, -f    Force update regardless of last heartbeat time"
+            echo "  --no-git       Skip git pull/commit/push (useful for local testing)"
+            echo "  --user NAME    Override detected unix user (useful for local multi-user testing)"
             echo "  --help, -h     Show this help message"
             echo ""
             echo "Note: This script automatically skips execution on spot instances"
@@ -54,6 +70,9 @@ HOSTNAME=$HOST
 # Current user (supports multi-user hosts where multiple unix accounts run this script)
 # We record a heartbeat per user under the host entry to avoid one user's updates masking another user's stuck state.
 RAW_USER="$(id -un 2>/dev/null || echo "${USER:-unknown}")"
+if [[ -n "${USER_OVERRIDE}" ]]; then
+    RAW_USER="${USER_OVERRIDE}"
+fi
 if [[ -z "${RAW_USER}" ]]; then
     RAW_USER="unknown"
 fi
@@ -944,7 +963,9 @@ commit_and_push() {
 main() {
     if should_update; then
         echo "Updating health information..."
-        git pull --rebase
+        if [ "$NO_GIT" = false ]; then
+            git pull --rebase
+        fi
         update_json
         # After updating JSON, copy log if present
         LOG_SRC="$HOME/logs/node.log"
@@ -963,7 +984,9 @@ main() {
             cp "$LOG_SRC" "$LOG_DEST_USER"
             cp "$LOG_SRC" "$LOG_DEST_LATEST"
         fi
-        commit_and_push
+        if [ "$NO_GIT" = false ]; then
+            commit_and_push
+        fi
     else
         exit 0
     fi
