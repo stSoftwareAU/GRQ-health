@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.72";
+const VERSION = "1.0.73";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -84,10 +84,14 @@ function getWorstUserHeartbeatTs(data) {
 }
 
 function getUserHeartbeatWarningHours(data) {
-    // Prefer per-host configured threshold emitted by run.sh, otherwise default to 8h.
+    // Prefer per-host configured threshold emitted by run.sh, otherwise default to 24h.
+    // IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold (8h)
+    // to avoid false positives. If processes run hourly and heartbeats update every 8 hours,
+    // marking as stale after exactly 8 hours would cause false positives.
+    // Default: 24 hours (3x the 8-hour heartbeat threshold) - fixes issue #15
     const h = Number(data?.user_stale_hours);
     if (Number.isFinite(h) && h > 0) return h;
-    return 8;
+    return 24;
 }
 
 function getRepoStatus(repo) {
