@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.67"
+VERSION="1.0.68"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -835,14 +835,6 @@ should_update() {
         return 0
     fi
     
-    # If the recorded script version doesn't match current VERSION, update immediately
-    local recorded_version
-    recorded_version=$(jq -r ".\"$HOSTNAME\".version // \"\"" "$JSON_FILE" 2>/dev/null || echo "")
-    if [ "$recorded_version" != "$VERSION" ]; then
-        echo "Version mismatch for $HOSTNAME (found '$recorded_version', current '$VERSION') - updating"
-        return 0
-    fi
-
     # If there are exceptions in the log, update regardless of heartbeat
     scan_log_errors
     if [ "$exception_count" -gt 0 ]; then
@@ -850,11 +842,26 @@ should_update() {
         return 0
     fi
 
-    # For multi-user hosts, check this user's heartbeat first so one user's recent update
-    # doesn't prevent another user's heartbeat from being recorded.
-    local last_heartbeat
-    last_heartbeat=$(jq -r ".\"$HOSTNAME\".users.\"$USER_KEY\".heart_beat_ts // .\"$HOSTNAME\".heart_beat_ts // 0" "$JSON_FILE" 2>/dev/null || echo "0")
-    local hours_since_last=$(( (CURRENT_TS - last_heartbeat) / 3600 ))
+    # Multi-user hosts: use the per-user heartbeat for update cadence.
+    # If this user is not present yet, we MUST update now to create their entry
+    # (otherwise a recently updated host heartbeat could mask a stuck/missing user).
+    local last_user_heartbeat
+    last_user_heartbeat=$(jq -r ".\"$HOSTNAME\".users.\"$USER_KEY\".heart_beat_ts // empty" "$JSON_FILE" 2>/dev/null || echo "")
+    if [[ -z "$last_user_heartbeat" ]] || [[ "$last_user_heartbeat" == "null" ]]; then
+        echo "User '$USER_KEY' not recorded for $HOSTNAME yet - updating to record per-user heartbeat"
+        return 0
+    fi
+
+    # If the user's recorded script version doesn't match current VERSION, update immediately.
+    # (Keeps users in sync when code changes roll out.)
+    local recorded_user_version
+    recorded_user_version=$(jq -r ".\"$HOSTNAME\".users.\"$USER_KEY\".version // \"\"" "$JSON_FILE" 2>/dev/null || echo "")
+    if [ "$recorded_user_version" != "$VERSION" ]; then
+        echo "Version mismatch for $HOSTNAME/$USER_KEY (found '$recorded_user_version', current '$VERSION') - updating"
+        return 0
+    fi
+
+    local hours_since_last=$(( (CURRENT_TS - last_user_heartbeat) / 3600 ))
     if [ $hours_since_last -ge $HEARTBEAT_THRESHOLD_HOURS ]; then
         return 0  # Need to update
     else
