@@ -15,12 +15,13 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.68"
+VERSION="1.0.69"
 
 # Parse command line arguments
 FORCE_UPDATE=false
 NO_GIT=false
 USER_OVERRIDE=""
+EXPECTED_USERS_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --force|-f)
@@ -39,12 +40,21 @@ while [[ $# -gt 0 ]]; do
             fi
             shift 2
             ;;
+        --expected-users)
+            EXPECTED_USERS_OVERRIDE="${2:-}"
+            if [[ -z "$EXPECTED_USERS_OVERRIDE" ]]; then
+                echo "Error: --expected-users requires a value (comma-separated list, e.g. sloth,rocket,elephant)"
+                exit 1
+            fi
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
             echo "  --force, -f    Force update regardless of last heartbeat time"
             echo "  --no-git       Skip git pull/commit/push (useful for local testing)"
             echo "  --user NAME    Override detected unix user (useful for local multi-user testing)"
+            echo "  --expected-users CSV  Override expected users for this host (comma-separated, e.g. sloth,rocket,elephant)"
             echo "  --help, -h     Show this help message"
             echo ""
             echo "Note: This script automatically skips execution on spot instances"
@@ -82,6 +92,43 @@ USER_SLUG="$(echo "${RAW_USER}" | tr ' ' '_' | tr -cd '[:alnum:]_-')"
 if [[ -z "${USER_SLUG}" ]]; then
     USER_SLUG="unknown"
 fi
+
+# Expected users for this host (used to flag hosts when a user is missing/stuck)
+# - If set, GRQ_EXPECTED_USERS or --expected-users (CSV) overrides discovery.
+# - Otherwise we "discover" by probing known bot usernames on this machine.
+#
+# This is intentionally conservative: we only probe known automated users so we don't
+# create permanent warnings for unrelated unix accounts that happen to exist.
+KNOWN_GRQ_USERS=("sloth" "rocket" "elephant")
+
+discover_expected_users_json() {
+    local csv="${GRQ_EXPECTED_USERS:-}"
+    if [[ -n "${EXPECTED_USERS_OVERRIDE}" ]]; then
+        csv="${EXPECTED_USERS_OVERRIDE}"
+    fi
+
+    local users=()
+    if [[ -n "$csv" ]]; then
+        IFS=',' read -r -a users <<< "$csv"
+    else
+        # Always include the current user
+        users+=("$USER_KEY")
+        # Add known bot users if they exist on this machine
+        for u in "${KNOWN_GRQ_USERS[@]}"; do
+            if id -u "$u" >/dev/null 2>&1; then
+                users+=("$u")
+            fi
+        done
+    fi
+
+    # Normalise: trim whitespace, remove empties, dedupe
+    printf '%s\n' "${users[@]}" \
+        | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+        | awk 'NF' \
+        | awk '!seen[$0]++' \
+        | jq -R . \
+        | jq -s .
+}
 
 # Function to detect if this is an AWS instance (all AWS instances are spot/temporary)
 is_aws_instance() {
@@ -872,6 +919,8 @@ should_update() {
 # Function to update JSON file
 update_json() {
     local system_info=$(get_system_info)
+    local expected_users_json
+    expected_users_json="$(discover_expected_users_json)"
     
     # Create backup (tmp file, clean up after)
     if [ -f "$JSON_FILE" ]; then
@@ -885,10 +934,12 @@ update_json() {
            --arg user "$USER_KEY" \
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
+           --argjson expected_users "$expected_users_json" \
            --argjson info "$system_info" \
            '
            # Host-level info (shared machine info), preserve existing manual fields like location/emoji
            .[$host] = ((.[$host] // {}) + $info)
+           | .[$host].expected_users = $expected_users
            # Ensure users map exists and update this user entry
            | .[$host].users = (.[$host].users // {})
            | .[$host].users[$user] = ((.[$host].users[$user] // {})
@@ -921,10 +972,12 @@ update_json() {
            --arg user "$USER_KEY" \
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
+           --argjson expected_users "$expected_users_json" \
            --argjson info "$system_info" \
            '{($host): ($info + {
                "heart_beat_ts": ($ts | tonumber),
                "version": $version,
+               "expected_users": $expected_users,
                "users": {
                    ($user): (($info | {exception_count, exception_summary, config_warning}) + {"heart_beat_ts": ($ts | tonumber), "version": $version})
                },
