@@ -15,7 +15,13 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.69"
+VERSION="1.0.70"
+
+# Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
+# Default: match the existing host update cadence unless overridden.
+# Override via env var: GRQ_USER_STALE_HOURS
+USER_STALE_HOURS_DEFAULT="${HEARTBEAT_THRESHOLD_HOURS}"
+USER_STALE_HOURS="${GRQ_USER_STALE_HOURS:-$USER_STALE_HOURS_DEFAULT}"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -935,11 +941,13 @@ update_json() {
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
            --argjson expected_users "$expected_users_json" \
+           --arg user_stale_hours "$USER_STALE_HOURS" \
            --argjson info "$system_info" \
            '
            # Host-level info (shared machine info), preserve existing manual fields like location/emoji
            .[$host] = ((.[$host] // {}) + $info)
            | .[$host].expected_users = $expected_users
+           | .[$host].user_stale_hours = ($user_stale_hours | tonumber)
            # Ensure users map exists and update this user entry
            | .[$host].users = (.[$host].users // {})
            | .[$host].users[$user] = ((.[$host].users[$user] // {})
@@ -973,11 +981,13 @@ update_json() {
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
            --argjson expected_users "$expected_users_json" \
+           --arg user_stale_hours "$USER_STALE_HOURS" \
            --argjson info "$system_info" \
            '{($host): ($info + {
                "heart_beat_ts": ($ts | tonumber),
                "version": $version,
                "expected_users": $expected_users,
+               "user_stale_hours": ($user_stale_hours | tonumber),
                "users": {
                    ($user): (($info | {exception_count, exception_summary, config_warning}) + {"heart_beat_ts": ($ts | tonumber), "version": $version})
                },
