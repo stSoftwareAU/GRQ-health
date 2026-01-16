@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Log Button Tests - Issue #13</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+        .test-case {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        .pass {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .fail {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .summary {
+            background: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .summary.all-pass {
+            background: #28a745;
+        }
+        .summary.has-failures {
+            background: #dc3545;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .card-preview {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dashboard Log Button Tests - Issue #13</h1>
+    <p>Testing that the "View Log" button only appears when there is a single user (or no users) on a host.</p>
+    <p>When there are multiple users, each user has their own log button in the user table, so the main log button should be hidden.</p>
+
+    <div id="test-results"></div>
+    <div id="summary" class="summary"></div>
+
+    <script>
+        // Import functions from dashboard.js by recreating the relevant logic
+        // This allows us to test the logic in isolation
+
+        function sanitizeUserSlug(user) {
+            const raw = String(user || 'unknown');
+            const slug = raw.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+            return slug || 'unknown';
+        }
+
+        function getUserEntries(data) {
+            const users = data?.users;
+            if (!users || typeof users !== 'object') {
+                return [];
+            }
+            return Object.entries(users).filter(([username, userData]) => {
+                return Boolean(username) && userData && typeof userData === 'object';
+            });
+        }
+
+        function getExpectedUsers(data) {
+            return getUserEntries(data).map(([u]) => u).sort((a, b) => a.localeCompare(b));
+        }
+
+        function getWorstUserHeartbeatTs(data) {
+            const entries = getUserEntries(data);
+            if (!entries.length) {
+                return data?.heart_beat_ts || 0;
+            }
+            const heartbeats = entries
+                .map(([_, userData]) => Number(userData.heart_beat_ts || 0))
+                .filter((ts) => Number.isFinite(ts) && ts > 0);
+            if (!heartbeats.length) {
+                return 0;
+            }
+            return Math.min(...heartbeats);
+        }
+
+        function formatTimestamp(timestamp) {
+            if (!timestamp || Number.isNaN(timestamp) || timestamp <= 0) {
+                return 'Unknown';
+            }
+            return new Date(timestamp * 1000).toLocaleString();
+        }
+
+        function getUserHeartbeatWarningHours(data) {
+            const h = Number(data?.user_stale_hours);
+            if (Number.isFinite(h) && h > 0) return h;
+            return 8;
+        }
+
+        // Simplified createHostCard that returns info about whether log button would be shown
+        function analyseHostCard(hostname, data) {
+            const userEntries = getUserEntries(data);
+            const expectedUsers = getExpectedUsers(data);
+            const showUserTable = expectedUsers.length >= 2;
+            const logUrl = `./log-viewer.html?file=./${hostname}/node.log`;
+
+            const userLogUrls = showUserTable ? expectedUsers.map(username => {
+                const slug = sanitizeUserSlug(username);
+                return {
+                    username,
+                    url: `./log-viewer.html?file=./${hostname}/node-${slug}.log`
+                };
+            }) : [];
+
+            return {
+                hostname,
+                expectedUsers,
+                userCount: expectedUsers.length,
+                showUserTable,
+                mainLogButtonVisible: !showUserTable,
+                mainLogUrl: logUrl,
+                userLogUrls
+            };
+        }
+
+        // Test cases
+        const testCases = [
+            {
+                name: 'Single user host should show main View Log button',
+                hostname: 'GRQ-23',
+                data: {
+                    heart_beat_ts: 1768561603,
+                    users: {
+                        'nigelleck': {
+                            heart_beat_ts: 1768561603,
+                            version: '1.0.71'
+                        }
+                    },
+                    user_count: 1,
+                    expected_users: ['nigelleck']
+                },
+                expectedMainLogVisible: true,
+                expectedUserTableVisible: false
+            },
+            {
+                name: 'Two user host should NOT show main View Log button',
+                hostname: 'GRQ-21',
+                data: {
+                    heart_beat_ts: 1768565174,
+                    users: {
+                        'sloth': {
+                            heart_beat_ts: 1768565174,
+                            version: '1.0.71'
+                        },
+                        'rocket': {
+                            heart_beat_ts: 1768562003,
+                            version: '1.0.71'
+                        }
+                    },
+                    user_count: 2,
+                    expected_users: ['sloth', 'rocket']
+                },
+                expectedMainLogVisible: false,
+                expectedUserTableVisible: true
+            },
+            {
+                name: 'Three user host should NOT show main View Log button',
+                hostname: 'GRQ-25',
+                data: {
+                    heart_beat_ts: 1768562432,
+                    users: {
+                        'rocket': { heart_beat_ts: 1768561655 },
+                        'elephant': { heart_beat_ts: 1768560597 },
+                        'sloth': { heart_beat_ts: 1768562432 }
+                    },
+                    user_count: 3,
+                    expected_users: ['sloth', 'rocket', 'elephant']
+                },
+                expectedMainLogVisible: false,
+                expectedUserTableVisible: true
+            },
+            {
+                name: 'Host with no users should show main View Log button',
+                hostname: 'GRQ-Legacy',
+                data: {
+                    heart_beat_ts: 1768562432
+                },
+                expectedMainLogVisible: true,
+                expectedUserTableVisible: false
+            },
+            {
+                name: 'Multi-user host should have individual log URLs for each user',
+                hostname: 'GRQ-19',
+                data: {
+                    heart_beat_ts: 1768563043,
+                    users: {
+                        'rocket': { heart_beat_ts: 1768562764 },
+                        'sloth': { heart_beat_ts: 1768563043 }
+                    },
+                    user_count: 2,
+                    expected_users: ['sloth', 'rocket']
+                },
+                expectedMainLogVisible: false,
+                expectedUserTableVisible: true,
+                expectedUserLogUrls: [
+                    { username: 'rocket', url: './log-viewer.html?file=./GRQ-19/node-rocket.log' },
+                    { username: 'sloth', url: './log-viewer.html?file=./GRQ-19/node-sloth.log' }
+                ]
+            }
+        ];
+
+        // Run tests
+        let passCount = 0;
+        let failCount = 0;
+        const resultsDiv = document.getElementById('test-results');
+
+        testCases.forEach((testCase, index) => {
+            const result = analyseHostCard(testCase.hostname, testCase.data);
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test-case';
+
+            let passed = true;
+            let details = [];
+
+            // Check main log button visibility
+            if (result.mainLogButtonVisible !== testCase.expectedMainLogVisible) {
+                passed = false;
+                details.push(`Main log button visibility: expected ${testCase.expectedMainLogVisible}, got ${result.mainLogButtonVisible}`);
+            } else {
+                details.push(`Main log button visibility: ${result.mainLogButtonVisible} ✓`);
+            }
+
+            // Check user table visibility
+            if (result.showUserTable !== testCase.expectedUserTableVisible) {
+                passed = false;
+                details.push(`User table visibility: expected ${testCase.expectedUserTableVisible}, got ${result.showUserTable}`);
+            } else {
+                details.push(`User table visibility: ${result.showUserTable} ✓`);
+            }
+
+            // Check individual user log URLs if specified
+            if (testCase.expectedUserLogUrls) {
+                const actualUrls = result.userLogUrls.map(u => u.url).sort();
+                const expectedUrls = testCase.expectedUserLogUrls.map(u => u.url).sort();
+
+                if (JSON.stringify(actualUrls) !== JSON.stringify(expectedUrls)) {
+                    passed = false;
+                    details.push(`User log URLs mismatch`);
+                    details.push(`Expected: ${JSON.stringify(expectedUrls)}`);
+                    details.push(`Got: ${JSON.stringify(actualUrls)}`);
+                } else {
+                    details.push(`User log URLs: ${actualUrls.length} URLs correct ✓`);
+                }
+            }
+
+            if (passed) {
+                passCount++;
+            } else {
+                failCount++;
+            }
+
+            testDiv.innerHTML = `
+                <h3>Test ${index + 1}: ${testCase.name}</h3>
+                <p>Hostname: <code>${testCase.hostname}</code>, User count: ${result.userCount}</p>
+                <p>Result: <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span></p>
+                <pre>${details.join('\n')}</pre>
+                <details>
+                    <summary>Analysis details</summary>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                </details>
+            `;
+
+            resultsDiv.appendChild(testDiv);
+        });
+
+        // Summary
+        const summaryDiv = document.getElementById('summary');
+        summaryDiv.className = `summary ${failCount === 0 ? 'all-pass' : 'has-failures'}`;
+        summaryDiv.innerHTML = `
+            <h2>Test Summary</h2>
+            <p>Passed: ${passCount} / ${testCases.length}</p>
+            <p>Failed: ${failCount} / ${testCases.length}</p>
+            ${failCount === 0 ? '<p>All tests passed!</p>' : '<p>Some tests failed. Please review the results above.</p>'}
+        `;
+    </script>
+</body>
+</html>
