@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.68";
+const VERSION = "1.0.69";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -63,6 +63,14 @@ function getUserEntries(data) {
     });
 }
 
+function getExpectedUsers(data) {
+    const expected = Array.isArray(data?.expected_users) ? data.expected_users : [];
+    const discovered = getUserEntries(data).map(([u]) => u);
+    // Union + stable sort
+    const set = new Set([...expected, ...discovered].filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
 function getWorstUserHeartbeatTs(data) {
     const entries = getUserEntries(data);
     if (!entries.length) {
@@ -75,6 +83,12 @@ function getWorstUserHeartbeatTs(data) {
         return 0;
     }
     return Math.min(...heartbeats);
+}
+
+function getUserHeartbeatWarningHours(data) {
+    // Use the script cadence if present, otherwise default to 8 hours.
+    // (Script currently uses HEARTBEAT_THRESHOLD_HOURS=8.)
+    return 8;
 }
 
 function getRepoStatus(repo) {
@@ -388,6 +402,7 @@ function getHealthStatus(_hostname, data) {
     }
     
     // Multi-user hosts: consider the *worst* (oldest) user's heartbeat so one user's updates can't mask another user's stuck state.
+    const expectedUsers = getExpectedUsers(data);
     const effectiveHeartbeatTs = getWorstUserHeartbeatTs(data);
 
     // Check if this is a mobile host without heartbeat
@@ -422,6 +437,21 @@ function getHealthStatus(_hostname, data) {
     
     // Check for warning states
     if (hoursSinceHeartbeat <= 24) {
+        // Per-user stale detection: if any expected user is missing/stale beyond the user heartbeat threshold, flag WARNING.
+        // This ensures "elephant stuck" makes the host warning even if the host itself updated recently.
+        if (expectedUsers.length >= 2) {
+            const warnHours = getUserHeartbeatWarningHours(data);
+            const usersMap = data?.users && typeof data.users === 'object' ? data.users : {};
+            const anyUserStale = expectedUsers.some((u) => {
+                const ts = Number(usersMap?.[u]?.heart_beat_ts || 0);
+                if (!ts || !Number.isFinite(ts)) return true; // missing counts as stale
+                return (now - ts) / 3600 > warnHours;
+            });
+            if (anyUserStale) {
+                return 'warning';
+            }
+        }
+
         // Disk usage warning (over 75% used) - applies to all hosts including mobile
         // High disk usage is bad - indicates potential storage issues
         if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
@@ -489,18 +519,20 @@ function createHostCard(hostname, data) {
     const location = data.location || '';
 
     const userEntries = getUserEntries(data);
-    const showUserTable = userEntries.length >= 2;
+    const expectedUsers = getExpectedUsers(data);
+    const showUserTable = expectedUsers.length >= 2;
     const displayHeartbeatTs = showUserTable ? getWorstUserHeartbeatTs(data) : data.heart_beat_ts;
     const userTableHtml = showUserTable ? (() => {
         const now = Math.floor(Date.now() / 1000);
-        const rows = userEntries
-            .slice()
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([username, userData]) => {
+        const usersMap = data?.users && typeof data.users === 'object' ? data.users : {};
+        const warnHours = getUserHeartbeatWarningHours(data);
+        const rows = expectedUsers
+            .map((username) => {
+                const userData = usersMap?.[username] || {};
                 const ts = Number(userData.heart_beat_ts || 0);
                 const tsText = ts > 0 ? formatTimestamp(ts) : 'Unknown';
                 const hoursSince = ts > 0 ? (now - ts) / 3600 : Number.POSITIVE_INFINITY;
-                const isStale = hoursSince > 24;
+                const isStale = hoursSince > warnHours;
                 const statusBadge = isStale
                     ? '<span class="badge bg-danger">stale</span>'
                     : '<span class="badge bg-success">ok</span>';
@@ -519,7 +551,7 @@ function createHostCard(hostname, data) {
         return `
             <div class="row mt-2">
                 <div class="col-12">
-                    <small class="text-muted">Users</small>
+                    <small class="text-muted">Users (stale after ${warnHours}h)</small>
                     <div class="table-responsive">
                         <table class="table table-sm table-striped mb-0">
                             <thead>
