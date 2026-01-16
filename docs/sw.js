@@ -1,15 +1,15 @@
 // GRQ Health Dashboard Service Worker
-// Version: 1.0.67
+// Version: 1.0.68
 
-const CACHE_NAME = 'grq-health-v1.0.67';
-const STATIC_CACHE_NAME = 'grq-health-static-v1.0.67';
+const CACHE_NAME = 'grq-health-v1.0.68';
+const STATIC_CACHE_NAME = 'grq-health-static-v1.0.68';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
   './',
   './index.html',
   './styles.css',
-  './dashboard.js?v=1.0.67',
+  './dashboard.js?v=1.0.68',
   './medical-check.png',
   './unhealthy.png',
   './manifest.json',
