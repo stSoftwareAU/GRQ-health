@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status Overflow Tests - Issue #17</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="../docs/styles.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        h1 {
+            color: white;
+            border-bottom: 2px solid white;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .test-case {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        .pass {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .fail {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .summary {
+            background: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .summary.all-pass {
+            background: #28a745;
+        }
+        .summary.has-failures {
+            background: #dc3545;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .card-preview {
+            border: 2px dashed #007bff;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #fafafa;
+            position: relative;
+        }
+        .card-preview::before {
+            content: "Card boundary";
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: #007bff;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .overflow-indicator {
+            position: absolute;
+            top: 0;
+            right: -10px;
+            width: 10px;
+            height: 100%;
+            background: rgba(220, 53, 69, 0.3);
+        }
+        .test-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .test-column {
+            flex: 1;
+            min-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Status Overflow Tests - Issue #17</h1>
+    <p style="color: white;">Testing that the health status badge stays within the host panel boundaries.</p>
+    <p style="color: white;">The status badge should never "leak" outside the card container.</p>
+
+    <div id="test-results"></div>
+    <div id="summary" class="summary"></div>
+
+    <script>
+        // Test function to check if an element overflows its container
+        function checkOverflow(container, element) {
+            const containerRect = container.getBoundingClientRect();
+            const elementRect = element.getBoundingClientRect();
+
+            const overflowLeft = elementRect.left < containerRect.left;
+            const overflowRight = elementRect.right > containerRect.right;
+            const overflowTop = elementRect.top < containerRect.top;
+            const overflowBottom = elementRect.bottom > containerRect.bottom;
+
+            return {
+                overflows: overflowLeft || overflowRight || overflowTop || overflowBottom,
+                overflowLeft,
+                overflowRight,
+                overflowTop,
+                overflowBottom,
+                containerRect,
+                elementRect,
+                details: {
+                    leftDiff: elementRect.left - containerRect.left,
+                    rightDiff: containerRect.right - elementRect.right,
+                    topDiff: elementRect.top - containerRect.top,
+                    bottomDiff: containerRect.bottom - elementRect.bottom
+                }
+            };
+        }
+
+        // Create a host card for testing - uses actual CSS from styles.css without inline overrides
+        // This ensures we're testing the real CSS fix, not a workaround
+        function createTestCard(hostname, status, machineType, emoji, containerWidth) {
+            const statusClasses = {
+                'healthy': 'healthy',
+                'warning': 'warning',
+                'critical': 'critical',
+                'mia': 'mia',
+                'dead': 'dead',
+                'historical': 'historical'
+            };
+
+            const statusClass = statusClasses[status] || 'healthy';
+
+            const machineTypeBadge = machineType
+                ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${machineType}</span>`
+                : '';
+
+            // The host-card uses the CSS from styles.css which should:
+            // - Have overflow: hidden on .host-card
+            // - Have min-width: 0 and text-overflow on .host-card h5
+            // - Have flex-shrink: 0 and white-space: nowrap on .health-status
+            return `
+                <div class="card-preview" style="width: ${containerWidth}px; overflow: visible;">
+                    <div class="host-card ${statusClass}" data-status="${status}" data-hostname="${hostname}">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0 d-flex align-items-center">
+                                ${emoji || ''} ${hostname}
+                                ${machineTypeBadge}
+                            </h5>
+                            <span class="health-status ${statusClass}">${status}</span>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">OS</small>
+                                <div class="fw-bold">macOS 15.0</div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Uptime</small>
+                                <div class="fw-bold">5d</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Test cases
+        const testCases = [
+            {
+                name: 'Short hostname should not overflow',
+                hostname: 'GRQ-23',
+                status: 'healthy',
+                machineType: '',
+                emoji: '',
+                containerWidth: 400
+            },
+            {
+                name: 'Long hostname should not overflow',
+                hostname: 'GRQ-Very-Long-Hostname-That-Might-Cause-Issues',
+                status: 'healthy',
+                machineType: '',
+                emoji: '',
+                containerWidth: 400
+            },
+            {
+                name: 'Hostname with machine type badge should not overflow',
+                hostname: 'GRQ-23',
+                status: 'healthy',
+                machineType: 'Mac Studio',
+                emoji: '',
+                containerWidth: 400
+            },
+            {
+                name: 'Long hostname with machine type should not overflow',
+                hostname: 'GRQ-Long-Hostname-Test',
+                status: 'warning',
+                machineType: 'MacBook Pro',
+                emoji: '',
+                containerWidth: 400
+            },
+            {
+                name: 'Hostname with emoji should not overflow',
+                hostname: 'GRQ-23',
+                status: 'critical',
+                machineType: '',
+                emoji: '🚀',
+                containerWidth: 400
+            },
+            {
+                name: 'Long hostname with emoji and badge should not overflow',
+                hostname: 'GRQ-Super-Long-Name',
+                status: 'warning',
+                machineType: 'Mac Studio',
+                emoji: '🍭',
+                containerWidth: 400
+            },
+            {
+                name: 'Narrow container should not cause overflow',
+                hostname: 'GRQ-23',
+                status: 'healthy',
+                machineType: 'Mac Studio',
+                emoji: '🍭',
+                containerWidth: 300
+            },
+            {
+                name: 'MIA status should not overflow',
+                hostname: 'GRQ-Mobile-Device',
+                status: 'mia',
+                machineType: 'MacBook Air',
+                emoji: '🕊️',
+                containerWidth: 400
+            },
+            {
+                name: 'Critical status should not overflow',
+                hostname: 'GRQ-Server-Critical',
+                status: 'critical',
+                machineType: 'Linux Server',
+                emoji: '👴🏻',
+                containerWidth: 400
+            },
+            {
+                name: 'Very narrow container (250px) should handle gracefully',
+                hostname: 'GRQ-Narrow',
+                status: 'healthy',
+                machineType: 'Mac',
+                emoji: '',
+                containerWidth: 250
+            }
+        ];
+
+        // Run tests
+        let passCount = 0;
+        let failCount = 0;
+        const resultsDiv = document.getElementById('test-results');
+
+        // Create test cards first
+        const testHtml = testCases.map((testCase, index) => `
+            <div class="test-case">
+                <h3>Test ${index + 1}: ${testCase.name}</h3>
+                <p>Hostname: <code>${testCase.hostname}</code>, Status: ${testCase.status}, Container: ${testCase.containerWidth}px</p>
+                <div id="card-container-${index}">
+                    ${createTestCard(testCase.hostname, testCase.status, testCase.machineType, testCase.emoji, testCase.containerWidth)}
+                </div>
+                <div id="result-${index}"></div>
+            </div>
+        `).join('');
+
+        resultsDiv.innerHTML = testHtml;
+
+        // Now check for overflow after rendering
+        setTimeout(() => {
+            testCases.forEach((testCase, index) => {
+                const container = document.querySelector(`#card-container-${index} .host-card`);
+                const statusElement = document.querySelector(`#card-container-${index} .health-status`);
+                const resultDiv = document.getElementById(`result-${index}`);
+
+                if (!container || !statusElement) {
+                    failCount++;
+                    resultDiv.innerHTML = `<p class="fail">FAIL: Could not find required elements</p>`;
+                    return;
+                }
+
+                const overflowCheck = checkOverflow(container, statusElement);
+
+                if (overflowCheck.overflows) {
+                    failCount++;
+                    resultDiv.innerHTML = `
+                        <p class="fail">FAIL: Status badge overflows the card container</p>
+                        <pre>Overflow details:
+- Left overflow: ${overflowCheck.overflowLeft} (${overflowCheck.details.leftDiff.toFixed(2)}px)
+- Right overflow: ${overflowCheck.overflowRight} (${overflowCheck.details.rightDiff.toFixed(2)}px)
+- Top overflow: ${overflowCheck.overflowTop} (${overflowCheck.details.topDiff.toFixed(2)}px)
+- Bottom overflow: ${overflowCheck.overflowBottom} (${overflowCheck.details.bottomDiff.toFixed(2)}px)</pre>
+                    `;
+                } else {
+                    passCount++;
+                    resultDiv.innerHTML = `
+                        <p class="pass">PASS: Status badge stays within card boundaries</p>
+                        <pre>Margins from container edges:
+- Left: ${overflowCheck.details.leftDiff.toFixed(2)}px
+- Right: ${overflowCheck.details.rightDiff.toFixed(2)}px</pre>
+                    `;
+                }
+            });
+
+            // Summary
+            const summaryDiv = document.getElementById('summary');
+            summaryDiv.className = `summary ${failCount === 0 ? 'all-pass' : 'has-failures'}`;
+            summaryDiv.innerHTML = `
+                <h2>Test Summary</h2>
+                <p>Passed: ${passCount} / ${testCases.length}</p>
+                <p>Failed: ${failCount} / ${testCases.length}</p>
+                ${failCount === 0 ? '<p>All tests passed! The status badge stays within the host panel.</p>' : '<p>Some tests failed. The status badge is leaking out of the host panel.</p>'}
+            `;
+        }, 100);
+    </script>
+</body>
+</html>
