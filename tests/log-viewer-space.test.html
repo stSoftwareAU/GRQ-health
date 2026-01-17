@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Viewer Space Optimisation Tests - Issue #18</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        h1 {
+            color: white;
+            border-bottom: 2px solid white;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .test-case {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        .pass {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .fail {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .summary {
+            background: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .summary.all-pass {
+            background: #28a745;
+        }
+        .summary.has-failures {
+            background: #dc3545;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .comparison {
+            display: flex;
+            gap: 20px;
+        }
+        .comparison > div {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <h1>Log Viewer Space Optimisation Tests - Issue #18</h1>
+    <p style="color: white;">Testing that the log viewer uses space efficiently without excessive padding and margins.</p>
+    <p style="color: white;">The log viewer should maximise the visible content area.</p>
+
+    <div id="test-results"></div>
+    <div id="summary" class="summary"></div>
+
+    <script>
+        // Expected CSS values for optimised space usage
+        const expectedValues = {
+            logContainer: {
+                padding: { max: 10 },         // Should be 10px or less (was 20px)
+                marginTop: { max: 50 },       // Should be 50px or less (was 80px)
+                marginSides: { max: 10 }      // Should be 10px or less (was 20px)
+            },
+            logContent: {
+                padding: { max: 12 },         // Should be 12px or less (was 20px)
+                lineHeight: { max: 1.3 }      // Should be 1.3 or less (was 1.4)
+            },
+            logHeader: {
+                padding: { max: 8 }           // Should be compact
+            }
+        };
+
+        // Parse CSS value to number (handles px, em, etc.)
+        function parseSize(value) {
+            if (typeof value === 'number') return value;
+            if (!value) return 0;
+            const num = parseFloat(value);
+            return isNaN(num) ? 0 : num;
+        }
+
+        // Fetch and parse the log-viewer.html CSS
+        async function fetchLogViewerCSS() {
+            try {
+                const response = await fetch('../docs/log-viewer.html');
+                const html = await response.text();
+
+                // Extract CSS from style tag
+                const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+                if (!styleMatch) {
+                    throw new Error('Could not find style tag');
+                }
+                return styleMatch[1];
+            } catch (error) {
+                console.error('Error fetching log-viewer.html:', error);
+                return null;
+            }
+        }
+
+        // Parse CSS rules to extract property values
+        function extractCSSValue(css, selector, property) {
+            // Create a regex to find the selector block
+            const selectorRegex = new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]+)\\}', 'g');
+            const match = selectorRegex.exec(css);
+
+            if (!match) return null;
+
+            const block = match[1];
+            // Find the property value
+            const propRegex = new RegExp(property.replace('-', '\\-') + '\\s*:\\s*([^;]+);?', 'i');
+            const propMatch = propRegex.exec(block);
+
+            return propMatch ? propMatch[1].trim() : null;
+        }
+
+        // Parse shorthand padding (e.g., "10px 15px" or "10px")
+        function parsePadding(value) {
+            if (!value) return { top: 0, right: 0, bottom: 0, left: 0 };
+
+            const parts = value.split(/\s+/).map(p => parseSize(p));
+
+            if (parts.length === 1) {
+                return { top: parts[0], right: parts[0], bottom: parts[0], left: parts[0] };
+            } else if (parts.length === 2) {
+                return { top: parts[0], right: parts[1], bottom: parts[0], left: parts[1] };
+            } else if (parts.length === 4) {
+                return { top: parts[0], right: parts[1], bottom: parts[2], left: parts[3] };
+            }
+
+            return { top: 0, right: 0, bottom: 0, left: 0 };
+        }
+
+        // Parse margin (e.g., "50px 10px 10px 10px" or "50px auto")
+        function parseMargin(value) {
+            if (!value) return { top: 0, right: 0, bottom: 0, left: 0 };
+
+            const parts = value.split(/\s+/).map(p => p === 'auto' ? 0 : parseSize(p));
+
+            if (parts.length === 1) {
+                return { top: parts[0], right: parts[0], bottom: parts[0], left: parts[0] };
+            } else if (parts.length === 2) {
+                return { top: parts[0], right: parts[1], bottom: parts[0], left: parts[1] };
+            } else if (parts.length === 4) {
+                return { top: parts[0], right: parts[1], bottom: parts[2], left: parts[3] };
+            }
+
+            return { top: 0, right: 0, bottom: 0, left: 0 };
+        }
+
+        // Run all tests
+        async function runTests() {
+            const css = await fetchLogViewerCSS();
+
+            if (!css) {
+                document.getElementById('test-results').innerHTML = `
+                    <div class="test-case">
+                        <h3>Error</h3>
+                        <p class="fail">Could not fetch log-viewer.html CSS</p>
+                    </div>
+                `;
+                document.getElementById('summary').className = 'summary has-failures';
+                document.getElementById('summary').innerHTML = '<h2>Tests Failed</h2><p>Could not load CSS to test.</p>';
+                return;
+            }
+
+            const testResults = [];
+
+            // Test 1: Log container padding
+            const logContainerPadding = extractCSSValue(css, '.log-container', 'padding');
+            const padding = parsePadding(logContainerPadding);
+            const maxPaddingValue = Math.max(padding.top, padding.right, padding.bottom, padding.left);
+            testResults.push({
+                name: 'Log container padding should be compact',
+                description: `Padding should be ${expectedValues.logContainer.padding.max}px or less`,
+                actual: logContainerPadding || 'not set',
+                expected: `≤ ${expectedValues.logContainer.padding.max}px`,
+                pass: maxPaddingValue <= expectedValues.logContainer.padding.max
+            });
+
+            // Test 2: Log container margin top
+            const logContainerMargin = extractCSSValue(css, '.log-container', 'margin');
+            const margin = parseMargin(logContainerMargin);
+            testResults.push({
+                name: 'Log container top margin should be reduced',
+                description: `Top margin should be ${expectedValues.logContainer.marginTop.max}px or less`,
+                actual: margin.top + 'px',
+                expected: `≤ ${expectedValues.logContainer.marginTop.max}px`,
+                pass: margin.top <= expectedValues.logContainer.marginTop.max
+            });
+
+            // Test 3: Log container side margins
+            const maxSideMargin = Math.max(margin.left, margin.right);
+            testResults.push({
+                name: 'Log container side margins should be compact',
+                description: `Side margins should be ${expectedValues.logContainer.marginSides.max}px or less`,
+                actual: maxSideMargin + 'px',
+                expected: `≤ ${expectedValues.logContainer.marginSides.max}px`,
+                pass: maxSideMargin <= expectedValues.logContainer.marginSides.max
+            });
+
+            // Test 4: Log content padding
+            const logContentPadding = extractCSSValue(css, '.log-content', 'padding');
+            const contentPadding = parsePadding(logContentPadding);
+            const maxContentPadding = Math.max(contentPadding.top, contentPadding.right, contentPadding.bottom, contentPadding.left);
+            testResults.push({
+                name: 'Log content padding should be compact',
+                description: `Content padding should be ${expectedValues.logContent.padding.max}px or less`,
+                actual: logContentPadding || 'not set',
+                expected: `≤ ${expectedValues.logContent.padding.max}px`,
+                pass: maxContentPadding <= expectedValues.logContent.padding.max
+            });
+
+            // Test 5: Line height
+            const lineHeight = extractCSSValue(css, '.log-content', 'line-height');
+            const lineHeightValue = parseFloat(lineHeight) || 1.4;
+            testResults.push({
+                name: 'Line height should be compact',
+                description: `Line height should be ${expectedValues.logContent.lineHeight.max} or less`,
+                actual: lineHeight || 'not set',
+                expected: `≤ ${expectedValues.logContent.lineHeight.max}`,
+                pass: lineHeightValue <= expectedValues.logContent.lineHeight.max
+            });
+
+            // Test 6: Log header padding
+            const logHeaderPadding = extractCSSValue(css, '.log-header', 'padding');
+            const headerPadding = parsePadding(logHeaderPadding);
+            const maxHeaderPadding = Math.max(headerPadding.top, headerPadding.right, headerPadding.bottom, headerPadding.left);
+            testResults.push({
+                name: 'Log header padding should be compact',
+                description: `Header padding should be ${expectedValues.logHeader.padding.max}px or less`,
+                actual: logHeaderPadding || 'not set',
+                expected: `≤ ${expectedValues.logHeader.padding.max}px`,
+                pass: maxHeaderPadding <= expectedValues.logHeader.padding.max
+            });
+
+            // Render results
+            const passCount = testResults.filter(t => t.pass).length;
+            const failCount = testResults.filter(t => !t.pass).length;
+
+            document.getElementById('test-results').innerHTML = testResults.map((test, index) => `
+                <div class="test-case">
+                    <h3>Test ${index + 1}: ${test.name}</h3>
+                    <p>${test.description}</p>
+                    <table>
+                        <tr>
+                            <th>Expected</th>
+                            <th>Actual</th>
+                            <th>Result</th>
+                        </tr>
+                        <tr>
+                            <td>${test.expected}</td>
+                            <td>${test.actual}</td>
+                            <td class="${test.pass ? 'pass' : 'fail'}">${test.pass ? 'PASS' : 'FAIL'}</td>
+                        </tr>
+                    </table>
+                </div>
+            `).join('');
+
+            const summaryDiv = document.getElementById('summary');
+            summaryDiv.className = `summary ${failCount === 0 ? 'all-pass' : 'has-failures'}`;
+            summaryDiv.innerHTML = `
+                <h2>Test Summary</h2>
+                <p>Passed: ${passCount} / ${testResults.length}</p>
+                <p>Failed: ${failCount} / ${testResults.length}</p>
+                ${failCount === 0
+                    ? '<p>All tests passed! The log viewer uses space efficiently.</p>'
+                    : '<p>Some tests failed. The log viewer has excessive padding/margins wasting space.</p>'}
+            `;
+        }
+
+        runTests();
+    </script>
+</body>
+</html>
