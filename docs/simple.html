@@ -132,73 +132,123 @@
             }
         }
         
+        // Get idle worker status by comparing 1m, 5m and 15m load averages - Issue #23
+        // Returns an object with idle status and details to help detect workers not doing meaningful work
+        function getIdleWorkerStatus(data) {
+            const result = {
+                isIdle: false,
+                reason: '',
+                load1m: null,
+                load5m: null,
+                load15m: null,
+                coreCount: 0
+            };
+
+            // Need load_averages and cpu_cores data
+            if (!data.load_averages || !data.cpu_cores) {
+                return result;
+            }
+
+            const coreCount = parseInt(data.cpu_cores);
+            if (!Number.isFinite(coreCount) || coreCount <= 0) {
+                return result;
+            }
+            result.coreCount = coreCount;
+
+            // Parse load averages from format like "43.6% (1m), 73.2% (5m), 56.6% (15m)"
+            const load1mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(1m\)/);
+            const load5mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(5m\)/);
+            const load15mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(15m\)/);
+
+            if (!load1mMatch || !load5mMatch || !load15mMatch) {
+                return result;
+            }
+
+            const load1m = parseFloat(load1mMatch[1]);
+            const load5m = parseFloat(load5mMatch[1]);
+            const load15m = parseFloat(load15mMatch[1]);
+
+            if (!Number.isFinite(load1m) || !Number.isFinite(load5m) || !Number.isFinite(load15m)) {
+                return result;
+            }
+
+            result.load1m = load1m;
+            result.load5m = load5m;
+            result.load15m = load15m;
+
+            // Only check multi-core systems (> 4 cores)
+            if (coreCount <= 4) {
+                return result;
+            }
+
+            // Define thresholds for idle detection
+            const idleThreshold1m = 15;
+            const idleThreshold5m = 15;
+            const idleThreshold15m = 20;
+
+            // Check for consistently idle machine - all averages are low
+            if (load1m < idleThreshold1m && load5m < idleThreshold5m && load15m < idleThreshold15m) {
+                result.isIdle = true;
+                result.reason = `Worker idle: ${load1m.toFixed(1)}% (1m), ${load5m.toFixed(1)}% (5m), ${load15m.toFixed(1)}% (15m) on ${coreCount} cores`;
+                return result;
+            }
+
+            return result;
+        }
+
         function getHealthStatus(hostname, data) {
             // Check if this is a dead machine
             if (data.death_date) {
                 return 'dead';
             }
-            
+
             // Check if this is a mobile host without heartbeat
             if (data.mobile && !data.heart_beat_ts) {
                 return 'historical';
             }
-            
+
             // For active hosts without heartbeat, mark as critical (unless mobile)
             if (!data.heart_beat_ts) {
                 return 'critical';
             }
-            
+
             const now = Math.floor(Date.now() / 1000);
             const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
-            
+
             // Handle timezone issues - if heartbeat is in the future, assume it's recent
             if (data.heart_beat_ts > now) {
                 return 'healthy';
             }
-            
+
             // Check for MIA state (mobile hosts not seen for 24+ hours)
             if (hoursSinceHeartbeat > 24 && data.mobile) {
                 return 'mia';
             }
-            
+
             // Check for critical state (no heartbeat for 24+ hours)
             if (hoursSinceHeartbeat > 24 && !data.mobile) {
                 return 'critical';
             }
-            
+
             // Check for warning states
             if (hoursSinceHeartbeat <= 24) {
                 // Disk usage warning (over 75% used)
                 if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
                     return 'warning';
                 }
-                
+
                 // Config warning (missing PRIMARY_READ_URL or TRAINING_WRITE_URL)
                 if (data.config_warning && data.config_warning.trim().length > 0) {
                     return 'warning';
                 }
-                
-                // CPU utilization warning (under 20% for multi-core systems)
-                if (data.cpu_load && data.cpu_cores) {
-                    const cpuPercent = parseFloat(data.cpu_load.replace('%', ''));
-                    const coreCount = parseInt(data.cpu_cores);
-                    if (coreCount > 4 && cpuPercent < 20) {
-                        return 'warning';
-                    }
+
+                // Idle worker detection - Issue #23
+                // Uses 1m, 5m, and 15m load averages to detect workers not doing meaningful work
+                const idleStatus = getIdleWorkerStatus(data);
+                if (idleStatus.isIdle) {
+                    return 'warning';
                 }
-                
-                // Recent utilization warning - check 5-minute load average
-                if (data.load_averages && data.cpu_cores) {
-                    const loadMatch = data.load_averages.match(/(\d+\.?\d*)% \(5m\)/);
-                    if (loadMatch) {
-                        const load5mPercent = parseFloat(loadMatch[1]);
-                        const coreCount = parseInt(data.cpu_cores);
-                        if (coreCount > 4 && load5mPercent < 10) {
-                            return 'warning';
-                        }
-                    }
-                }
-                
+
                 // OS version warning
                 if (data.os_info && data.os_version) {
                     if (data.os_info.includes('macOS') && data.os_version < '14.0') {
@@ -208,15 +258,15 @@
                         return 'warning';
                     }
                 }
-                
+
                 // Exception warning
                 if (data.exception_count && parseInt(data.exception_count) > 0) {
                     return 'warning';
                 }
-                
+
                 return 'healthy';
             }
-            
+
             return 'healthy';
         }
 
