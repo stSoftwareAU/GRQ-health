@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.75";
+const VERSION = "1.0.76";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -92,6 +92,45 @@ function getUserHeartbeatWarningHours(data) {
     const h = Number(data?.user_stale_hours);
     if (Number.isFinite(h) && h > 0) return h;
     return 24;
+}
+
+// Get list of stale users with their heartbeat information - Issue #22
+function getStaleUsers(data, nowTs) {
+    const expectedUsers = getExpectedUsers(data);
+    if (expectedUsers.length < 2) {
+        return []; // Only check multi-user hosts
+    }
+    const warnHours = getUserHeartbeatWarningHours(data);
+    const usersMap = data?.users && typeof data.users === 'object' ? data.users : {};
+    const staleUsers = [];
+    expectedUsers.forEach((username) => {
+        const ts = Number(usersMap?.[username]?.heart_beat_ts || 0);
+        const hoursSince = ts > 0 ? (nowTs - ts) / 3600 : Number.POSITIVE_INFINITY;
+        const isStale = !ts || !Number.isFinite(ts) || hoursSince > warnHours;
+        if (isStale) {
+            staleUsers.push({
+                username,
+                heartbeatTs: ts,
+                hoursSince: Math.floor(hoursSince)
+            });
+        }
+    });
+    return staleUsers;
+}
+
+// Build warning text for stale users - Issue #22
+function buildStaleUserWarning(data, nowTs) {
+    const staleUsers = getStaleUsers(data, nowTs);
+    if (staleUsers.length === 0) {
+        return '';
+    }
+    const userDetails = staleUsers.map(u => {
+        if (u.heartbeatTs > 0) {
+            return `${u.username} (${formatTimestamp(u.heartbeatTs)})`;
+        }
+        return `${u.username} (never seen)`;
+    }).join(', ');
+    return `Stale user${staleUsers.length > 1 ? 's' : ''}: ${userDetails}`;
 }
 
 function getRepoStatus(repo) {
@@ -943,6 +982,13 @@ function updateStats(hosts) {
             if (data.exception_count && parseInt(data.exception_count) > 0) {
                 if (warningReason) warningReason += ', ';
                 warningReason += `Stack traces: ${data.exception_summary}`;
+            }
+            // Issue #22: Highlight which user has the warning (stale users)
+            const now = Math.floor(Date.now() / 1000);
+            const staleUserWarning = buildStaleUserWarning(data, now);
+            if (staleUserWarning) {
+                if (warningReason) warningReason += ', ';
+                warningReason += staleUserWarning;
             }
             return `<div class="warning-host-item">
                 <strong>${hostname}</strong> - ${warningReason}
