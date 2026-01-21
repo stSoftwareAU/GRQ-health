@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.76";
+const VERSION = "1.0.77";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -131,6 +131,100 @@ function buildStaleUserWarning(data, nowTs) {
         return `${u.username} (never seen)`;
     }).join(', ');
     return `Stale user${staleUsers.length > 1 ? 's' : ''}: ${userDetails}`;
+}
+
+// Get idle worker status by comparing 1m, 5m and 15m load averages - Issue #23
+// Returns an object with idle status and details to help detect workers not doing meaningful work
+// The key insight is:
+// - If all averages (1m, 5m, 15m) are low, the machine is consistently idle
+// - If 15m is high but 1m/5m are low, work finished recently (not a concern)
+// - If 15m is low but 1m/5m are high, work just started (not a concern)
+// - Only flag when the machine appears consistently underutilised
+function getIdleWorkerStatus(data) {
+    const result = {
+        isIdle: false,
+        reason: '',
+        load1m: null,
+        load5m: null,
+        load15m: null,
+        coreCount: 0
+    };
+
+    // Need load_averages and cpu_cores data
+    if (!data.load_averages || !data.cpu_cores) {
+        return result;
+    }
+
+    const coreCount = parseInt(data.cpu_cores);
+    if (!Number.isFinite(coreCount) || coreCount <= 0) {
+        return result;
+    }
+    result.coreCount = coreCount;
+
+    // Parse load averages from format like "43.6% (1m), 73.2% (5m), 56.6% (15m)"
+    const load1mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(1m\)/);
+    const load5mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(5m\)/);
+    const load15mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(15m\)/);
+
+    if (!load1mMatch || !load5mMatch || !load15mMatch) {
+        return result;
+    }
+
+    const load1m = parseFloat(load1mMatch[1]);
+    const load5m = parseFloat(load5mMatch[1]);
+    const load15m = parseFloat(load15mMatch[1]);
+
+    if (!Number.isFinite(load1m) || !Number.isFinite(load5m) || !Number.isFinite(load15m)) {
+        return result;
+    }
+
+    result.load1m = load1m;
+    result.load5m = load5m;
+    result.load15m = load15m;
+
+    // Only check multi-core systems (> 4 cores) as single-core systems have different usage patterns
+    if (coreCount <= 4) {
+        return result;
+    }
+
+    // Define thresholds for idle detection
+    // A worker is considered idle when ALL load averages are below thresholds
+    // This indicates consistent underutilisation, not just a momentary lull
+    const idleThreshold1m = 15;  // 1-minute average threshold (most recent)
+    const idleThreshold5m = 15;  // 5-minute average threshold (short-term)
+    const idleThreshold15m = 20; // 15-minute average threshold (longer-term)
+
+    // Check for consistently idle machine - all averages are low
+    if (load1m < idleThreshold1m && load5m < idleThreshold5m && load15m < idleThreshold15m) {
+        result.isIdle = true;
+        result.reason = `Worker idle: ${load1m.toFixed(1)}% (1m), ${load5m.toFixed(1)}% (5m), ${load15m.toFixed(1)}% (15m) on ${coreCount} cores`;
+        return result;
+    }
+
+    // Check for recently stopped work - 15m is higher than current (1m/5m)
+    // This is informational, not a warning - work may have just finished
+    if (load15m > 50 && load1m < 15 && load5m < 20) {
+        // Work appears to have finished recently - not idle, just completed work
+        return result;
+    }
+
+    // Check for recently started work - 1m/5m are higher than 15m
+    // This is informational - work may have just started
+    if (load1m > 50 && load15m < 20) {
+        // Work appears to have just started - not idle
+        return result;
+    }
+
+    return result;
+}
+
+// Build warning text for idle workers - Issue #23
+function buildIdleWorkerWarning(data) {
+    const idleStatus = getIdleWorkerStatus(data);
+    if (!idleStatus.isIdle) {
+        return '';
+    }
+    return idleStatus.reason;
 }
 
 function getRepoStatus(repo) {
@@ -505,27 +599,13 @@ function getHealthStatus(_hostname, data) {
             return 'warning';
         }
         
-        // CPU utilization warning (under 20% for multi-core systems) - indicates potential training issues
-        // Low CPU usage on multi-core systems might indicate single-threaded training or stuck processes
-        if (data.cpu_load && data.cpu_cores) {
-            const cpuPercent = parseFloat(data.cpu_load.replace('%', ''));
-            const coreCount = parseInt(data.cpu_cores);
-            if (coreCount > 4 && cpuPercent < 20) {
-                return 'warning';
-            }
-        }
-        
-        // Recent utilization warning - check 5-minute load average for recent activity
-        if (data.load_averages && data.cpu_cores) {
-            const loadMatch = data.load_averages.match(/(\d+\.?\d*)% \(5m\)/);
-            if (loadMatch) {
-                const load5mPercent = parseFloat(loadMatch[1]);
-                const coreCount = parseInt(data.cpu_cores);
-                // If 5-minute load average is very low on multi-core systems, might indicate recent under utilization
-                if (coreCount > 4 && load5mPercent < 10) {
-                    return 'warning';
-                }
-            }
+        // Idle worker detection - Issue #23
+        // Uses 1m, 5m, and 15m load averages to detect workers not doing meaningful work
+        // A worker is flagged as idle only when ALL averages are consistently low
+        // This avoids false positives from momentary lulls or workers that just finished/started work
+        const idleStatus = getIdleWorkerStatus(data);
+        if (idleStatus.isIdle) {
+            return 'warning';
         }
         
         // OS version warning (basic check)
@@ -950,24 +1030,11 @@ function updateStats(hosts) {
                 if (warningReason) warningReason += ', ';
                 warningReason += data.config_warning;
             }
-            if (data.cpu_load && data.cpu_cores) {
-                const cpuPercent = parseFloat(data.cpu_load.replace('%', ''));
-                const coreCount = parseInt(data.cpu_cores);
-                if (coreCount > 4 && cpuPercent < 20) {
-                    if (warningReason) warningReason += ', ';
-                    warningReason += `Low CPU utilization: ${data.cpu_load} (${coreCount} cores)`;
-                }
-            }
-            if (data.load_averages && data.cpu_cores) {
-                const loadMatch = data.load_averages.match(/(\d+\.?\d*)% \(5m\)/);
-                if (loadMatch) {
-                    const load5mPercent = parseFloat(loadMatch[1]);
-                    const coreCount = parseInt(data.cpu_cores);
-                    if (coreCount > 4 && load5mPercent < 10) {
-                        if (warningReason) warningReason += ', ';
-                        warningReason += `Low recent utilization: ${load5mPercent}% (5m avg)`;
-                    }
-                }
+            // Issue #23: Idle worker detection using 1m, 5m, 15m load averages
+            const idleWorkerWarning = buildIdleWorkerWarning(data);
+            if (idleWorkerWarning) {
+                if (warningReason) warningReason += ', ';
+                warningReason += idleWorkerWarning;
             }
             if (data.os_info && data.os_version) {
                 if ((data.os_info.includes('macOS') && data.os_version < '14.0') || 
