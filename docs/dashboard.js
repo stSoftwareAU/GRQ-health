@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.77";
+const VERSION = "1.0.78";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -536,41 +536,51 @@ function getHealthStatus(_hostname, data) {
     if (data.death_date) {
         return 'dead';
     }
-    
+
+    // Host-level heartbeat: when the host itself was last seen.
+    // This is used for critical/MIA determination (Issue #26).
+    const hostHeartbeatTs = data?.heart_beat_ts || 0;
+
     // Multi-user hosts: consider the *worst* (oldest) user's heartbeat so one user's updates can't mask another user's stuck state.
+    // This is used for per-user stale warning detection only — not for critical status.
     const expectedUsers = getExpectedUsers(data);
-    const effectiveHeartbeatTs = getWorstUserHeartbeatTs(data);
+    const worstUserHeartbeatTs = getWorstUserHeartbeatTs(data);
+
+    // For critical/MIA determination, use the host-level heartbeat.
+    // A stale user should trigger a warning, not mark the entire host as critical.
+    // Fall back to worst user heartbeat only if there is no host-level heartbeat (Issue #26).
+    const effectiveHeartbeatTs = hostHeartbeatTs || worstUserHeartbeatTs;
 
     // Check if this is a mobile host without heartbeat
     if (data.mobile && !effectiveHeartbeatTs) {
         // For mobile hosts without heartbeat, mark as historical
         return 'historical';
     }
-    
+
     // For active hosts without heartbeat, mark as critical (unless mobile)
     if (!effectiveHeartbeatTs) {
         return 'critical';
     }
-    
+
     const now = Math.floor(Date.now() / 1000);
     const hoursSinceHeartbeat = (now - effectiveHeartbeatTs) / 3600;
-    
+
     // Handle timezone issues - if heartbeat is in the future, assume it's recent
     if (effectiveHeartbeatTs > now) {
         return 'healthy';
     }
-    
+
     // Check for MIA state (mobile hosts not seen for 24+ hours)
     if (hoursSinceHeartbeat > 24 && data.mobile) {
         return 'mia';
     }
-    
+
     // Check for critical state (no heartbeat for 24+ hours)
     // Mobile hosts are now marked as MIA instead of critical
     if (hoursSinceHeartbeat > 24 && !data.mobile) {
         return 'critical';
     }
-    
+
     // Check for warning states
     if (hoursSinceHeartbeat <= 24) {
         // Per-user stale detection: if any expected user is missing/stale beyond the user heartbeat threshold, flag WARNING.
