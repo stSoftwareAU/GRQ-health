@@ -1,66 +1,438 @@
-run_core pid=22171 start=Tue Feb  3 07:06:24 AEDT 2026
+run_core pid=88956 start=Tue Feb  3 17:40:08 AEDT 2026
 ================ Clean up START ================
 Version 1.3.13
 Disk usage:
 Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
-/dev/disk3s1s1   460Gi    11Gi   295Gi     4%    453k  3.1G    0%   /
+/dev/disk3s1s1   460Gi    11Gi   293Gi     4%    453k  3.1G    0%   /
 devfs            204Ki   204Ki     0Bi   100%     706     0  100%   /dev
-/dev/disk3s6     460Gi   2.0Gi   295Gi     1%       2  3.1G    0%   /System/Volumes/VM
-/dev/disk3s2     460Gi   7.5Gi   295Gi     3%    1.3k  3.1G    0%   /System/Volumes/Preboot
-/dev/disk3s4     460Gi   3.1Mi   295Gi     1%      63  3.1G    0%   /System/Volumes/Update
+/dev/disk3s6     460Gi   4.0Gi   293Gi     2%       4  3.1G    0%   /System/Volumes/VM
+/dev/disk3s2     460Gi   7.5Gi   293Gi     3%    1.3k  3.1G    0%   /System/Volumes/Preboot
+/dev/disk3s4     460Gi   3.1Mi   293Gi     1%      63  3.1G    0%   /System/Volumes/Update
 /dev/disk1s2     500Mi   6.0Mi   482Mi     2%       1  4.9M    0%   /System/Volumes/xarts
 /dev/disk1s1     500Mi   5.6Mi   482Mi     2%      30  4.9M    0%   /System/Volumes/iSCPreboot
 /dev/disk1s3     500Mi   1.2Mi   482Mi     1%      60  4.9M    0%   /System/Volumes/Hardware
-/dev/disk3s5     460Gi   143Gi   295Gi    33%    846k  3.1G    0%   /System/Volumes/Data
+/dev/disk3s5     460Gi   143Gi   293Gi    33%    851k  3.1G    0%   /System/Volumes/Data
 map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
-/dev/disk5s1     1.8Ti   961Gi   902Gi    52%     59M  9.5G    1%   /Volumes/DataGRQ
-Uptime:  7:06  up 22:15, 3 users, load averages: 4.92 3.86 3.64
-Start: 07:06:24@AEDT
-USER    PID  PPID COMMAND
-nigel 11314     1 cloudphotod
-nigel 22171     1 /bin/bash /Users/nigel/src/GRQ/worker/.run_core.sh
-nigel 22210 22171 /bin/bash worker/node.sh
-nigel 22216 22171 sleep 30
-root  22235 22210 ps -U nigel -o user,pid,ppid,command
-nigel 75343     1 deno run --v8-flags=--max-old-space-size=16384 --allow-read --allow-write --allow-net --allow-ffi --allow-env src/Learn.ts --timeout=5 --log=1 --populationSize=50 --trainingSampleRate=0.3 --sparseRatio=0.075 --elitism=1 --sampler=true --verbose=true --disableCRISPR=false --traceStore=.trace --costOfGrowth=0.000_000_000_5 --costName=MSE --focusList= --discoverySampleRate=0.025
-root    786   784 login -pf nigel
-nigel   788   786 -zsh
-root  14918   788 sudo su - trainer
-root  14919 14918 sudo su - trainer
+/dev/disk5s1     1.8Ti   971Gi   892Gi    53%     59M  9.4G    1%   /Volumes/DataGRQ
+Uptime: 17:40  up 1 day,  8:49, 3 users, load averages: 7.87 9.41 11.83
+Start: 17:40:08@AEDT
+USER      PID  PPID COMMAND
+trainer 85947     1 /bin/bash worker/node.sh
+trainer 85999 85947 /bin/bash ./train/taskData.sh
+trainer 87839 87838 /bin/sh -c ~/GRQ/worker/sync_training_to_s3.sh >> ~/logs/s3.log 2>> ~/logs/s3.err
+trainer 87840 87839 /bin/bash /Volumes/DataGRQ/Trainer/GRQ/worker/sync_training_to_s3.sh
+trainer 87931 87840 /opt/homebrew/Cellar/python@3.13/3.13.11/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /opt/homebrew/bin/aws s3 cp /Volumes/DataGRQ/Trainer/Training/5a85f65e8e72d7639383c742baf0808b0f8334f30eaf0a3f5d851340d9c7ed53.tgz s3://grq-trainingdata/trainData-binary_97/data.tgz.uploading.5a85f65e8e72d7639383c742baf0808b0f8334f30eaf0a3f5d851340d9c7ed53.87840 --only-show-errors
+trainer 88617 85999 tee -a /Volumes/DataGRQ/Trainer/logs/trainDataIndustry.log
+trainer 88651     1 /bin/bash ./repos.sh
+trainer 88885 88651 /bin/bash ./model_fetch.sh GRQ-sentiment-tickers --skip-validate
+trainer 88955 88954 /bin/sh -c nice -n 20 ~/GRQ/run.sh --max-stale-hours 96 --max-task-hours 96 >> ~/logs/run.log 2>> ~/logs/run.err
+trainer 88956 88955 /bin/bash /Volumes/DataGRQ/Trainer/GRQ/worker/.run_core.sh --max-task-hours 96
+trainer 88997 88956 /bin/bash worker/node.sh
+trainer 89003 88956 sleep 30
+root    89024 88997 ps -U trainer -o user,pid,ppid,command
+trainer 66234 66233 -zsh
+trainer 88743 66234 tail -F /Volumes/DataGRQ/Trainer/logs/node.log
+worker/node.sh: line 73: ifconfig: command not found
+worker/node.sh: line 74: sysctl: command not found
 Host: GRQ-11
-User: nigel
-IP: 169.254.10.167
-169.254.244.105
-169.254.69.240
-10.0.0.11
-10.0.0.89
-10.1.0.11
-100.107.196.16
-Number of CPUs: 10
-Available Memory: 24G
+User: trainer
+IP: 
+Number of CPUs: 
+Available Memory: 14G
 ================ Clean up ENDED ================
-PATH: /Users/nigel/.deno/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
+PATH: /Volumes/DataGRQ/Trainer/.deno/bin:/usr/bin:/bin:/opt/homebrew/bin
 deno 2.6.7 (stable, release, aarch64-apple-darwin)
 v8 14.5.201.2-rusty
 typescript 5.9.2
 aws-cli/2.32.11 Python/3.13.11 Darwin/25.2.0 source/arm64
-Option: 9
-World Index 1.1
-HEAD is now at 93d91fe GRQ-11 OK GRQ-WorldUncertaintyIndex
+Option: data
+Starting data training task at Tue Feb  3 17:40:10 AEDT 2026
+Logs are current, appending to existing files
+Running trainDataStocks.sh...
+HEAD is now at 80f6a03 Evolution score 0.4087 -> 0.4088 {diff 1} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+HEAD is now at 4186820483 🪶 Removed neuron fea0f39d (impact: 1.77e-3) for Mac-Ultra-M2-1: Score +1.20000e-7 -> 0.408836
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 944756d9 REJECTED 12.05% -> 8.15% Delta -3.891
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+Starting default... Tue Feb  3 17:40:52 AEDT 2026
+Cluster mode
+HEAD is now at 8fe9ef0f5d Refresh of history on GRQ-11@2026-02-03
 Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
-✅ GRQ-coordination synced with remote (validation skipped)
-✋  GRQ-WorldUncertaintyIndex is not eligible to run right now. Status: OK, Host: GRQ-11, Age: 74592s
-🔒 Lock not acquired for GRQ-WorldUncertaintyIndex. Exiting.
-HEAD is now at 031c54bd0 Enhance tests for PidGuard and Worker initialization (#788)
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at 0eb12519f4 Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+Difference between cluster score 0.4088 & worker score 0.4173 is 85
+Cluster score 0.4088 on 20260203 BETTER than worker's score 0.4173 on 0000000; ignoring worker's network
+HEAD is now at 8fe9ef0f5d Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at 0eb12519f4 Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at e94bd85 Refresh of history for 2026-02-03 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-location
+   a1c43580..3a5ae166  Develop    -> origin/Develop
+HEAD is now at 3a5ae166 GRQ-16 Improved location models
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at be6e1f28 GRQ-16 Improved Industry models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at e02a1fa GRQ-3 Improved exchange models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 80f6a03 Evolution score 0.4087 -> 0.4088 {diff 1} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+HEAD is now at 4186820483 🪶 Removed neuron fea0f39d (impact: 1.77e-3) for Mac-Ultra-M2-1: Score +1.20000e-7 -> 0.408836
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 944756d9 REJECTED 12.05% -> 8.15% Delta -3.891
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 857ebfb925a2 Refresh of Sentiments on GRQ-3@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-tickers synced with remote (validation skipped)
+fatal: Unable to create '/Volumes/DataGRQ/Trainer/GRQ-sentiment-topics/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+⚠️ Reset failed and cannot reach GitHub - keeping repo, will retry later
+ERROR: trainDataStocks.sh failed with status 1
+Running trainDataIndustry.sh...
+HEAD is now at be6e1f28 GRQ-16 Improved Industry models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at 8fe9ef0f5d Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at 0eb12519f4 Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at e94bd85 Refresh of history for 2026-02-03 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-location
+   3a5ae166..da8024c3  Develop    -> origin/Develop
+HEAD is now at da8024c3 GRQ-3 Improved location models
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at be6e1f28 GRQ-16 Improved Industry models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at e02a1fa GRQ-3 Improved exchange models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 80f6a03 Evolution score 0.4087 -> 0.4088 {diff 1} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+From github.com:stSoftwareAU/GRQ-sampler
+   4186820483..665e5bd46b  main       -> origin/main
+HEAD is now at 665e5bd46b 🪶 Removed neuron fea0f39d (impact: 1.77e-3) for Mac-Ultra-M2-1: Score +1.20000e-7 -> 0.408838
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 944756d9 REJECTED 12.05% -> 8.15% Delta -3.891
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 857ebfb925a2 Refresh of Sentiments on GRQ-3@2026-02-03
+fatal: Unable to create '/Volumes/DataGRQ/Trainer/GRQ-sentiment-tickers/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+⚠️ Checkout failed and cannot reach GitHub - keeping repo, will retry later
+ERROR: trainDataIndustry.sh failed with status 1
+Running trainDataExchange.sh...
+HEAD is now at 37eb479 GRQ-3 Improved exchange models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 8fe9ef0f5d Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at 0eb12519f4 Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at e94bd85 Refresh of history for 2026-02-03 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+HEAD is now at da8024c3 GRQ-3 Improved location models
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at be6e1f28 GRQ-16 Improved Industry models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at 37eb479 GRQ-3 Improved exchange models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 80f6a03 Evolution score 0.4087 -> 0.4088 {diff 1} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+HEAD is now at 665e5bd46b 🪶 Removed neuron fea0f39d (impact: 1.77e-3) for Mac-Ultra-M2-1: Score +1.20000e-7 -> 0.408838
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 944756d9 REJECTED 12.05% -> 8.15% Delta -3.891
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 857ebfb925a2 Refresh of Sentiments on GRQ-3@2026-02-03
+fatal: Unable to create '/Volumes/DataGRQ/Trainer/GRQ-sentiment-tickers/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+⚠️ Checkout failed and cannot reach GitHub - keeping repo, will retry later
+ERROR: trainDataExchange.sh failed with status 1
+Running trainDataLocation.sh...
+HEAD is now at da8024c3 GRQ-3 Improved location models
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at 8fe9ef0f5d Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at 0eb12519f4 Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at e94bd85 Refresh of history for 2026-02-03 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+HEAD is now at da8024c3 GRQ-3 Improved location models
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at be6e1f28 GRQ-16 Improved Industry models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at 37eb479 GRQ-3 Improved exchange models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 80f6a03 Evolution score 0.4087 -> 0.4088 {diff 1} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+HEAD is now at 9e2e9fa713 🪶 Removed neuron fea0f39d (impact: 1.77e-3) for Mac-Ultra-M2-1: Score +1.20000e-7 -> 0.408838
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 944756d9 REJECTED 12.05% -> 8.15% Delta -3.891
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 857ebfb925a2 Refresh of Sentiments on GRQ-3@2026-02-03
+fatal: Unable to create '/Volumes/DataGRQ/Trainer/GRQ-sentiment-tickers/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+⚠️ Checkout failed and cannot reach GitHub - keeping repo, will retry later
+ERROR: trainDataLocation.sh failed with status 1
+Running trainDataFX.sh...
+Starting FX... HEAD is now at e94bd85 Refresh of history for 2026-02-03 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+HEAD is now at 8fe9ef0f5d Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-shareprices2025Q3 synced with remote (validation skipped)
+HEAD is now at 0eb12519f4 Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-companyreports synced with remote (validation skipped)
+HEAD is now at e94bd85 Refresh of history for 2026-02-03 on GRQ-11
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-FX synced with remote (validation skipped)
+HEAD is now at da8024c3 GRQ-3 Improved location models
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-location synced with remote (validation skipped)
+HEAD is now at be6e1f28 GRQ-16 Improved Industry models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-industryV2 synced with remote (validation skipped)
+HEAD is now at 37eb479 GRQ-3 Improved exchange models
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-exchange synced with remote (validation skipped)
+HEAD is now at 80f6a03 Evolution score 0.4087 -> 0.4088 {diff 1} on Mac-Ultra-M2
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-cluster synced with remote (validation skipped)
+HEAD is now at 1487b76416 🦠 Mac-Ultra-M2 🎯, Score: 0.408838, Neurons: 772 & Synapses: 18,215
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-sampler synced with remote (validation skipped)
+HEAD is now at 944756d9 REJECTED 12.05% -> 8.15% Delta -3.891
+Reset branch 'main'
+branch 'main' set up to track 'origin/main'.
+Your branch is up to date with 'origin/main'.
+✅ GRQ-portfolio synced with remote (validation skipped)
+HEAD is now at 857ebfb925a2 Refresh of Sentiments on GRQ-3@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-tickers synced with remote (validation skipped)
+HEAD is now at 2293ec2ee00 Refresh of Sentiments on GRQ-3@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-sentiment-topics synced with remote (validation skipped)
+HEAD is now at f058f6b Refresh of history on GRQ-11@2026-02-03
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-commodities synced with remote (validation skipped)
+HEAD is now at fcc4f4e Refresh of history on 2026-02-02
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-listing synced with remote (validation skipped)
+HEAD is now at d47da41 Enhance symbol shuffling in insiders.sh with fallback for non-GNU systems
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-insiders synced with remote (validation skipped)
+HEAD is now at 2af0c08 Update fetch_wui.sh
+Reset branch 'Develop'
+branch 'Develop' set up to track 'origin/Develop'.
+Your branch is up to date with 'origin/Develop'.
+✅ GRQ-WorldUncertaintyIndex synced with remote (validation skipped)
+Duration: 8m 30s
+Generating FX training data...
+FX Training data { _: [], next: true }
+Discovered 54 currency pairs: USDTHB, USDMXN, USDZAR, USDPHP, EURJPY, EURUSD, USDSGD, USDEGP, USDCHF, USDVND, USDKYD, CADJPY, USDPLN, AUDCAD, USDILS, USDCNY, USDARS, AUDEUR, AUDGBP, USDCAD, GBPUSD, USDTWD, USDAED, CADAUD, USDINR, USDGBP, USDEUR, USDHKD, AUDCNY, USDRUB, USDTRY, EURCNY, USDKRW, USDDKK, USDKZT, USDIDR, USDCOP, USDBRL, USDJPY, USDCRC, USDPEN, CADCNY, USDSEK, AUDJPY, USDMYR, USDAUD, AUDUSD, USDNZD, CADGBP, USDNOK, USDSAR, GBPCNY, CADEUR, USDCLP
+Training data directory exists: .trainData-fx_c_98 (use --force to regenerate)
+Checksum file is valid with      108 files.
+1.1.0: 🔄 Rsync attempt 1 of 3 using rsync: --include=* --exclude=checksum.sha256 /Volumes/DataGRQ/Trainer/GRQ/.trainData-fx_c_98/ /Volumes/DataGRQ/Trainer/Training/trainData-fx_c_98/
+1.1.0: 🔄 Rsync attempt 1 of 3 using rsync: /Volumes/DataGRQ/Trainer/GRQ/.trainData-fx_c_98/checksum.sha256 /Volumes/DataGRQ/Trainer/Training/trainData-fx_c_98/
+Data training task completed at Tue Feb  3 18:06:30 AEDT 2026
+Already on 'Develop'
+Your branch is up to date with 'origin/Develop'.
+Data training task failed with error code: 1
+Cloning into 'GRQ-logs'...
+[Develop 4502488] trainer@GRQ-11 status 1
+ 1 file changed, 179 insertions(+), 1757 deletions(-)
+To github.com:stSoftwareAU/GRQ-logs.git
+   f46e2d8..4502488  Develop -> Develop
+HEAD is now at c999733 Refactor ParallelTrainData and WorkerProcessor for improved error handling and worker management (#793)
 From github.com:stSoftwareAU/GRQ-health
-   289297246..af59fd98a  Develop    -> origin/Develop
-HEAD is now at af59fd98a Update repo health: ATO
+   08865926..cc8d70be  Develop    -> origin/Develop
+HEAD is now at cc8d70be Update health status for GRQ-18 at Tue Feb  3 18:02:10 AEDT 2026
 Reset branch 'Develop'
 branch 'Develop' set up to track 'origin/Develop'.
 Your branch is up to date with 'origin/Develop'.
 ✅ GRQ-health synced with remote (validation skipped)
+Exceptions detected (4) - updating regardless of last heartbeat time
 Updating health information...
 Already up to date.
 Updated health information for GRQ-11
