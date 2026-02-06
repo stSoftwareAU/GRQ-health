@@ -1,13 +1,20 @@
 #!/bin/bash
 # Test script for Issue #23: Detecting idle workers
-# This script verifies that the system can detect workers that aren't doing meaningful work
-# by comparing 5-minute and 15-minute load averages
+#
+# These are functional "what" tests that call getIdleWorkerStatus() with real
+# test data and verify the returned result. They do NOT grep source code.
+#
+# Key behaviour under test:
+# - Workers with consistently low load averages (1m, 5m, 15m) are flagged as idle
+# - Workers with high 15m but low 1m indicate work just finished (not idle)
+# - Workers with low 15m but high 1m indicate work just started (not idle)
+# - Only multi-core systems (> 4 cores) are checked
+# - Missing data returns not-idle (graceful handling)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
-SIMPLE_HTML="$SCRIPT_DIR/../docs/simple.html"
+source "$SCRIPT_DIR/extract-functions.sh"
 
 echo "Testing Issue #23: Idle worker detection"
 echo "========================================="
@@ -26,75 +33,131 @@ fail_test() {
     FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-# Test 1: Check that dashboard.js has a function to detect idle workers
-echo "Test 1: Checking for getIdleWorkerStatus function in dashboard.js..."
+TEST_OUTPUT=$(run_js_test '
+// Test 1: All load averages low on multi-core system should be IDLE
+{
+    const data = {
+        load_averages: "5.0% (1m), 5.0% (5m), 5.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === true;
+    console.log("TEST_RESULT:All loads low on 16 cores is idle:" + (pass ? "PASS" : "FAIL") + ":isIdle=" + result.isIdle);
+}
 
-if grep -q "function getIdleWorkerStatus" "$DASHBOARD_JS" || grep -q "getIdleWorkerStatus" "$DASHBOARD_JS"; then
-    pass_test "getIdleWorkerStatus function exists in dashboard.js"
-else
-    fail_test "getIdleWorkerStatus function should exist in dashboard.js"
-fi
+// Test 2: High load averages should NOT be idle
+{
+    const data = {
+        load_averages: "85.0% (1m), 73.2% (5m), 56.6% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === false;
+    console.log("TEST_RESULT:High loads is not idle:" + (pass ? "PASS" : "FAIL") + ":isIdle=" + result.isIdle);
+}
 
-# Test 2: Check that the idle worker detection compares both 5m and 15m averages
-echo "Test 2: Checking that idle worker detection uses both 5m and 15m load averages..."
+// Test 3: Work just finished (high 15m, low 1m/5m) should NOT be idle
+{
+    const data = {
+        load_averages: "5.0% (1m), 10.0% (5m), 55.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === false;
+    console.log("TEST_RESULT:Work just finished is not idle:" + (pass ? "PASS" : "FAIL") + ":isIdle=" + result.isIdle);
+}
 
-if grep -E "5m.*15m|15m.*5m|load_avg_5|load_avg_15|load5m|load15m" "$DASHBOARD_JS" | grep -qi "idle\|work"; then
-    pass_test "Idle worker detection compares 5m and 15m load averages"
-else
-    # More lenient check - look for patterns matching 5m and 15m in context of idle detection
-    if grep -E "\(5m\)|\(15m\)" "$DASHBOARD_JS" | head -5 | grep -q .; then
-        pass_test "Dashboard has load average pattern matching (5m)/(15m)"
-    else
-        fail_test "Idle worker detection should compare both 5m and 15m load averages"
-    fi
-fi
+// Test 4: Work just started (high 1m, low 15m) should NOT be idle
+{
+    const data = {
+        load_averages: "75.0% (1m), 30.0% (5m), 10.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === false;
+    console.log("TEST_RESULT:Work just started is not idle:" + (pass ? "PASS" : "FAIL") + ":isIdle=" + result.isIdle);
+}
 
-# Test 3: Check that idle worker warnings are shown in the warning section
-echo "Test 3: Checking for idle worker warning messages..."
+// Test 5: Small system (4 cores) should NOT be flagged as idle even with low loads
+{
+    const data = {
+        load_averages: "2.0% (1m), 3.0% (5m), 1.0% (15m)",
+        cpu_cores: "4"
+    };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === false;
+    console.log("TEST_RESULT:4-core system not checked for idle:" + (pass ? "PASS" : "FAIL") + ":isIdle=" + result.isIdle);
+}
 
-if grep -qi "idle\|not doing\|no meaningful\|underutilised" "$DASHBOARD_JS"; then
-    pass_test "Idle worker warning messages exist"
-else
-    fail_test "Should have idle worker warning messages in dashboard.js"
-fi
+// Test 6: Missing load_averages should return not idle
+{
+    const data = { cpu_cores: "16" };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === false;
+    console.log("TEST_RESULT:Missing load data returns not idle:" + (pass ? "PASS" : "FAIL") + ":isIdle=" + result.isIdle);
+}
 
-# Test 4: Check that simple.html also has idle worker detection
-echo "Test 4: Checking that simple.html has idle worker detection..."
+// Test 7: Missing cpu_cores should return not idle
+{
+    const data = { load_averages: "5.0% (1m), 5.0% (5m), 5.0% (15m)" };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === false;
+    console.log("TEST_RESULT:Missing core count returns not idle:" + (pass ? "PASS" : "FAIL") + ":isIdle=" + result.isIdle);
+}
 
-if grep -qi "idle\|underutilised" "$SIMPLE_HTML"; then
-    pass_test "simple.html has idle worker detection"
-else
-    fail_test "simple.html should also have idle worker detection"
-fi
+// Test 8: Idle worker should trigger warning via getHealthStatus
+{
+    const now = Math.floor(Date.now() / 1000);
+    const oneHourAgo = now - 3600;
+    const data = {
+        heart_beat_ts: oneHourAgo,
+        os_info: "macOS",
+        os_version: "15.0",
+        load_averages: "5.0% (1m), 5.0% (5m), 5.0% (15m)",
+        cpu_cores: "16"
+    };
+    const status = getHealthStatus("GRQ-IDLE", data);
+    const pass = status === "warning";
+    console.log("TEST_RESULT:Idle worker triggers warning status:" + (pass ? "PASS" : "FAIL") + ":status=" + status);
+}
 
-# Test 5: Check that the warning display shows the reason for idle workers
-echo "Test 5: Checking that warning reasons include idle worker details..."
+// Test 9: Idle reason includes load percentages
+{
+    const data = {
+        load_averages: "3.5% (1m), 4.2% (5m), 6.1% (15m)",
+        cpu_cores: "8"
+    };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.isIdle === true && result.reason.includes("3.5") && result.reason.includes("4.2");
+    console.log("TEST_RESULT:Idle reason includes load values:" + (pass ? "PASS" : "FAIL") + ":reason=" + result.reason);
+}
 
-if grep -qi "idle.*worker\|worker.*idle\|utilisation\|utilization" "$DASHBOARD_JS"; then
-    pass_test "Warning reasons include idle worker details"
-else
-    fail_test "Warning reasons should include idle worker details"
-fi
+// Test 10: Core count is correctly parsed
+{
+    const data = {
+        load_averages: "5.0% (1m), 5.0% (5m), 5.0% (15m)",
+        cpu_cores: "24"
+    };
+    const result = getIdleWorkerStatus(data);
+    const pass = result.coreCount === 24;
+    console.log("TEST_RESULT:Core count is parsed correctly:" + (pass ? "PASS" : "FAIL") + ":coreCount=" + result.coreCount);
+}
+')
 
-# Test 6: Check that the detection considers multi-core systems appropriately
-echo "Test 6: Checking that detection considers CPU cores..."
+while IFS= read -r line; do
+    case "$line" in
+        TEST_RESULT:*:PASS:*)
+            name=$(echo "$line" | cut -d: -f2)
+            pass_test "$name"
+            ;;
+        TEST_RESULT:*:FAIL:*)
+            name=$(echo "$line" | cut -d: -f2)
+            detail=$(echo "$line" | cut -d: -f4-)
+            fail_test "$name ($detail)"
+            ;;
+    esac
+done <<< "$TEST_OUTPUT"
 
-if grep -E "cpu_cores|coreCount" "$DASHBOARD_JS" | grep -q .; then
-    pass_test "Idle detection considers CPU cores"
-else
-    fail_test "Idle detection should consider CPU cores"
-fi
-
-# Test 7: Check for the 1m load average being used to detect recent activity
-echo "Test 7: Checking for 1m load average usage to detect recent activity..."
-
-if grep -E "\(1m\)" "$DASHBOARD_JS" | grep -q .; then
-    pass_test "1m load average is used in detection"
-else
-    fail_test "1m load average should be used to detect very recent activity"
-fi
-
-# Summary
 echo ""
 echo "========================================="
 echo "Test Summary"
@@ -104,16 +167,9 @@ echo "Failed: $FAIL_COUNT"
 echo ""
 
 if [ "$FAIL_COUNT" -gt 0 ]; then
-    echo "Some tests FAILED. Issue #23 may not be fully fixed."
+    echo "Some tests FAILED."
     exit 1
 else
-    echo "All tests PASSED! Issue #23 is properly fixed."
-    echo ""
-    echo "Summary of changes for Issue #23:"
-    echo "- Added idle worker detection using 1m, 5m, and 15m load averages"
-    echo "- Workers with consistently low load across all averages are flagged as idle"
-    echo "- Workers with high 15m but low 1m may indicate work just finished (not flagged)"
-    echo "- Workers with low 15m but high 1m/5m may indicate work just started (not flagged)"
-    echo "- This helps detect workers that aren't doing meaningful work"
+    echo "All tests PASSED!"
     exit 0
 fi

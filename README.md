@@ -419,6 +419,50 @@ bash -x run.sh
 - Hostnames are used as identifiers (ensure they don't contain sensitive data)
 - Consider using SSH keys for git authentication instead of passwords
 
+## Testing Guidelines
+
+### Unit Tests vs Benchmarks
+
+- **Unit tests are for functionality testing only**: Verify that code produces correct results ("what" it does), not how fast it runs or how the code is structured.
+- **Benchmarks are for performance testing**: Use dedicated benchmarks to measure and compare execution time. Benchmarks are expected to take time.
+- **Why this matters**: Unit tests run in parallel with other tests, making performance measurements unreliable. You will never get consistent timing results from unit tests.
+
+### "What" Tests vs "How" Tests
+
+**"What" tests** (good) verify the behaviour of the code by calling real functions with test data and asserting on results:
+```bash
+# Good: calls the real function with test data and checks the result
+result=$(run_js_test 'console.log(getHealthStatus("host", { death_date: "2024-01-01" }))')
+[ "$result" = "dead" ]  # Asserts on the output
+```
+
+**"How" tests** (bad) inspect source code for patterns, function names, or code structure:
+```bash
+# Bad: grepping source code for patterns — this is not a real test
+grep -q "function getHealthStatus" dashboard.js
+grep -A5 'critical' dashboard.js | grep -q 'heart_beat_ts'
+```
+
+**Why "how" tests are harmful**: They break when code is refactored even if behaviour is preserved. If we switch from "quick sort" to "bubble sort", a "what" test still passes (correct results), but a "how" test fails (different code).
+
+### Writing New Tests
+
+1. **Test files** go in `tests/` and must be named `test-*.sh` (the `quality.sh` script runs all `tests/test-*.sh` files)
+2. **Helper scripts** in `tests/` should NOT start with `test-` (e.g., `extract-functions.sh`)
+3. **JavaScript function tests** use `tests/extract-functions.sh` which extracts pure functions from `dashboard.js` and runs them via `deno`:
+   ```bash
+   source "$SCRIPT_DIR/extract-functions.sh"
+   result=$(run_js_test 'console.log(getHealthStatus("host", { heart_beat_ts: 0 }))')
+   ```
+4. **CSS property tests** extract actual values from CSS files and assert on them
+5. **Shell tests** should source and call real functions, not grep for patterns
+
+### Running Tests
+
+```bash
+./quality.sh  # Runs all tests and checks code quality
+```
+
 ## Contributing
 
 1. Fork the repository
@@ -426,8 +470,9 @@ bash -x run.sh
 3. Make your changes
 4. **Always update the version number** in `run.sh` when making code changes
 5. **Run the version update script**: `./update_version.sh` to sync version across all files
-6. Test on different operating systems
-7. Submit a pull request
+6. **Run `./quality.sh`** to ensure all tests pass
+7. Test on different operating systems
+8. Submit a pull request
 
 ### Version Management
 

@@ -1,70 +1,149 @@
 #!/bin/bash
 # Test script for Issue #13: Per-user log button behaviour
-# This script verifies that the dashboard.js change was implemented correctly
+#
+# These are functional "what" tests that call the dashboard functions with real
+# test data and verify the results. They do NOT grep source code.
+#
+# Key behaviour under test:
+# - Single-user hosts should show the main "View Log" button (showUserTable = false)
+# - Multi-user hosts (2+) should hide the main button and show per-user log buttons
+# - Per-user log URLs are correctly generated using sanitizeUserSlug
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
+source "$SCRIPT_DIR/extract-functions.sh"
 
 echo "Testing Issue #13: Per-user log button behaviour"
 echo "================================================"
 echo ""
 
-# Test 1: Check that showUserTable variable controls log button visibility
-echo "Test 1: Checking that showUserTable controls log button visibility..."
-if grep -q '${!showUserTable' "$DASHBOARD_JS"; then
-    echo "  PASS: Log button is conditionally shown based on showUserTable"
-else
-    echo "  FAIL: Log button is not conditionally shown"
-    exit 1
-fi
+PASS_COUNT=0
+FAIL_COUNT=0
 
-# Test 2: Check that the conditional wraps the log button div
-echo "Test 2: Checking conditional structure around log button..."
-if grep -A5 '${!showUserTable' "$DASHBOARD_JS" | grep -q 'position-absolute'; then
-    echo "  PASS: Log button div is inside the conditional"
-else
-    echo "  FAIL: Log button div is not properly wrapped"
-    exit 1
-fi
+pass_test() {
+    echo "  PASS: $1"
+    PASS_COUNT=$((PASS_COUNT + 1))
+}
 
-# Test 3: Verify user table still shows per-user log buttons
-echo "Test 3: Checking that user table has per-user log buttons..."
-if grep -q 'userLogUrl.*node-\${slug}.log' "$DASHBOARD_JS"; then
-    echo "  PASS: User table has per-user log URLs"
-else
-    echo "  FAIL: User table missing per-user log URLs"
-    exit 1
-fi
+fail_test() {
+    echo "  FAIL: $1"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+}
 
-# Test 4: Verify showUserTable is set based on expectedUsers.length >= 2
-echo "Test 4: Checking showUserTable logic..."
-if grep -q 'showUserTable = expectedUsers.length >= 2' "$DASHBOARD_JS"; then
-    echo "  PASS: showUserTable correctly checks for 2+ users"
-else
-    echo "  FAIL: showUserTable logic is incorrect"
-    exit 1
-fi
+TEST_OUTPUT=$(run_js_test '
+// Test 1: Single user host — expectedUsers.length < 2, so showUserTable should be false
+{
+    const data = {
+        heart_beat_ts: 1768561603,
+        users: {
+            nigelleck: { heart_beat_ts: 1768561603, version: "1.0.71" }
+        }
+    };
+    const expectedUsers = getExpectedUsers(data);
+    const showUserTable = expectedUsers.length >= 2;
+    const pass = !showUserTable && expectedUsers.length === 1;
+    console.log("TEST_RESULT:Single user host hides user table:" + (pass ? "PASS" : "FAIL") + ":showUserTable=" + showUserTable + " users=" + expectedUsers.length);
+}
 
-# Test 5: Verify the closing of the conditional
-echo "Test 5: Checking conditional is properly closed..."
-if grep -q "} : ''" "$DASHBOARD_JS" | head -1; then
-    echo "  PASS: Conditional is properly closed with empty string fallback"
-else
-    # Alternative check - the ternary operator might be formatted differently
-    if grep -q ": ''}" "$DASHBOARD_JS"; then
-        echo "  PASS: Conditional is properly closed"
-    else
-        echo "  PASS: Conditional structure appears valid"
-    fi
-fi
+// Test 2: Two-user host — showUserTable should be true
+{
+    const data = {
+        heart_beat_ts: 1768565174,
+        users: {
+            sloth: { heart_beat_ts: 1768565174 },
+            rocket: { heart_beat_ts: 1768562003 }
+        }
+    };
+    const expectedUsers = getExpectedUsers(data);
+    const showUserTable = expectedUsers.length >= 2;
+    const pass = showUserTable && expectedUsers.length === 2;
+    console.log("TEST_RESULT:Two-user host shows user table:" + (pass ? "PASS" : "FAIL") + ":showUserTable=" + showUserTable + " users=" + expectedUsers.length);
+}
+
+// Test 3: Three-user host — showUserTable should be true
+{
+    const data = {
+        heart_beat_ts: 1768562432,
+        users: {
+            rocket: { heart_beat_ts: 1768561655 },
+            elephant: { heart_beat_ts: 1768560597 },
+            sloth: { heart_beat_ts: 1768562432 }
+        }
+    };
+    const expectedUsers = getExpectedUsers(data);
+    const showUserTable = expectedUsers.length >= 2;
+    const pass = showUserTable && expectedUsers.length === 3;
+    console.log("TEST_RESULT:Three-user host shows user table:" + (pass ? "PASS" : "FAIL") + ":showUserTable=" + showUserTable + " users=" + expectedUsers.length);
+}
+
+// Test 4: Host with no users — showUserTable should be false
+{
+    const data = { heart_beat_ts: 1768562432 };
+    const expectedUsers = getExpectedUsers(data);
+    const showUserTable = expectedUsers.length >= 2;
+    const pass = !showUserTable && expectedUsers.length === 0;
+    console.log("TEST_RESULT:No-user host hides user table:" + (pass ? "PASS" : "FAIL") + ":showUserTable=" + showUserTable + " users=" + expectedUsers.length);
+}
+
+// Test 5: Per-user log URLs are correctly generated
+{
+    const data = {
+        heart_beat_ts: 1768563043,
+        users: {
+            rocket: { heart_beat_ts: 1768562764 },
+            sloth: { heart_beat_ts: 1768563043 }
+        }
+    };
+    const expectedUsers = getExpectedUsers(data);
+    const hostname = "GRQ-19";
+    const urls = expectedUsers.map(u => {
+        const slug = sanitizeUserSlug(u);
+        return "./log-viewer.html?file=./" + hostname + "/node-" + slug + ".log";
+    });
+    const hasRocket = urls.some(u => u.includes("node-rocket.log"));
+    const hasSloth = urls.some(u => u.includes("node-sloth.log"));
+    const pass = hasRocket && hasSloth && urls.length === 2;
+    console.log("TEST_RESULT:Per-user log URLs are correct:" + (pass ? "PASS" : "FAIL") + ":urls=" + JSON.stringify(urls));
+}
+
+// Test 6: sanitizeUserSlug handles spaces and special chars
+{
+    const slug1 = sanitizeUserSlug("john doe");
+    const slug2 = sanitizeUserSlug("user@host");
+    const slug3 = sanitizeUserSlug("");
+    const slug4 = sanitizeUserSlug(null);
+    const pass = slug1 === "john_doe" && slug2 === "userhost" && slug3 === "unknown" && slug4 === "unknown";
+    console.log("TEST_RESULT:sanitizeUserSlug handles edge cases:" + (pass ? "PASS" : "FAIL") + ":slugs=" + [slug1,slug2,slug3,slug4].join(","));
+}
+')
+
+while IFS= read -r line; do
+    case "$line" in
+        TEST_RESULT:*:PASS:*)
+            name=$(echo "$line" | cut -d: -f2)
+            pass_test "$name"
+            ;;
+        TEST_RESULT:*:FAIL:*)
+            name=$(echo "$line" | cut -d: -f2)
+            detail=$(echo "$line" | cut -d: -f4-)
+            fail_test "$name ($detail)"
+            ;;
+    esac
+done <<< "$TEST_OUTPUT"
 
 echo ""
 echo "================================================"
-echo "All tests passed!"
+echo "Test Summary"
+echo "================================================"
+echo "Passed: $PASS_COUNT"
+echo "Failed: $FAIL_COUNT"
 echo ""
-echo "Summary of changes for Issue #13:"
-echo "- The main 'View Log' button is now hidden when a host has 2+ users"
-echo "- Each user still has their own log button in the user table"
-echo "- Single-user hosts continue to show the main 'View Log' button"
+
+if [ "$FAIL_COUNT" -gt 0 ]; then
+    echo "Some tests FAILED."
+    exit 1
+else
+    echo "All tests PASSED!"
+    exit 0
+fi
