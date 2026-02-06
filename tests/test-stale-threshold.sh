@@ -1,15 +1,17 @@
 #!/bin/bash
-# Test script for Issue #15: Refresh time and stale shouldn't be the same
-# This script verifies that the stale threshold is properly separated from the heartbeat threshold
+# Test for Issue #15: Refresh time and stale shouldn't be the same
+# Verifies that the stale threshold is properly separated from the heartbeat
+# threshold in both run.sh config and dashboard.js logic.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUN_SH="$SCRIPT_DIR/../run.sh"
-DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
+source "$SCRIPT_DIR/extract-functions.sh"
 
-echo "Testing Issue #15: Refresh time and stale threshold separation"
-echo "=============================================================="
+RUN_SH="$SCRIPT_DIR/../run.sh"
+
+echo "Testing Issue #15: Stale threshold separation"
+echo "=============================================="
 echo ""
 
 PASS_COUNT=0
@@ -25,89 +27,86 @@ fail_test() {
     FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-# Test 1: Check that USER_STALE_HOURS_DEFAULT is NOT the same as HEARTBEAT_THRESHOLD_HOURS
-echo "Test 1: Checking that USER_STALE_HOURS_DEFAULT is separate from HEARTBEAT_THRESHOLD_HOURS..."
+# Test 1: run.sh HEARTBEAT_THRESHOLD_HOURS and USER_STALE_HOURS_DEFAULT are different
+echo "Test 1: Checking config values in run.sh..."
 
 HEARTBEAT_THRESHOLD=$(grep '^HEARTBEAT_THRESHOLD_HOURS=' "$RUN_SH" | head -1 | cut -d'=' -f2)
-USER_STALE_DEFAULT_LINE=$(grep 'USER_STALE_HOURS_DEFAULT=' "$RUN_SH" | head -1)
+USER_STALE_DEFAULT=$(grep '^USER_STALE_HOURS_DEFAULT=' "$RUN_SH" | head -1 | cut -d'=' -f2)
 
-# The line should NOT reference HEARTBEAT_THRESHOLD_HOURS directly
-if echo "$USER_STALE_DEFAULT_LINE" | grep -q 'HEARTBEAT_THRESHOLD_HOURS'; then
-    fail_test "USER_STALE_HOURS_DEFAULT should NOT directly reference HEARTBEAT_THRESHOLD_HOURS"
+if [ "$HEARTBEAT_THRESHOLD" != "$USER_STALE_DEFAULT" ]; then
+    pass_test "HEARTBEAT ($HEARTBEAT_THRESHOLD h) != USER_STALE_DEFAULT ($USER_STALE_DEFAULT h)"
 else
-    pass_test "USER_STALE_HOURS_DEFAULT is set independently of HEARTBEAT_THRESHOLD_HOURS"
+    fail_test "HEARTBEAT and USER_STALE_DEFAULT should be different values"
 fi
 
-# Test 2: Check that USER_STALE_HOURS_DEFAULT is at least 24 (3x the 8-hour heartbeat)
-echo "Test 2: Checking that USER_STALE_HOURS_DEFAULT is at least 24 hours..."
-
-# Extract the actual default value
-USER_STALE_DEFAULT=$(grep 'USER_STALE_HOURS_DEFAULT=' "$RUN_SH" | head -1 | sed 's/.*="\{0,1\}\([0-9]*\).*/\1/')
-
-if [[ "$USER_STALE_DEFAULT" =~ ^[0-9]+$ ]] && [ "$USER_STALE_DEFAULT" -ge 24 ]; then
-    pass_test "USER_STALE_HOURS_DEFAULT is $USER_STALE_DEFAULT hours (>= 24h)"
-else
-    fail_test "USER_STALE_HOURS_DEFAULT should be at least 24 hours, found: $USER_STALE_DEFAULT"
-fi
-
-# Test 3: Check that the stale threshold is at least 3x the heartbeat threshold
-echo "Test 3: Checking that stale threshold is at least 3x heartbeat threshold..."
+# Test 2: Stale threshold is at least 3x the heartbeat threshold
+echo "Test 2: Checking stale >= 3x heartbeat..."
 
 if [[ "$HEARTBEAT_THRESHOLD" =~ ^[0-9]+$ ]] && [[ "$USER_STALE_DEFAULT" =~ ^[0-9]+$ ]]; then
     MIN_STALE=$((HEARTBEAT_THRESHOLD * 3))
     if [ "$USER_STALE_DEFAULT" -ge "$MIN_STALE" ]; then
-        pass_test "Stale threshold ($USER_STALE_DEFAULT h) >= 3x heartbeat ($HEARTBEAT_THRESHOLD h = min $MIN_STALE h)"
+        pass_test "Stale ($USER_STALE_DEFAULT h) >= 3x heartbeat ($HEARTBEAT_THRESHOLD h)"
     else
-        fail_test "Stale threshold ($USER_STALE_DEFAULT h) should be >= 3x heartbeat ($HEARTBEAT_THRESHOLD h = min $MIN_STALE h)"
+        fail_test "Stale ($USER_STALE_DEFAULT h) should be >= 3x heartbeat ($HEARTBEAT_THRESHOLD h = min $MIN_STALE h)"
     fi
 else
-    fail_test "Could not parse threshold values: HEARTBEAT=$HEARTBEAT_THRESHOLD, STALE=$USER_STALE_DEFAULT"
+    fail_test "Could not parse threshold values"
 fi
 
-# Test 4: Check that dashboard.js default matches the new stale threshold
-echo "Test 4: Checking that dashboard.js default stale threshold is at least 24 hours..."
+# Test 3: getUserHeartbeatWarningHours returns correct default via JS
+echo "Test 3: Checking getUserHeartbeatWarningHours default..."
 
-# Look for the return statement with a number in getUserHeartbeatWarningHours function
-DASHBOARD_DEFAULT=$(grep -A10 'function getUserHeartbeatWarningHours' "$DASHBOARD_JS" | grep 'return [0-9]' | tail -1 | sed 's/[^0-9]*\([0-9]*\).*/\1/')
+OUTPUT=$(run_js_test '
+// Test 3: Default stale threshold should be 24 hours
+{
+    const hours = getUserHeartbeatWarningHours({});
+    if (hours === 24) {
+        console.log("TEST_RESULT:default-stale:PASS:default is 24 hours");
+    } else {
+        console.log("TEST_RESULT:default-stale:FAIL:expected 24, got " + hours);
+    }
+}
 
-if [[ "$DASHBOARD_DEFAULT" =~ ^[0-9]+$ ]] && [ "$DASHBOARD_DEFAULT" -ge 24 ]; then
-    pass_test "Dashboard default stale threshold is $DASHBOARD_DEFAULT hours (>= 24h)"
-else
-    fail_test "Dashboard default stale threshold should be at least 24 hours, found: $DASHBOARD_DEFAULT"
-fi
+// Test 4: Per-host override is respected
+{
+    const hours = getUserHeartbeatWarningHours({ user_stale_hours: 48 });
+    if (hours === 48) {
+        console.log("TEST_RESULT:override-stale:PASS:per-host override to 48 hours works");
+    } else {
+        console.log("TEST_RESULT:override-stale:FAIL:expected 48, got " + hours);
+    }
+}
 
-# Test 5: Verify run.sh has documentation about the relationship between thresholds
-echo "Test 5: Checking that run.sh documents the threshold relationship..."
+// Test 5: Invalid override falls back to default
+{
+    const hours = getUserHeartbeatWarningHours({ user_stale_hours: -1 });
+    if (hours === 24) {
+        console.log("TEST_RESULT:invalid-override:PASS:invalid override falls back to 24");
+    } else {
+        console.log("TEST_RESULT:invalid-override:FAIL:expected 24, got " + hours);
+    }
+}
+')
 
-if grep -q "multiple" "$RUN_SH" || grep -q "3x\|3 times\|three times" "$RUN_SH" || grep -q "24.*hours\|stale.*hours" "$RUN_SH"; then
-    pass_test "run.sh documents the stale threshold configuration"
-else
-    # Check for comment explaining the relationship
-    if grep -A3 'USER_STALE_HOURS' "$RUN_SH" | grep -q '#'; then
-        pass_test "run.sh has comments about USER_STALE_HOURS"
-    else
-        fail_test "run.sh should document the relationship between heartbeat and stale thresholds"
-    fi
-fi
+while IFS= read -r line; do
+    case "$line" in
+        TEST_RESULT:*)
+            local_name="$(echo "$line" | cut -d: -f2)"
+            local_result="$(echo "$line" | cut -d: -f3)"
+            local_detail="$(echo "$line" | cut -d: -f4-)"
+            if [ "$local_result" = "PASS" ]; then
+                pass_test "$local_name — $local_detail"
+            else
+                fail_test "$local_name — $local_detail"
+            fi
+            ;;
+    esac
+done <<< "$OUTPUT"
 
-# Summary
 echo ""
-echo "=============================================================="
-echo "Test Summary"
-echo "=============================================================="
-echo "Passed: $PASS_COUNT"
-echo "Failed: $FAIL_COUNT"
-echo ""
+echo "=============================================="
+echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
 
 if [ "$FAIL_COUNT" -gt 0 ]; then
-    echo "Some tests FAILED. Issue #15 may not be fully fixed."
     exit 1
-else
-    echo "All tests PASSED! Issue #15 is properly fixed."
-    echo ""
-    echo "Summary of changes for Issue #15:"
-    echo "- Stale threshold is now 24 hours (3x the 8-hour heartbeat threshold)"
-    echo "- This prevents false positives when processes run hourly but heartbeats update every 8 hours"
-    echo "- The dashboard and run.sh now use consistent stale threshold values"
-    exit 0
 fi
