@@ -1,13 +1,12 @@
 #!/bin/bash
-# Test script for Issue #23: Detecting idle workers
-# This script verifies that the system can detect workers that aren't doing meaningful work
-# by comparing 5-minute and 15-minute load averages
+# Test for Issue #23: Idle worker detection
+# Calls getIdleWorkerStatus() and buildIdleWorkerWarning() with test data
+# to verify idle detection logic using 1m, 5m, 15m load averages.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
-SIMPLE_HTML="$SCRIPT_DIR/../docs/simple.html"
+source "$SCRIPT_DIR/extract-functions.sh"
 
 echo "Testing Issue #23: Idle worker detection"
 echo "========================================="
@@ -16,104 +15,156 @@ echo ""
 PASS_COUNT=0
 FAIL_COUNT=0
 
-pass_test() {
-    echo "  PASS: $1"
-    PASS_COUNT=$((PASS_COUNT + 1))
-}
-
-fail_test() {
-    echo "  FAIL: $1"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-}
-
-# Test 1: Check that dashboard.js has a function to detect idle workers
-echo "Test 1: Checking for getIdleWorkerStatus function in dashboard.js..."
-
-if grep -q "function getIdleWorkerStatus" "$DASHBOARD_JS" || grep -q "getIdleWorkerStatus" "$DASHBOARD_JS"; then
-    pass_test "getIdleWorkerStatus function exists in dashboard.js"
-else
-    fail_test "getIdleWorkerStatus function should exist in dashboard.js"
-fi
-
-# Test 2: Check that the idle worker detection compares both 5m and 15m averages
-echo "Test 2: Checking that idle worker detection uses both 5m and 15m load averages..."
-
-if grep -E "5m.*15m|15m.*5m|load_avg_5|load_avg_15|load5m|load15m" "$DASHBOARD_JS" | grep -qi "idle\|work"; then
-    pass_test "Idle worker detection compares 5m and 15m load averages"
-else
-    # More lenient check - look for patterns matching 5m and 15m in context of idle detection
-    if grep -E "\(5m\)|\(15m\)" "$DASHBOARD_JS" | head -5 | grep -q .; then
-        pass_test "Dashboard has load average pattern matching (5m)/(15m)"
+check_result() {
+    local line="$1"
+    local name result detail
+    name="$(echo "$line" | cut -d: -f2)"
+    result="$(echo "$line" | cut -d: -f3)"
+    detail="$(echo "$line" | cut -d: -f4-)"
+    if [ "$result" = "PASS" ]; then
+        echo "  PASS: $name — $detail"
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
-        fail_test "Idle worker detection should compare both 5m and 15m load averages"
+        echo "  FAIL: $name — $detail"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
-fi
+}
 
-# Test 3: Check that idle worker warnings are shown in the warning section
-echo "Test 3: Checking for idle worker warning messages..."
+OUTPUT=$(run_js_test '
+// Test 1: All load averages low on multi-core system — should be idle
+{
+    const data = {
+        load_averages: "5.0% (1m), 3.2% (5m), 4.1% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    if (result.isIdle) {
+        console.log("TEST_RESULT:all-low-idle:PASS:correctly flagged as idle");
+    } else {
+        console.log("TEST_RESULT:all-low-idle:FAIL:expected idle, got not idle");
+    }
+}
 
-if grep -qi "idle\|not doing\|no meaningful\|underutilised" "$DASHBOARD_JS"; then
-    pass_test "Idle worker warning messages exist"
-else
-    fail_test "Should have idle worker warning messages in dashboard.js"
-fi
+// Test 2: All load averages high — should NOT be idle
+{
+    const data = {
+        load_averages: "80.0% (1m), 75.0% (5m), 70.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    if (!result.isIdle) {
+        console.log("TEST_RESULT:all-high-not-idle:PASS:correctly not flagged as idle");
+    } else {
+        console.log("TEST_RESULT:all-high-not-idle:FAIL:expected not idle, got idle");
+    }
+}
 
-# Test 4: Check that simple.html also has idle worker detection
-echo "Test 4: Checking that simple.html has idle worker detection..."
+// Test 3: Work just finished (15m high, 1m/5m low) — should NOT be idle
+{
+    const data = {
+        load_averages: "5.0% (1m), 8.0% (5m), 60.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    if (!result.isIdle) {
+        console.log("TEST_RESULT:work-finished:PASS:correctly not flagged as idle");
+    } else {
+        console.log("TEST_RESULT:work-finished:FAIL:expected not idle, got idle");
+    }
+}
 
-if grep -qi "idle\|underutilised" "$SIMPLE_HTML"; then
-    pass_test "simple.html has idle worker detection"
-else
-    fail_test "simple.html should also have idle worker detection"
-fi
+// Test 4: Work just started (1m high, 15m low) — should NOT be idle
+{
+    const data = {
+        load_averages: "70.0% (1m), 40.0% (5m), 10.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    if (!result.isIdle) {
+        console.log("TEST_RESULT:work-started:PASS:correctly not flagged as idle");
+    } else {
+        console.log("TEST_RESULT:work-started:FAIL:expected not idle, got idle");
+    }
+}
 
-# Test 5: Check that the warning display shows the reason for idle workers
-echo "Test 5: Checking that warning reasons include idle worker details..."
+// Test 5: Small system (4 cores or fewer) — should never be flagged idle
+{
+    const data = {
+        load_averages: "2.0% (1m), 1.0% (5m), 1.5% (15m)",
+        cpu_cores: "4"
+    };
+    const result = getIdleWorkerStatus(data);
+    if (!result.isIdle) {
+        console.log("TEST_RESULT:small-system:PASS:correctly skipped for small system");
+    } else {
+        console.log("TEST_RESULT:small-system:FAIL:should not flag small systems as idle");
+    }
+}
 
-if grep -qi "idle.*worker\|worker.*idle\|utilisation\|utilization" "$DASHBOARD_JS"; then
-    pass_test "Warning reasons include idle worker details"
-else
-    fail_test "Warning reasons should include idle worker details"
-fi
+// Test 6: Missing load_averages data — should return not idle
+{
+    const data = { cpu_cores: "16" };
+    const result = getIdleWorkerStatus(data);
+    if (!result.isIdle) {
+        console.log("TEST_RESULT:missing-data:PASS:correctly returns not idle for missing data");
+    } else {
+        console.log("TEST_RESULT:missing-data:FAIL:should not flag missing data as idle");
+    }
+}
 
-# Test 6: Check that the detection considers multi-core systems appropriately
-echo "Test 6: Checking that detection considers CPU cores..."
+// Test 7: buildIdleWorkerWarning returns reason for idle host
+{
+    const data = {
+        load_averages: "5.0% (1m), 3.2% (5m), 4.1% (15m)",
+        cpu_cores: "16"
+    };
+    const warning = buildIdleWorkerWarning(data);
+    if (warning.length > 0 && warning.includes("idle")) {
+        console.log("TEST_RESULT:warning-text:PASS:warning message includes idle reason");
+    } else {
+        console.log("TEST_RESULT:warning-text:FAIL:expected warning text, got: " + warning);
+    }
+}
 
-if grep -E "cpu_cores|coreCount" "$DASHBOARD_JS" | grep -q .; then
-    pass_test "Idle detection considers CPU cores"
-else
-    fail_test "Idle detection should consider CPU cores"
-fi
+// Test 8: buildIdleWorkerWarning returns empty for busy host
+{
+    const data = {
+        load_averages: "80.0% (1m), 75.0% (5m), 70.0% (15m)",
+        cpu_cores: "16"
+    };
+    const warning = buildIdleWorkerWarning(data);
+    if (warning === "") {
+        console.log("TEST_RESULT:no-warning-busy:PASS:no warning for busy host");
+    } else {
+        console.log("TEST_RESULT:no-warning-busy:FAIL:expected empty, got: " + warning);
+    }
+}
 
-# Test 7: Check for the 1m load average being used to detect recent activity
-echo "Test 7: Checking for 1m load average usage to detect recent activity..."
+// Test 9: Idle detection populates load values in result
+{
+    const data = {
+        load_averages: "5.0% (1m), 3.2% (5m), 4.1% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    if (result.load1m === 5.0 && result.load5m === 3.2 && result.load15m === 4.1 && result.coreCount === 16) {
+        console.log("TEST_RESULT:parsed-values:PASS:load values parsed correctly");
+    } else {
+        console.log("TEST_RESULT:parsed-values:FAIL:load1m=" + result.load1m + " load5m=" + result.load5m + " load15m=" + result.load15m + " cores=" + result.coreCount);
+    }
+}
+')
 
-if grep -E "\(1m\)" "$DASHBOARD_JS" | grep -q .; then
-    pass_test "1m load average is used in detection"
-else
-    fail_test "1m load average should be used to detect very recent activity"
-fi
+while IFS= read -r line; do
+    case "$line" in
+        TEST_RESULT:*) check_result "$line" ;;
+    esac
+done <<< "$OUTPUT"
 
-# Summary
 echo ""
 echo "========================================="
-echo "Test Summary"
-echo "========================================="
-echo "Passed: $PASS_COUNT"
-echo "Failed: $FAIL_COUNT"
-echo ""
+echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
 
 if [ "$FAIL_COUNT" -gt 0 ]; then
-    echo "Some tests FAILED. Issue #23 may not be fully fixed."
     exit 1
-else
-    echo "All tests PASSED! Issue #23 is properly fixed."
-    echo ""
-    echo "Summary of changes for Issue #23:"
-    echo "- Added idle worker detection using 1m, 5m, and 15m load averages"
-    echo "- Workers with consistently low load across all averages are flagged as idle"
-    echo "- Workers with high 15m but low 1m may indicate work just finished (not flagged)"
-    echo "- Workers with low 15m but high 1m/5m may indicate work just started (not flagged)"
-    echo "- This helps detect workers that aren't doing meaningful work"
-    exit 0
 fi
