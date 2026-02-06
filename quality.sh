@@ -35,7 +35,7 @@ run_test() {
 
 # Run shell-based tests
 if [ -d "$SCRIPT_DIR/tests" ]; then
-    for test_file in "$SCRIPT_DIR"/tests/*.sh; do
+    for test_file in "$SCRIPT_DIR"/tests/test-*.sh; do
         if [ -f "$test_file" ]; then
             test_name=$(basename "$test_file" .sh)
             run_test "$test_name" "$test_file"

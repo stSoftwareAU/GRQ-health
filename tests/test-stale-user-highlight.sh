@@ -1,127 +1,186 @@
 #!/bin/bash
 # Test for Issue #22: Highlight which user has the warning
-# This test verifies that the dashboard correctly identifies and displays
-# which specific user(s) are stale in the warning section.
+# Calls getStaleUsers() and buildStaleUserWarning() with test data to verify
+# that stale users are correctly identified and warning text is generated.
 
-echo "Testing Issue #22: Stale user highlighting in warnings"
-echo "======================================================="
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/extract-functions.sh"
+
+echo "Testing Issue #22: Stale user highlighting"
+echo "==========================================="
 echo ""
 
 PASS_COUNT=0
 FAIL_COUNT=0
 
-# Test 1: Check that getStaleUsers function exists
-echo "Test 1: Checking that getStaleUsers function exists in dashboard.js..."
-if grep -q "function getStaleUsers" docs/dashboard.js; then
-    echo "  PASS: getStaleUsers function exists"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: getStaleUsers function not found"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+check_result() {
+    local line="$1"
+    local name result detail
+    name="$(echo "$line" | cut -d: -f2)"
+    result="$(echo "$line" | cut -d: -f3)"
+    detail="$(echo "$line" | cut -d: -f4-)"
+    if [ "$result" = "PASS" ]; then
+        echo "  PASS: $name — $detail"
+        PASS_COUNT=$((PASS_COUNT + 1))
+    else
+        echo "  FAIL: $name — $detail"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+}
 
-# Test 2: Check that buildStaleUserWarning function exists
-echo "Test 2: Checking that buildStaleUserWarning function exists in dashboard.js..."
-if grep -q "function buildStaleUserWarning" docs/dashboard.js; then
-    echo "  PASS: buildStaleUserWarning function exists"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: buildStaleUserWarning function not found"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+OUTPUT=$(run_js_test '
+const NOW_TS = 1700000000;
 
-# Test 3: Check that getStaleUsers checks for multi-user hosts (>= 2 users)
-echo "Test 3: Checking that getStaleUsers only checks multi-user hosts..."
-if grep -A 5 "function getStaleUsers" docs/dashboard.js | grep -q "expectedUsers.length < 2"; then
-    echo "  PASS: getStaleUsers checks for 2+ users"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: getStaleUsers should only check multi-user hosts"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+// Test 1: Multi-user host with one stale user returns that user
+{
+    const oneHourAgo = NOW_TS - 3600;
+    const twoDaysAgo = NOW_TS - 2 * 86400;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: oneHourAgo },
+            bob:   { heart_beat_ts: twoDaysAgo }
+        }
+    };
+    const stale = getStaleUsers(data, NOW_TS);
+    if (stale.length === 1 && stale[0].username === "bob") {
+        console.log("TEST_RESULT:one-stale:PASS:correctly identified bob as stale");
+    } else {
+        console.log("TEST_RESULT:one-stale:FAIL:expected [bob], got " + JSON.stringify(stale));
+    }
+}
 
-# Test 4: Check that buildStaleUserWarning includes user names
-echo "Test 4: Checking that buildStaleUserWarning includes user names..."
-if grep -A 20 "function buildStaleUserWarning" docs/dashboard.js | grep -q "username"; then
-    echo "  PASS: buildStaleUserWarning includes user names"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: buildStaleUserWarning should include user names"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+// Test 2: Multi-user host with all fresh users returns empty
+{
+    const oneHourAgo = NOW_TS - 3600;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: oneHourAgo },
+            bob:   { heart_beat_ts: oneHourAgo }
+        }
+    };
+    const stale = getStaleUsers(data, NOW_TS);
+    if (stale.length === 0) {
+        console.log("TEST_RESULT:none-stale:PASS:no stale users detected");
+    } else {
+        console.log("TEST_RESULT:none-stale:FAIL:expected [], got " + JSON.stringify(stale));
+    }
+}
 
-# Test 5: Check that buildStaleUserWarning includes timestamp info
-echo "Test 5: Checking that buildStaleUserWarning includes timestamp info..."
-if grep -A 20 "function buildStaleUserWarning" docs/dashboard.js | grep -q "formatTimestamp"; then
-    echo "  PASS: buildStaleUserWarning includes timestamp info"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: buildStaleUserWarning should include timestamp info"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+// Test 3: Single-user host is always skipped (only check multi-user hosts)
+{
+    const twoDaysAgo = NOW_TS - 2 * 86400;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: twoDaysAgo }
+        }
+    };
+    const stale = getStaleUsers(data, NOW_TS);
+    if (stale.length === 0) {
+        console.log("TEST_RESULT:single-user-skip:PASS:single-user host skipped");
+    } else {
+        console.log("TEST_RESULT:single-user-skip:FAIL:expected [], got " + JSON.stringify(stale));
+    }
+}
 
-# Test 6: Check that buildStaleUserWarning handles "never seen" case
-echo "Test 6: Checking that buildStaleUserWarning handles missing heartbeat..."
-if grep -A 20 "function buildStaleUserWarning" docs/dashboard.js | grep -q "never seen"; then
-    echo "  PASS: buildStaleUserWarning handles 'never seen' case"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: buildStaleUserWarning should handle 'never seen' case"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+// Test 4: User with no heartbeat is considered stale ("never seen")
+{
+    const oneHourAgo = NOW_TS - 3600;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: oneHourAgo },
+            bob:   {}
+        }
+    };
+    const stale = getStaleUsers(data, NOW_TS);
+    if (stale.length === 1 && stale[0].username === "bob" && stale[0].heartbeatTs === 0) {
+        console.log("TEST_RESULT:never-seen:PASS:user with no heartbeat is stale");
+    } else {
+        console.log("TEST_RESULT:never-seen:FAIL:expected bob (never seen), got " + JSON.stringify(stale));
+    }
+}
 
-# Test 7: Check that warning section uses buildStaleUserWarning
-echo "Test 7: Checking that warning section uses buildStaleUserWarning..."
-# Check for actual usage: const staleUserWarning = buildStaleUserWarning(data, now);
-if grep -q "const staleUserWarning = buildStaleUserWarning" docs/dashboard.js; then
-    echo "  PASS: Warning section uses buildStaleUserWarning"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: Warning section should use buildStaleUserWarning"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+// Test 5: buildStaleUserWarning generates correct text for one stale user
+{
+    const oneHourAgo = NOW_TS - 3600;
+    const twoDaysAgo = NOW_TS - 2 * 86400;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: oneHourAgo },
+            bob:   { heart_beat_ts: twoDaysAgo }
+        }
+    };
+    const warning = buildStaleUserWarning(data, NOW_TS);
+    if (warning.includes("Stale user:") && warning.includes("bob")) {
+        console.log("TEST_RESULT:warning-singular:PASS:singular warning text correct");
+    } else {
+        console.log("TEST_RESULT:warning-singular:FAIL:got: " + warning);
+    }
+}
 
-# Test 8: Check that stale user warning uses singular/plural correctly
-echo "Test 8: Checking singular/plural grammar in stale user warning..."
-if grep -A 20 "function buildStaleUserWarning" docs/dashboard.js | grep -q "Stale user.*s.*length > 1"; then
-    echo "  PASS: Uses correct singular/plural grammar"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: Should use 'user' (singular) or 'users' (plural) appropriately"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+// Test 6: buildStaleUserWarning generates plural text for multiple stale users
+{
+    const twoDaysAgo = NOW_TS - 2 * 86400;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: twoDaysAgo },
+            bob:   { heart_beat_ts: twoDaysAgo }
+        }
+    };
+    const warning = buildStaleUserWarning(data, NOW_TS);
+    if (warning.includes("Stale users:") && warning.includes("alice") && warning.includes("bob")) {
+        console.log("TEST_RESULT:warning-plural:PASS:plural warning text correct");
+    } else {
+        console.log("TEST_RESULT:warning-plural:FAIL:got: " + warning);
+    }
+}
 
-# Test 9: Check Issue #22 comment exists
-echo "Test 9: Checking that Issue #22 is documented in the code..."
-if grep -q "Issue #22" docs/dashboard.js; then
-    echo "  PASS: Issue #22 is documented in the code"
-    PASS_COUNT=$((PASS_COUNT + 1))
-else
-    echo "  FAIL: Issue #22 should be documented in the code"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-fi
+// Test 7: buildStaleUserWarning returns empty for no stale users
+{
+    const oneHourAgo = NOW_TS - 3600;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: oneHourAgo },
+            bob:   { heart_beat_ts: oneHourAgo }
+        }
+    };
+    const warning = buildStaleUserWarning(data, NOW_TS);
+    if (warning === "") {
+        console.log("TEST_RESULT:no-warning:PASS:empty warning for fresh users");
+    } else {
+        console.log("TEST_RESULT:no-warning:FAIL:expected empty, got: " + warning);
+    }
+}
+
+// Test 8: buildStaleUserWarning includes "never seen" for missing heartbeat
+{
+    const oneHourAgo = NOW_TS - 3600;
+    const data = {
+        users: {
+            alice: { heart_beat_ts: oneHourAgo },
+            bob:   {}
+        }
+    };
+    const warning = buildStaleUserWarning(data, NOW_TS);
+    if (warning.includes("never seen")) {
+        console.log("TEST_RESULT:never-seen-text:PASS:warning includes never seen");
+    } else {
+        console.log("TEST_RESULT:never-seen-text:FAIL:got: " + warning);
+    }
+}
+')
+
+while IFS= read -r line; do
+    case "$line" in
+        TEST_RESULT:*) check_result "$line" ;;
+    esac
+done <<< "$OUTPUT"
 
 echo ""
-echo "======================================================="
-echo "Test Summary"
-echo "======================================================="
-echo "Passed: $PASS_COUNT"
-echo "Failed: $FAIL_COUNT"
-echo ""
+echo "==========================================="
+echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
 
-if [ $FAIL_COUNT -eq 0 ]; then
-    echo "All tests PASSED! Issue #22 is properly implemented."
-    echo ""
-    echo "Summary of changes for Issue #22:"
-    echo "- Added getStaleUsers() function to identify stale users in multi-user hosts"
-    echo "- Added buildStaleUserWarning() function to build human-readable warning text"
-    echo "- Warning section now shows which specific user(s) are stale"
-    echo "- Stale user warnings include relative timestamps (e.g., '1d 6h ago')"
-    echo "- Handles 'never seen' case for users without heartbeat"
-    echo "Status: PASSED"
-    exit 0
-else
-    echo "Some tests FAILED! Issue #22 implementation needs work."
-    echo "Status: FAILED"
+if [ "$FAIL_COUNT" -gt 0 ]; then
     exit 1
 fi

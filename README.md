@@ -419,6 +419,55 @@ bash -x run.sh
 - Hostnames are used as identifiers (ensure they don't contain sensitive data)
 - Consider using SSH keys for git authentication instead of passwords
 
+## Testing
+
+### Unit Tests vs Benchmarks
+
+- **Unit tests** verify functionality — call a function with test data and assert on the result. They must not validate performance (timing).
+- **Benchmarks** measure performance — dedicated scripts that compare execution time. Benchmarks are expected to take time and must not run inside unit tests.
+- **Why?** Unit tests run in parallel, making timing measurements unreliable.
+
+### "What" Tests vs "How" Tests
+
+All tests must be **"what" tests** — they check **what** the code produces, not **how** it is implemented:
+
+- **Good ("what" test):** Call `getHealthStatus("host", data)` and assert the return value is `"warning"`.
+- **Bad ("how" test):** Grep the source code for `grep -q 'anyUserStale'` to check if a variable name exists.
+
+"How" tests break whenever you refactor (e.g., renaming a variable, switching algorithms) even though the behaviour is unchanged. They offer no real value.
+
+### Writing JS Tests
+
+The project uses `deno` to run pure functions extracted from `docs/dashboard.js`:
+
+```bash
+source tests/extract-functions.sh
+run_js_test '
+    const result = getHealthStatus("host", { heart_beat_ts: 1700000000 });
+    if (result === "healthy") {
+        console.log("TEST_RESULT:my-test:PASS:correct status");
+    } else {
+        console.log("TEST_RESULT:my-test:FAIL:expected healthy, got " + result);
+    }
+'
+```
+
+Test protocol: JS prints `TEST_RESULT:<name>:<PASS|FAIL>:<detail>`, the shell harness parses these lines.
+
+### Test File Conventions
+
+- Test files: `tests/test-*.sh` (run by `quality.sh`)
+- Helper files: `tests/*.sh` without the `test-` prefix (not run as tests)
+- CSS tests: Extract CSS property values with `sed` and compare directly
+
+### What NOT to Do in Tests
+
+- Do **not** grep source files for patterns, variable names, or function bodies
+- Do **not** check that one function calls another
+- Do **not** use `extract_function ... | grep` patterns
+- Do **not** reduce iteration counts to make performance tests faster — create proper benchmarks instead
+- If a function requires external services (e.g., GitHub API), skip the test rather than faking it with grep
+
 ## Contributing
 
 1. Fork the repository

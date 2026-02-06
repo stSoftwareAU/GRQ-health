@@ -1,70 +1,137 @@
 #!/bin/bash
-# Test script for Issue #13: Per-user log button behaviour
-# This script verifies that the dashboard.js change was implemented correctly
+# Test for Issue #13: Per-user log button behaviour
+# Calls getExpectedUsers() and getUserEntries() with test data to verify
+# that multi-user host detection works correctly (drives button visibility).
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
+source "$SCRIPT_DIR/extract-functions.sh"
 
-echo "Testing Issue #13: Per-user log button behaviour"
-echo "================================================"
+echo "Testing Issue #13: Per-user log button logic"
+echo "============================================="
 echo ""
 
-# Test 1: Check that showUserTable variable controls log button visibility
-echo "Test 1: Checking that showUserTable controls log button visibility..."
-if grep -q '${!showUserTable' "$DASHBOARD_JS"; then
-    echo "  PASS: Log button is conditionally shown based on showUserTable"
-else
-    echo "  FAIL: Log button is not conditionally shown"
-    exit 1
-fi
+PASS_COUNT=0
+FAIL_COUNT=0
 
-# Test 2: Check that the conditional wraps the log button div
-echo "Test 2: Checking conditional structure around log button..."
-if grep -A5 '${!showUserTable' "$DASHBOARD_JS" | grep -q 'position-absolute'; then
-    echo "  PASS: Log button div is inside the conditional"
-else
-    echo "  FAIL: Log button div is not properly wrapped"
-    exit 1
-fi
-
-# Test 3: Verify user table still shows per-user log buttons
-echo "Test 3: Checking that user table has per-user log buttons..."
-if grep -q 'userLogUrl.*node-\${slug}.log' "$DASHBOARD_JS"; then
-    echo "  PASS: User table has per-user log URLs"
-else
-    echo "  FAIL: User table missing per-user log URLs"
-    exit 1
-fi
-
-# Test 4: Verify showUserTable is set based on expectedUsers.length >= 2
-echo "Test 4: Checking showUserTable logic..."
-if grep -q 'showUserTable = expectedUsers.length >= 2' "$DASHBOARD_JS"; then
-    echo "  PASS: showUserTable correctly checks for 2+ users"
-else
-    echo "  FAIL: showUserTable logic is incorrect"
-    exit 1
-fi
-
-# Test 5: Verify the closing of the conditional
-echo "Test 5: Checking conditional is properly closed..."
-if grep -q "} : ''" "$DASHBOARD_JS" | head -1; then
-    echo "  PASS: Conditional is properly closed with empty string fallback"
-else
-    # Alternative check - the ternary operator might be formatted differently
-    if grep -q ": ''}" "$DASHBOARD_JS"; then
-        echo "  PASS: Conditional is properly closed"
+check_result() {
+    local line="$1"
+    local name result detail
+    name="$(echo "$line" | cut -d: -f2)"
+    result="$(echo "$line" | cut -d: -f3)"
+    detail="$(echo "$line" | cut -d: -f4-)"
+    if [ "$result" = "PASS" ]; then
+        echo "  PASS: $name — $detail"
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
-        echo "  PASS: Conditional structure appears valid"
+        echo "  FAIL: $name — $detail"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
-fi
+}
+
+OUTPUT=$(run_js_test '
+// Test 1: Single-user host — showUserTable should be false (< 2 users)
+{
+    const data = {
+        users: { alice: { heart_beat_ts: 1700000000 } }
+    };
+    const users = getExpectedUsers(data);
+    const showUserTable = users.length >= 2;
+    if (!showUserTable) {
+        console.log("TEST_RESULT:single-user-no-table:PASS:single user does not trigger user table");
+    } else {
+        console.log("TEST_RESULT:single-user-no-table:FAIL:expected no table, got " + users.length + " users");
+    }
+}
+
+// Test 2: Multi-user host (2+ users) — showUserTable should be true
+{
+    const data = {
+        users: {
+            alice: { heart_beat_ts: 1700000000 },
+            bob:   { heart_beat_ts: 1700000000 }
+        }
+    };
+    const users = getExpectedUsers(data);
+    const showUserTable = users.length >= 2;
+    if (showUserTable) {
+        console.log("TEST_RESULT:multi-user-table:PASS:two users triggers user table");
+    } else {
+        console.log("TEST_RESULT:multi-user-table:FAIL:expected table, got " + users.length + " users");
+    }
+}
+
+// Test 3: No users map — should return empty list
+{
+    const data = {};
+    const users = getExpectedUsers(data);
+    if (users.length === 0) {
+        console.log("TEST_RESULT:no-users-empty:PASS:no users map returns empty list");
+    } else {
+        console.log("TEST_RESULT:no-users-empty:FAIL:expected 0 users, got " + users.length);
+    }
+}
+
+// Test 4: getUserEntries filters out invalid entries
+{
+    const data = {
+        users: {
+            alice: { heart_beat_ts: 1700000000 },
+            "": { heart_beat_ts: 1700000000 },
+            bob: null
+        }
+    };
+    const entries = getUserEntries(data);
+    if (entries.length === 1 && entries[0][0] === "alice") {
+        console.log("TEST_RESULT:filter-invalid:PASS:invalid entries filtered out");
+    } else {
+        console.log("TEST_RESULT:filter-invalid:FAIL:expected 1 valid entry, got " + entries.length);
+    }
+}
+
+// Test 5: sanitizeUserSlug produces valid slugs
+{
+    const slug1 = sanitizeUserSlug("my user");
+    const slug2 = sanitizeUserSlug(null);
+    const slug3 = sanitizeUserSlug("alice");
+    const ok = slug1 === "my_user" && slug2 === "unknown" && slug3 === "alice";
+    if (ok) {
+        console.log("TEST_RESULT:slug-sanitise:PASS:slugs are correct");
+    } else {
+        console.log("TEST_RESULT:slug-sanitise:FAIL:got " + slug1 + ", " + slug2 + ", " + slug3);
+    }
+}
+
+// Test 6: getExpectedUsers returns sorted list
+{
+    const data = {
+        users: {
+            charlie: { heart_beat_ts: 1700000000 },
+            alice:   { heart_beat_ts: 1700000000 },
+            bob:     { heart_beat_ts: 1700000000 }
+        }
+    };
+    const users = getExpectedUsers(data);
+    const sorted = users.join(",") === "alice,bob,charlie";
+    if (sorted) {
+        console.log("TEST_RESULT:sorted-users:PASS:users are alphabetically sorted");
+    } else {
+        console.log("TEST_RESULT:sorted-users:FAIL:got " + users.join(","));
+    }
+}
+')
+
+while IFS= read -r line; do
+    case "$line" in
+        TEST_RESULT:*) check_result "$line" ;;
+    esac
+done <<< "$OUTPUT"
 
 echo ""
-echo "================================================"
-echo "All tests passed!"
-echo ""
-echo "Summary of changes for Issue #13:"
-echo "- The main 'View Log' button is now hidden when a host has 2+ users"
-echo "- Each user still has their own log button in the user table"
-echo "- Single-user hosts continue to show the main 'View Log' button"
+echo "============================================="
+echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
+
+if [ "$FAIL_COUNT" -gt 0 ]; then
+    exit 1
+fi
