@@ -15,6 +15,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 REPOS_JSON="${PROJECT_ROOT}/docs/repos.json"
 
+# Validate repo name: alphanumeric, hyphens, underscores, periods, colons, forward slashes
+validate_repo_name() {
+    local name="$1"
+    if [ -z "$name" ]; then
+        echo "Error: Repo name cannot be empty." >&2
+        return 1
+    fi
+    if ! [[ "$name" =~ ^[a-zA-Z0-9_./:+-]+$ ]]; then
+        echo "Error: Invalid repo name '$name'. Only alphanumeric, hyphens, underscores, periods, colons, and forward slashes allowed." >&2
+        return 1
+    fi
+    return 0
+}
+
 # Check arguments
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <repo_name>"
@@ -22,7 +36,20 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
+# Support --validate flag for testing validation without side effects
+if [ "$1" = "--validate" ]; then
+    if [ $# -lt 2 ]; then
+        echo "Usage: $0 --validate <repo_name>" >&2
+        exit 1
+    fi
+    validate_repo_name "$2"
+    exit $?
+fi
+
 REPO_NAME="$1"
+
+# Validate the repo name before proceeding
+validate_repo_name "$REPO_NAME" || exit 1
 
 # Get current UTC timestamp (Unix timestamp)
 CURRENT_TS=$(date +%s)
