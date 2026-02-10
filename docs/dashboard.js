@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.79";
+const VERSION = "1.0.80";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -23,6 +23,18 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize offline indicator
   initializeOfflineIndicator();
 });
+
+// Named constants for health thresholds — single source of truth (Issue #35)
+const THRESHOLDS = {
+    IDLE_MIN_CORES: 4,        // Only check idle status on machines with more than this many cores
+    IDLE_LOAD_1M: 15,         // 1-minute load average threshold for idle detection (%)
+    IDLE_LOAD_5M: 15,         // 5-minute load average threshold for idle detection (%)
+    IDLE_LOAD_15M: 20,        // 15-minute load average threshold for idle detection (%)
+    DISK_WARNING_PERCENT: 75, // Disk usage above this triggers a warning
+    HEARTBEAT_CRITICAL_HOURS: 24, // Hours without heartbeat before marking host critical
+    MACOS_MIN_VERSION: '14.0',    // macOS versions below this trigger a warning
+    UBUNTU_MIN_VERSION: '22.04'   // Ubuntu versions below this trigger a warning
+};
 
 function formatUptime(seconds) {
     if (seconds < 60) return `${seconds}s`;
@@ -51,6 +63,17 @@ function sanitizeUserSlug(user) {
     const raw = String(user || 'unknown');
     const slug = raw.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
     return slug || 'unknown';
+}
+
+// Escape HTML special characters to prevent XSS when interpolating into innerHTML
+function escapeHtml(str) {
+    if (!str && str !== 0) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 function getUserEntries(data) {
@@ -182,20 +205,13 @@ function getIdleWorkerStatus(data) {
     result.load5m = load5m;
     result.load15m = load15m;
 
-    // Only check multi-core systems (> 4 cores) as single-core systems have different usage patterns
-    if (coreCount <= 4) {
+    // Only check multi-core systems as single-core systems have different usage patterns
+    if (coreCount <= THRESHOLDS.IDLE_MIN_CORES) {
         return result;
     }
 
-    // Define thresholds for idle detection
-    // A worker is considered idle when ALL load averages are below thresholds
-    // This indicates consistent underutilisation, not just a momentary lull
-    const idleThreshold1m = 15;  // 1-minute average threshold (most recent)
-    const idleThreshold5m = 15;  // 5-minute average threshold (short-term)
-    const idleThreshold15m = 20; // 15-minute average threshold (longer-term)
-
     // Check for consistently idle machine - all averages are low
-    if (load1m < idleThreshold1m && load5m < idleThreshold5m && load15m < idleThreshold15m) {
+    if (load1m < THRESHOLDS.IDLE_LOAD_1M && load5m < THRESHOLDS.IDLE_LOAD_5M && load15m < THRESHOLDS.IDLE_LOAD_15M) {
         result.isIdle = true;
         result.reason = `Worker idle: ${load1m.toFixed(1)}% (1m), ${load5m.toFixed(1)}% (5m), ${load15m.toFixed(1)}% (15m) on ${coreCount} cores`;
         return result;
@@ -326,7 +342,7 @@ function renderRepoHealth(errorMessage = null) {
     }
 
     if (!repos.length) {
-        listElement.innerHTML = `<p class="text-muted mb-0">${errorMessage || 'No market feed repos configured.'}</p>`;
+        listElement.innerHTML = `<p class="text-muted mb-0">${escapeHtml(errorMessage) || 'No market feed repos configured.'}</p>`;
         return;
     }
 
@@ -339,25 +355,25 @@ function renderRepoHealth(errorMessage = null) {
     const repoItemsHtml = repos.map((repo) => {
         // Calculate status from last_commit_ts
         const status = getRepoStatus(repo) || 'error';
-        const repoName = repo.name || 'Unknown';
+        const repoName = escapeHtml(repo.name || 'Unknown');
         const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
         return `
         <div class="repo-health-item repo-${status}">
             <div class="repo-meta">
                 <div class="repo-name">${repoName}</div>
-                <div class="repo-slug">${repo.repo || ''}</div>
+                <div class="repo-slug">${escapeHtml(repo.repo || '')}</div>
             </div>
             <div class="text-end">
                 <span class="${statusBadge(status)} repo-status-badge">${statusLabel}</span>
                 <div class="repo-time">${repo.last_commit_ts > 0 ? `Last commit ${formatTimestamp(repo.last_commit_ts)}` : 'Commit time unavailable'}</div>
-                ${repo.error_message ? `<div class="repo-error text-danger"><small>${repo.error_message}</small></div>` : ''}
+                ${repo.error_message ? `<div class="repo-error text-danger"><small>${escapeHtml(repo.error_message)}</small></div>` : ''}
             </div>
         </div>
     `;
     }).join('');
 
     const alertHtml = errorMessage
-        ? `<div class="alert alert-warning mb-3">${errorMessage}</div>`
+        ? `<div class="alert alert-warning mb-3">${escapeHtml(errorMessage)}</div>`
         : '';
 
     listElement.innerHTML = `${alertHtml}${repoItemsHtml}`;
@@ -478,7 +494,7 @@ function showHealthError(message) {
     <div class="d-flex flex-column align-items-center">
       <i class="bi bi-exclamation-circle mb-3" style="font-size: 3rem; color: #dc3545;"></i>
       <h4 class="text-danger mb-3">Health Monitoring Unavailable</h4>
-      <p class="mb-3">${message}</p>
+      <p class="mb-3">${escapeHtml(message)}</p>
       <button class="btn btn-primary" onclick="this.parentElement.parentElement.remove()">
         <i class="bi bi-arrow-clockwise me-1"></i> Retry
       </button>
@@ -570,19 +586,19 @@ function getHealthStatus(_hostname, data) {
         return 'healthy';
     }
 
-    // Check for MIA state (mobile hosts not seen for 24+ hours)
-    if (hoursSinceHeartbeat > 24 && data.mobile) {
+    // Check for MIA state (mobile hosts not seen beyond threshold)
+    if (hoursSinceHeartbeat > THRESHOLDS.HEARTBEAT_CRITICAL_HOURS && data.mobile) {
         return 'mia';
     }
 
-    // Check for critical state (no heartbeat for 24+ hours)
+    // Check for critical state (no heartbeat beyond threshold)
     // Mobile hosts are now marked as MIA instead of critical
-    if (hoursSinceHeartbeat > 24 && !data.mobile) {
+    if (hoursSinceHeartbeat > THRESHOLDS.HEARTBEAT_CRITICAL_HOURS && !data.mobile) {
         return 'critical';
     }
 
     // Check for warning states
-    if (hoursSinceHeartbeat <= 24) {
+    if (hoursSinceHeartbeat <= THRESHOLDS.HEARTBEAT_CRITICAL_HOURS) {
         // Per-user stale detection: if any expected user is missing/stale beyond the user heartbeat threshold, flag WARNING.
         // This ensures "elephant stuck" makes the host warning even if the host itself updated recently.
         if (expectedUsers.length >= 2) {
@@ -598,9 +614,8 @@ function getHealthStatus(_hostname, data) {
             }
         }
 
-        // Disk usage warning (over 75% used) - applies to all hosts including mobile
-        // High disk usage is bad - indicates potential storage issues
-        if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
+        // Disk usage warning - applies to all hosts including mobile
+        if (data.used_disk_percent && parseFloat(data.used_disk_percent) > THRESHOLDS.DISK_WARNING_PERCENT) {
             return 'warning';
         }
         
@@ -620,10 +635,10 @@ function getHealthStatus(_hostname, data) {
         
         // OS version warning (basic check)
         if (data.os_info && data.os_version) {
-            if (data.os_info.includes('macOS') && data.os_version < '14.0') {
+            if (data.os_info.includes('macOS') && data.os_version < THRESHOLDS.MACOS_MIN_VERSION) {
                 return 'warning';
             }
-            if (data.os_info.includes('Ubuntu') && data.os_version < '22.04') {
+            if (data.os_info.includes('Ubuntu') && data.os_version < THRESHOLDS.UBUNTU_MIN_VERSION) {
                 return 'warning';
             }
         }
@@ -646,9 +661,10 @@ function getHealthStatus(_hostname, data) {
 function createHostCard(hostname, data) {
     const healthStatus = getHealthStatus(hostname, data);
     const statusClass = healthStatus;
-    const logUrl = `./log-viewer.html?file=./${hostname}/node.log`;
-    const emoji = data.emoji || '';
-    const location = data.location || '';
+    const safeHostname = escapeHtml(hostname);
+    const logUrl = `./log-viewer.html?file=./${safeHostname}/node.log`;
+    const emoji = escapeHtml(data.emoji || '');
+    const location = escapeHtml(data.location || '');
 
     const userEntries = getUserEntries(data);
     const expectedUsers = getExpectedUsers(data);
@@ -669,10 +685,10 @@ function createHostCard(hostname, data) {
                     ? '<span class="badge bg-danger">stale</span>'
                     : '<span class="badge bg-success">ok</span>';
                 const slug = sanitizeUserSlug(username);
-                const userLogUrl = `./log-viewer.html?file=./${hostname}/node-${slug}.log`;
+                const userLogUrl = `./log-viewer.html?file=./${safeHostname}/node-${slug}.log`;
                 return `
                     <tr>
-                        <td class="text-nowrap">${username}</td>
+                        <td class="text-nowrap">${escapeHtml(username)}</td>
                         <td class="text-nowrap">${tsText}</td>
                         <td class="text-end text-nowrap">${statusBadge}</td>
                         <td class="text-end text-nowrap"><a href="${userLogUrl}" class="btn btn-sm btn-outline-secondary">Log</a></td>
@@ -707,18 +723,18 @@ function createHostCard(hostname, data) {
             <div class="col-lg-6 col-xl-4">
                 <div class="host-card dead" data-status="dead">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${emoji} ${hostname}</h5>
+                        <h5 class="mb-0">${emoji} ${safeHostname}</h5>
                         <span class="health-status dead">Dead</span>
                     </div>
                     ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
                     <div class="row">
                         <div class="col-12">
                             <small class="text-muted">Death Date</small>
-                            <div class="fw-bold">${data.death_date}</div>
+                            <div class="fw-bold">${escapeHtml(data.death_date)}</div>
                         </div>
                     </div>
-                    ${data.os_info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">OS</small><div class="fw-bold">${data.os_info}</div></div></div>` : ''}
-                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
+                    ${data.os_info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">OS</small><div class="fw-bold">${escapeHtml(data.os_info)}</div></div></div>` : ''}
+                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${escapeHtml(data.info)}</div></div></div>` : ''}
                     <div class="text-center mt-3">
                         <span class="badge bg-secondary">Historical Record</span>
                     </div>
@@ -733,22 +749,22 @@ function createHostCard(hostname, data) {
             <div class="col-lg-6 col-xl-4">
                 <div class="host-card historical" data-status="historical">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${emoji} ${hostname}</h5>
+                        <h5 class="mb-0">${emoji} ${safeHostname}</h5>
                         <span class="health-status historical">Historical</span>
                     </div>
                     ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
                     <div class="row">
                         <div class="col-6">
                             <small class="text-muted">OS</small>
-                            <div class="fw-bold">${data.os_info}</div>
+                            <div class="fw-bold">${escapeHtml(data.os_info)}</div>
                         </div>
                         <div class="col-6">
                             <small class="text-muted">Last Seen</small>
-                            <div class="fw-bold">${data.last_seen || 'Unknown'}</div>
+                            <div class="fw-bold">${escapeHtml(data.last_seen || 'Unknown')}</div>
                         </div>
                     </div>
-                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
-                    ${data.sample_rate ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Sample Rate</small><div class="fw-bold">${data.sample_rate}</div></div></div>` : ''}
+                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${escapeHtml(data.info)}</div></div></div>` : ''}
+                    ${data.sample_rate ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Sample Rate</small><div class="fw-bold">${escapeHtml(data.sample_rate)}</div></div></div>` : ''}
                     <div class="text-center mt-3">
                         <span class="badge bg-info">MacBook Air</span>
                     </div>
@@ -764,21 +780,21 @@ function createHostCard(hostname, data) {
             <div class="col-lg-6 col-xl-4">
                 <div class="host-card mia" data-status="mia">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${miaEmoji} ${hostname}</h5>
+                        <h5 class="mb-0">${miaEmoji} ${safeHostname}</h5>
                         <span class="health-status mia">Off the Grid</span>
                     </div>
                     ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
                     <div class="row">
                         <div class="col-6">
                             <small class="text-muted">OS</small>
-                            <div class="fw-bold">${data.os_info} ${data.os_version}</div>
+                            <div class="fw-bold">${escapeHtml(data.os_info)} ${escapeHtml(data.os_version)}</div>
                         </div>
                         <div class="col-6">
                             <small class="text-muted">Last Seen</small>
                             <div class="fw-bold">${data.heart_beat_ts ? formatTimestamp(data.heart_beat_ts) : 'Unknown'}</div>
                         </div>
                     </div>
-                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
+                    ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${escapeHtml(data.info)}</div></div></div>` : ''}
                     <div class="text-center mt-3">
                         <span class="badge bg-info">Off the Grid</span>
                     </div>
@@ -852,11 +868,11 @@ function createHostCard(hostname, data) {
     
     return `
         <div class="col-lg-6 col-xl-4">
-            <div class="host-card ${statusClass}${mobileClass}${outdatedMacClass}" data-status="${healthStatus}" data-hostname="${hostname}">
+            <div class="host-card ${statusClass}${mobileClass}${outdatedMacClass}" data-status="${healthStatus}" data-hostname="${escapeHtml(hostname)}">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0 d-flex align-items-center">
-                        ${emoji} ${hostname}
-                        ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${data.machine_type}</span>` : ''}
+                        ${emoji} ${safeHostname}
+                        ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${escapeHtml(data.machine_type)}</span>` : ''}
                     </h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
                 </div>
@@ -865,7 +881,7 @@ function createHostCard(hostname, data) {
                     <div class="col-6">
                         <small class="text-muted">OS</small>
                         <div class="fw-bold">
-                            ${data.os_info} ${data.os_version}
+                            ${escapeHtml(data.os_info)} ${escapeHtml(data.os_version)}
                             ${outdatedMacClass ? '<span class="badge bg-warning text-white ms-2" title="Update available"><i class="bi bi-arrow-up-circle"></i> Update</span>' : ''}
                         </div>
                     </div>
@@ -877,44 +893,44 @@ function createHostCard(hostname, data) {
                 <div class="row mt-2">
                     <div class="col-6">
                         <small class="text-muted">Disk Usage</small>
-                        <div class="fw-bold">${diskDisplay}</div>
+                        <div class="fw-bold">${escapeHtml(diskDisplay)}</div>
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Memory</small>
-                        <div class="fw-bold">${memDisplay}</div>
+                        <div class="fw-bold">${escapeHtml(memDisplay)}</div>
                     </div>
                 </div>
                 <div class="row mt-2">
                     <div class="col-6">
                         <small class="text-muted">CPU Load</small>
-                        <div class="fw-bold">${cpuDisplay}</div>
-                        ${data.cpu_breakdown ? `<small class="text-muted">${data.cpu_breakdown}</small>` : ''}
-                        ${data.load_averages ? `<small class="text-muted">Recent: ${data.load_averages}</small>` : ''}
+                        <div class="fw-bold">${escapeHtml(cpuDisplay)}</div>
+                        ${data.cpu_breakdown ? `<small class="text-muted">${escapeHtml(data.cpu_breakdown)}</small>` : ''}
+                        ${data.load_averages ? `<small class="text-muted">Recent: ${escapeHtml(data.load_averages)}</small>` : ''}
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Network</small>
-                        <div class="fw-bold">${data.network_status}</div>
-                        ${data.ip_addresses ? `<small class="text-muted">${data.ip_addresses}</small>` : ''}
+                        <div class="fw-bold">${escapeHtml(data.network_status)}</div>
+                        ${data.ip_addresses ? `<small class="text-muted">${escapeHtml(data.ip_addresses)}</small>` : ''}
                     </div>
                 </div>
                 <div class="row mt-2">
                     <div class="col-6">
                         <small class="text-muted">Timezone</small>
-                        <div class="fw-bold">${data.timezone}</div>
+                        <div class="fw-bold">${escapeHtml(data.timezone)}</div>
                     </div>
                 </div>
                 ${userTableHtml}
-                ${data.config_warning ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Config</small><div class="fw-bold text-warning">${data.config_warning}</div></div></div>` : ''}
-                ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${data.info}</div></div></div>` : ''}
+                ${data.config_warning ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Config</small><div class="fw-bold text-warning">${escapeHtml(data.config_warning)}</div></div></div>` : ''}
+                ${data.info ? `<div class="row mt-2"><div class="col-12"><small class="text-muted">Info</small><div class="fw-bold">${escapeHtml(data.info)}</div></div></div>` : ''}
                 <div class="last-seen">Last seen: ${displayHeartbeatTs ? formatTimestamp(displayHeartbeatTs) : 'Unknown'}</div>
                 <div class="d-flex justify-content-center align-items-center mt-2 position-relative">
                     <div class="text-center">
-                        ${data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${data.version}</small>` : ''}
+                        ${data.version ? `<small class="text-muted" style="font-size: 0.6rem; opacity: 0.6;" title="Health script version">v${escapeHtml(data.version)}</small>` : ''}
                     </div>
                     ${!showUserTable ? `
                     <div class="position-absolute" style="right: 0;">
                         <a href="${logUrl}" class="btn btn-sm ${data.exception_count && parseInt(data.exception_count) > 0 ? 'btn-danger' : 'btn-outline-primary'}"
-                           ${data.exception_count && parseInt(data.exception_count) > 0 ? `title="${data.exception_summary}" data-bs-toggle="tooltip" data-bs-placement="top"` : ''}>
+                           ${data.exception_count && parseInt(data.exception_count) > 0 ? `title="${escapeHtml(data.exception_summary)}" data-bs-toggle="tooltip" data-bs-placement="top"` : ''}>
                             <i class="bi ${data.exception_count && parseInt(data.exception_count) > 0 ? 'bi-exclamation-triangle' : 'bi-file-text'}"></i>
                             ${data.exception_count && parseInt(data.exception_count) > 0 ? 'View Log ⚠️' : 'View Log'}
                         </a>
@@ -988,11 +1004,11 @@ function updateStats(hosts) {
             if (data.heart_beat_ts) {
                 const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
                 return `<div class="critical-host-item">
-                    <strong>${hostname}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
+                    <strong>${escapeHtml(hostname)}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
                 </div>`;
             } else {
                 return `<div class="critical-host-item">
-                    <strong>${hostname}</strong> - No heartbeat data available
+                    <strong>${escapeHtml(hostname)}</strong> - No heartbeat data available
                 </div>`;
             }
         }).join('');
@@ -1012,11 +1028,11 @@ function updateStats(hosts) {
             if (data.heart_beat_ts) {
                 const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
                 return `<div class="mia-host-item">
-                    <strong>${hostname}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
+                    <strong>${escapeHtml(hostname)}</strong> - Last seen: ${formatTimestamp(data.heart_beat_ts)} (${hoursSince} hours ago)
                 </div>`;
             } else {
                 return `<div class="mia-host-item">
-                    <strong>${hostname}</strong> - No heartbeat data available
+                    <strong>${escapeHtml(hostname)}</strong> - No heartbeat data available
                 </div>`;
             }
         }).join('');
@@ -1033,7 +1049,7 @@ function updateStats(hosts) {
         const warningHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning');
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
-            if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
+            if (data.used_disk_percent && parseFloat(data.used_disk_percent) > THRESHOLDS.DISK_WARNING_PERCENT) {
                 warningReason += `High disk usage: ${data.used_disk_percent}%`;
             }
             if (data.config_warning) {
@@ -1047,8 +1063,8 @@ function updateStats(hosts) {
                 warningReason += idleWorkerWarning;
             }
             if (data.os_info && data.os_version) {
-                if ((data.os_info.includes('macOS') && data.os_version < '14.0') || 
-                    (data.os_info.includes('Ubuntu') && data.os_version < '22.04')) {
+                if ((data.os_info.includes('macOS') && data.os_version < THRESHOLDS.MACOS_MIN_VERSION) ||
+                    (data.os_info.includes('Ubuntu') && data.os_version < THRESHOLDS.UBUNTU_MIN_VERSION)) {
                     if (warningReason) warningReason += ', ';
                     warningReason += `OS version: ${data.os_version}`;
                 }
@@ -1068,7 +1084,7 @@ function updateStats(hosts) {
                 warningReason += staleUserWarning;
             }
             return `<div class="warning-host-item">
-                <strong>${hostname}</strong> - ${warningReason}
+                <strong>${escapeHtml(hostname)}</strong> - ${escapeHtml(warningReason)}
             </div>`;
         }).join('');
         warningHostsList.innerHTML = warningHtml;
@@ -1186,7 +1202,7 @@ async function loadData() {
         content.innerHTML = `
             <div class="error">
                 <h3>Error Loading Data</h3>
-                <p>Failed to load health data: ${error.message}</p>
+                <p>Failed to load health data: ${escapeHtml(error.message)}</p>
                 <p>Make sure the index.json file exists and is accessible.</p>
             </div>
         `;
