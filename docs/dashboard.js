@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.81";
+const VERSION = "1.0.82";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -30,8 +30,10 @@ const THRESHOLDS = {
     IDLE_LOAD_1M: 15,         // 1-minute load average threshold for idle detection (%)
     IDLE_LOAD_5M: 15,         // 5-minute load average threshold for idle detection (%)
     IDLE_LOAD_15M: 20,        // 15-minute load average threshold for idle detection (%)
+    IDLE_HIGH_LOAD: 50,       // Load above this indicates active work (recently started/stopped)
     DISK_WARNING_PERCENT: 75, // Disk usage above this triggers a warning
     HEARTBEAT_CRITICAL_HOURS: 24, // Hours without heartbeat before marking host critical
+    USER_STALE_DEFAULT_HOURS: 24, // Default hours before a user is marked stale (3x the 8h heartbeat threshold)
     MACOS_MIN_VERSION: '14.0',    // macOS versions below this trigger a warning
     UBUNTU_MIN_VERSION: '22.04'   // Ubuntu versions below this trigger a warning
 };
@@ -114,7 +116,7 @@ function getUserHeartbeatWarningHours(data) {
     // Default: 24 hours (3x the 8-hour heartbeat threshold) - fixes issue #15
     const h = Number(data?.user_stale_hours);
     if (Number.isFinite(h) && h > 0) return h;
-    return 24;
+    return THRESHOLDS.USER_STALE_DEFAULT_HOURS;
 }
 
 // Get list of stale users with their heartbeat information - Issue #22
@@ -219,14 +221,14 @@ function getIdleWorkerStatus(data) {
 
     // Check for recently stopped work - 15m is higher than current (1m/5m)
     // This is informational, not a warning - work may have just finished
-    if (load15m > 50 && load1m < 15 && load5m < 20) {
+    if (load15m > THRESHOLDS.IDLE_HIGH_LOAD && load1m < THRESHOLDS.IDLE_LOAD_1M && load5m < THRESHOLDS.IDLE_LOAD_15M) {
         // Work appears to have finished recently - not idle, just completed work
         return result;
     }
 
     // Check for recently started work - 1m/5m are higher than 15m
     // This is informational - work may have just started
-    if (load1m > 50 && load15m < 20) {
+    if (load1m > THRESHOLDS.IDLE_HIGH_LOAD && load15m < THRESHOLDS.IDLE_LOAD_15M) {
         // Work appears to have just started - not idle
         return result;
     }
