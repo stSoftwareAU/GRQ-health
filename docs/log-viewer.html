@@ -164,7 +164,7 @@
                 
                 document.getElementById('logContainer').innerHTML = `
                     <div class="log-header">
-                        <div class="log-title"><i class="bi bi-file-text"></i> ${hostname}/node.log <small class="text-muted">• ${new Date().toLocaleString()}</small></div>
+                        <div class="log-title"><i class="bi bi-file-text"></i> ${escapeHtml(hostname)}/node.log <small class="text-muted">• ${new Date().toLocaleString()}</small></div>
                     </div>
                     <div class="log-content">${processedContent}</div>
                 `;
@@ -181,8 +181,8 @@
                     <div class="error">
                         <i class="bi bi-exclamation-triangle"></i>
                         <h4>Error Loading Log File</h4>
-                        <p>Failed to load log file: ${error.message}</p>
-                        <p>File path: ${filePath}</p>
+                        <p>Failed to load log file: ${escapeHtml(error.message)}</p>
+                        <p>File path: ${escapeHtml(filePath)}</p>
                     </div>
                 `;
             }
@@ -224,10 +224,14 @@
             }).join('');
         }
         
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        function escapeHtml(str) {
+            if (!str && str !== 0) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
         
         function scrollToFirstIssue() {
