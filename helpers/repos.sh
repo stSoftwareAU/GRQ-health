@@ -22,7 +22,7 @@ validate_repo_name() {
         echo "Error: Repo name cannot be empty." >&2
         return 1
     fi
-    if ! [[ "$name" =~ ^[a-zA-Z0-9_./:+-]+$ ]]; then
+    if ! [[ "$name" =~ ^[a-zA-Z0-9_./:+- ]+$ ]]; then
         echo "Error: Invalid repo name '$name'. Only alphanumeric, hyphens, underscores, periods, colons, and forward slashes allowed." >&2
         return 1
     fi
