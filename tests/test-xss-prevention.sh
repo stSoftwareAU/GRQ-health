@@ -25,11 +25,11 @@ fail_test() {
     FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-# createHostCard (lines 661-943) is outside the default pure-function range
+# createHostCard (lines 663-945) is outside the default pure-function range
 # but it only generates HTML strings — no real DOM access needed.
 # Extract it separately and provide a minimal DOM mock.
 extract_card_function() {
-    sed -n '661,943p' "$SCRIPT_DIR/../docs/dashboard.js"
+    sed -n '663,945p' "$SCRIPT_DIR/../docs/dashboard.js"
 }
 
 # renderRepoHealth (lines 306-380) uses document.getElementById
