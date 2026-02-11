@@ -46,6 +46,17 @@
     <div class="repo-summary" id="repoSummary"></div>
 
     <script>
+        // Escape HTML special characters to prevent XSS when interpolating into innerHTML
+        function escapeHtml(str) {
+            if (!str && str !== 0) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         async function checkHealth() {
             try {
                 // Add timestamp to force fresh fetch and bypass cache
@@ -300,18 +311,18 @@
 
             const parts = [`${repoStats.healthy} good`];
             if (repoStats.warning > 0) {
-                const warningNames = repoStats.warningNames.join(', ');
+                const warningNames = repoStats.warningNames.map(escapeHtml).join(', ');
                 parts.push(`${repoStats.warning} warning${warningNames ? ` (${warningNames})` : ''}`);
             }
             if (repoStats.error > 0) {
-                const errorNames = repoStats.errorNames.join(', ');
+                const errorNames = repoStats.errorNames.map(escapeHtml).join(', ');
                 parts.push(`${repoStats.error} error${errorNames ? ` (${errorNames})` : ''}`);
             }
 
             summaryElement.innerHTML = `
-                Market feeds: ${parts.join(' • ')}
+                Market feeds: ${parts.join(' &bull; ')}
                 ${generatedAt ? `<small>Repo data updated ${formatRelativeTime(generatedAt)}</small>` : ''}
-                ${repoStats.errorMessages.length ? `<small>Issues: ${repoStats.errorMessages.join(' • ')}</small>` : ''}
+                ${repoStats.errorMessages.length ? `<small>Issues: ${repoStats.errorMessages.map(escapeHtml).join(' &bull; ')}</small>` : ''}
             `;
         }
 
