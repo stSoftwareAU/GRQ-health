@@ -24,10 +24,10 @@ fail_test() {
     FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-# Test 1: Valid repo names should be accepted (exit code indicates format OK)
-# We use --dry-run to test validation without actually modifying files
+# Test 1: Valid repo names should be accepted
 echo "Test 1: Valid repo names..."
-for name in "Dividends" "FX" "share-prices" "my_repo" "repo.2025"; do
+for name in "Dividends" "FX" "share-prices" "my_repo" "repo.2025" \
+            "org/repo" "host:path" "repo+extra" "A" "a1b2c3"; do
     if bash "$REPOS_SCRIPT" --validate "$name" 2>/dev/null; then
         pass_test "accepted valid name: $name"
     else
@@ -35,8 +35,8 @@ for name in "Dividends" "FX" "share-prices" "my_repo" "repo.2025"; do
     fi
 done
 
-# Test 2: Invalid repo names should be rejected
-echo "Test 2: Invalid repo names..."
+# Test 2: Invalid repo names should be rejected (special characters)
+echo "Test 2: Invalid repo names (special characters)..."
 for name in '<script>' '"; rm -rf /' '$HOME' 'repo name' 'a&b' 'x|y'; do
     if bash "$REPOS_SCRIPT" --validate "$name" 2>/dev/null; then
         fail_test "accepted invalid name: $name"
@@ -51,6 +51,41 @@ if bash "$REPOS_SCRIPT" --validate "" 2>/dev/null; then
     fail_test "accepted empty name"
 else
     pass_test "rejected empty name"
+fi
+
+# Test 4: Command injection attempts should be rejected
+echo "Test 4: Command injection attempts..."
+for name in '$(whoami)' '`id`' 'repo;ls' 'repo$(cat /etc/passwd)' \
+            'repo`rm -rf /`' '{evil}' 'a\\nb'; do
+    if bash "$REPOS_SCRIPT" --validate "$name" 2>/dev/null; then
+        fail_test "accepted injection attempt: $name"
+    else
+        pass_test "rejected injection attempt: $name"
+    fi
+done
+
+# Test 5: Error messages should go to stderr
+echo "Test 5: Error output goes to stderr..."
+STDERR_OUTPUT=$(bash "$REPOS_SCRIPT" --validate '$(evil)' 2>&1 1>/dev/null || true)
+if [[ "$STDERR_OUTPUT" == *"Error: Invalid repo name"* ]]; then
+    pass_test "error message sent to stderr for invalid name"
+else
+    fail_test "error message not on stderr, got: $STDERR_OUTPUT"
+fi
+
+STDERR_EMPTY=$(bash "$REPOS_SCRIPT" --validate "" 2>&1 1>/dev/null || true)
+if [[ "$STDERR_EMPTY" == *"Error: Repo name cannot be empty"* ]]; then
+    pass_test "error message sent to stderr for empty name"
+else
+    fail_test "error message not on stderr for empty name, got: $STDERR_EMPTY"
+fi
+
+# Test 6: Missing argument for --validate should fail
+echo "Test 6: Missing --validate argument..."
+if bash "$REPOS_SCRIPT" --validate 2>/dev/null; then
+    fail_test "accepted --validate without repo name"
+else
+    pass_test "rejected --validate without repo name"
 fi
 
 echo ""
