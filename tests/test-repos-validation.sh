@@ -1,6 +1,7 @@
 #!/bin/bash
-# Test for Issue #36: Input validation in repos.sh
-# Verifies that repos.sh rejects invalid repo names
+# Test for Issue #36 / #43: Input validation in repos.sh
+# Verifies that repos.sh rejects invalid repo names and accepts valid ones
+# Issue #43: Repo names with spaces are valid (e.g., "Training Data")
 
 set -e
 
@@ -27,7 +28,9 @@ fail_test() {
 # Test 1: Valid repo names should be accepted
 echo "Test 1: Valid repo names..."
 for name in "Dividends" "FX" "share-prices" "my_repo" "repo.2025" \
-            "org/repo" "host:path" "repo+extra" "A" "a1b2c3"; do
+            "org/repo" "host:path" "repo+extra" "A" "a1b2c3" \
+            "Training Data" "S3 Sync" "Company Reports" "Discovery Snapshot" \
+            "ScoreClient:luke"; do
     if bash "$REPOS_SCRIPT" --validate "$name" 2>/dev/null; then
         pass_test "accepted valid name: $name"
     else
@@ -37,7 +40,7 @@ done
 
 # Test 2: Invalid repo names should be rejected (special characters)
 echo "Test 2: Invalid repo names (special characters)..."
-for name in '<script>' '"; rm -rf /' '$HOME' 'repo name' 'a&b' 'x|y'; do
+for name in '<script>' '"; rm -rf /' '$HOME' 'a&b' 'x|y'; do
     if bash "$REPOS_SCRIPT" --validate "$name" 2>/dev/null; then
         fail_test "accepted invalid name: $name"
     else
@@ -86,6 +89,21 @@ if bash "$REPOS_SCRIPT" --validate 2>/dev/null; then
     fail_test "accepted --validate without repo name"
 else
     pass_test "rejected --validate without repo name"
+fi
+
+# Test 7: All names in docs/repos.json must pass validation (Issue #43)
+echo "Test 7: All repo names from docs/repos.json..."
+REPOS_JSON="$SCRIPT_DIR/../docs/repos.json"
+if command -v jq &> /dev/null && [ -f "$REPOS_JSON" ]; then
+    while IFS= read -r repo_name; do
+        if bash "$REPOS_SCRIPT" --validate "$repo_name" 2>/dev/null; then
+            pass_test "repos.json name accepted: $repo_name"
+        else
+            fail_test "repos.json name rejected: $repo_name"
+        fi
+    done < <(jq -r '.repos[].name' "$REPOS_JSON")
+else
+    echo "  SKIP: jq not available or repos.json not found"
 fi
 
 echo ""

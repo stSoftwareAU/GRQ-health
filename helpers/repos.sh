@@ -15,17 +15,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 REPOS_JSON="${PROJECT_ROOT}/docs/repos.json"
 
-# Validate repo name: alphanumeric, hyphens, underscores, periods, colons, forward slashes
+# Validate repo name: alphanumeric, hyphens, underscores, periods, colons, forward slashes, spaces
 validate_repo_name() {
     local name="$1"
     if [ -z "$name" ]; then
         echo "Error: Repo name cannot be empty." >&2
         return 1
     fi
-    #if ! [[ "$name" =~ ^[a-zA-Z0-9_./:+- ]+$ ]]; then
-        #echo "Error: Invalid repo name '$name'. Only alphanumeric, hyphens, underscores, periods, colons, and forward slashes allowed." >&2
-        #return 1
-    #fi
+    if ! [[ "$name" =~ ^[a-zA-Z0-9' '_./+:=-]+$ ]]; then
+        echo "Error: Invalid repo name '$name'. Only alphanumeric, spaces, hyphens, underscores, periods, colons, forward slashes, and plus signs allowed." >&2
+        return 1
+    fi
     return 0
 }
 
