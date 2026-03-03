@@ -7,9 +7,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
 DENO="$HOME/.deno/bin/deno"
 
-# Extract pure functions (lines 27-661) from dashboard.js
+# Extract pure functions (lines 27-700) from dashboard.js
 extract_pure_functions() {
-    sed -n '27,661p' "$DASHBOARD_JS"
+    sed -n '27,700p' "$DASHBOARD_JS"
 }
 
 # Run a JS test using deno

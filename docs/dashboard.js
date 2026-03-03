@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.85";
+const VERSION = "1.0.86";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -245,30 +245,69 @@ function buildIdleWorkerWarning(data) {
     return idleStatus.reason;
 }
 
-function getRepoStatus(repo) {
+// Count business days (weekdays only) between two unix timestamps (Issue #47)
+// Weekends (Saturday=6, Sunday=0) are skipped so they don't count toward staleness
+function countBusinessDays(fromTs, toTs) {
+    if (toTs <= fromTs) return 0;
+
+    const msPerDay = 86400 * 1000;
+    const fromDate = new Date(fromTs * 1000);
+    const toDate = new Date(toTs * 1000);
+
+    // Normalise both dates to midnight UTC for whole-day counting
+    const fromMidnight = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()));
+    const toMidnight = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate()));
+
+    let count = 0;
+    let cursor = new Date(fromMidnight.getTime() + msPerDay); // start the day after fromTs
+    while (cursor <= toMidnight) {
+        const day = cursor.getUTCDay(); // 0=Sun, 6=Sat
+        if (day !== 0 && day !== 6) {
+            count++;
+        }
+        cursor = new Date(cursor.getTime() + msPerDay);
+    }
+    return count;
+}
+
+function getRepoStatus(repo, nowTs) {
     // Calculate status based on last_commit_ts
-    // Uses per-repo warning_days and error_days if provided, otherwise defaults to 1 day (warning) and 2 days (error)
+    // Repos with explicit warning_days/error_days use calendar days.
+    // Repos using defaults skip weekends (business days only) — Issue #47.
     if (!repo || !repo.last_commit_ts || repo.last_commit_ts <= 0) {
         return 'error'; // No timestamp or invalid repo means error
     }
-    
-    // Get thresholds (default: 1 day warning, 2 days error)
+
+    const hasExplicitThresholds = repo.warning_days !== undefined || repo.error_days !== undefined;
     const warningDays = repo.warning_days !== undefined ? repo.warning_days : 1;
     const errorDays = repo.error_days !== undefined ? repo.error_days : 2;
-    
-    // Convert days to hours
-    const warningHours = warningDays * 24;
-    const errorHours = errorDays * 24;
-    
-    const now = Math.floor(Date.now() / 1000);
-    const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
-    
-    if (hoursSinceCommit > errorHours) {
-        return 'error';
-    } else if (hoursSinceCommit > warningHours) {
-        return 'warning';
+
+    const now = nowTs || Math.floor(Date.now() / 1000);
+
+    if (hasExplicitThresholds) {
+        // Explicit thresholds: use calendar hours as before
+        const warningHours = warningDays * 24;
+        const errorHours = errorDays * 24;
+        const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
+
+        if (hoursSinceCommit > errorHours) {
+            return 'error';
+        } else if (hoursSinceCommit > warningHours) {
+            return 'warning';
+        } else {
+            return 'healthy';
+        }
     } else {
-        return 'healthy';
+        // Default thresholds: count only business days (skip weekends)
+        const businessDays = countBusinessDays(repo.last_commit_ts, now);
+
+        if (businessDays > errorDays) {
+            return 'error';
+        } else if (businessDays > warningDays) {
+            return 'warning';
+        } else {
+            return 'healthy';
+        }
     }
 }
 
