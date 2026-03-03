@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.86";
+const VERSION = "1.0.87";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -8,6 +8,8 @@ let currentFilter = 'all';
 let allHosts = [];
 let repoHealthData = { repos: [] };
 let lastRepoRefresh = 0;
+// Issue #49: Track disk warning state per host for hysteresis
+const diskWarningState = {};
 
 // Initialize PWA functionality when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -31,7 +33,8 @@ const THRESHOLDS = {
     IDLE_LOAD_5M: 15,         // 5-minute load average threshold for idle detection (%)
     IDLE_LOAD_15M: 20,        // 15-minute load average threshold for idle detection (%)
     IDLE_HIGH_LOAD: 50,       // Load above this indicates active work (recently started/stopped)
-    DISK_WARNING_PERCENT: 75, // Disk usage above this triggers a warning
+    DISK_WARNING_PERCENT: 75, // Disk usage at or above this triggers a warning
+    DISK_WARNING_CLEAR_PERCENT: 72, // Disk usage must drop to or below this to clear warning (hysteresis)
     HEARTBEAT_CRITICAL_HOURS: 24, // Hours without heartbeat before marking host critical
     USER_STALE_DEFAULT_HOURS: 24, // Default hours before a user is marked stale (3x the 8h heartbeat threshold)
     MACOS_MIN_VERSION: '14.0',    // macOS versions below this trigger a warning
@@ -588,7 +591,23 @@ function redirectToSimpleVersion() {
   }
 }
 
-function getHealthStatus(_hostname, data) {
+// Issue #49: Hysteresis for disk usage warning to prevent oscillation.
+// Returns true if disk should be in warning state.
+// - Triggers warning when diskPercent >= DISK_WARNING_PERCENT
+// - Clears warning only when diskPercent <= DISK_WARNING_CLEAR_PERCENT
+// - In the hysteresis band, maintains the previous state
+function isDiskWarning(diskPercent, wasPreviouslyWarning) {
+    if (diskPercent >= THRESHOLDS.DISK_WARNING_PERCENT) {
+        return true;
+    }
+    if (diskPercent <= THRESHOLDS.DISK_WARNING_CLEAR_PERCENT) {
+        return false;
+    }
+    // In the hysteresis band — maintain previous state
+    return !!wasPreviouslyWarning;
+}
+
+function getHealthStatus(_hostname, data, options) {
     // Check if this is a dead machine
     if (data.death_date) {
         return 'dead';
@@ -655,9 +674,13 @@ function getHealthStatus(_hostname, data) {
             }
         }
 
-        // Disk usage warning - applies to all hosts including mobile
-        if (data.used_disk_percent && parseFloat(data.used_disk_percent) > THRESHOLDS.DISK_WARNING_PERCENT) {
-            return 'warning';
+        // Disk usage warning with hysteresis (Issue #49) - applies to all hosts including mobile
+        if (data.used_disk_percent) {
+            const diskPct = parseFloat(data.used_disk_percent);
+            const wasDiskWarning = !!(options && options.diskWarningActive);
+            if (isDiskWarning(diskPct, wasDiskWarning)) {
+                return 'warning';
+            }
         }
         
         // Config warning (missing PRIMARY_READ_URL or TRAINING_WRITE_URL)
@@ -700,7 +723,7 @@ function getHealthStatus(_hostname, data) {
 }
 
 function createHostCard(hostname, data) {
-    const healthStatus = getHealthStatus(hostname, data);
+    const healthStatus = getCachedHealthStatus(hostname);
     const statusClass = healthStatus;
     const safeHostname = escapeHtml(hostname);
     const logUrl = `./log-viewer.html?file=./${safeHostname}/node.log`;
@@ -983,13 +1006,37 @@ function createHostCard(hostname, data) {
     `;
     }
 
+// Issue #49: Wrapper that applies disk hysteresis state tracking.
+// Call once per host per refresh cycle to update state, then use cached result.
+const _healthStatusCache = {};
+function refreshHealthStatuses(hosts) {
+    // Clear cache for new refresh cycle
+    Object.keys(_healthStatusCache).forEach(k => delete _healthStatusCache[k]);
+    for (const [hostname, data] of hosts) {
+        const opts = { diskWarningActive: !!diskWarningState[hostname] };
+        const status = getHealthStatus(hostname, data, opts);
+        _healthStatusCache[hostname] = status;
+        // Update disk warning state for next cycle
+        if (data.used_disk_percent) {
+            diskWarningState[hostname] = isDiskWarning(
+                parseFloat(data.used_disk_percent),
+                opts.diskWarningActive
+            );
+        }
+    }
+}
+
+function getCachedHealthStatus(hostname) {
+    return _healthStatusCache[hostname] || 'healthy';
+}
+
 function updateStats(hosts) {
     const stats = {
         total: hosts.length,
-        healthy: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'healthy').length,
-        warning: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning').length,
-        critical: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical').length,
-        mia: hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'mia').length
+        healthy: hosts.filter(([hostname]) => getCachedHealthStatus(hostname) === 'healthy').length,
+        warning: hosts.filter(([hostname]) => getCachedHealthStatus(hostname) === 'warning').length,
+        critical: hosts.filter(([hostname]) => getCachedHealthStatus(hostname) === 'critical').length,
+        mia: hosts.filter(([hostname]) => getCachedHealthStatus(hostname) === 'mia').length
     };
     const repoStats = getRepoStats();
     const hasRepoError = repoStats.error > 0;
@@ -1040,7 +1087,7 @@ function updateStats(hosts) {
     const criticalSection = document.getElementById('criticalSection');
     const criticalHostsList = document.getElementById('criticalHostsList');
     if (stats.critical > 0) {
-        const criticalHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'critical');
+        const criticalHosts = hosts.filter(([hostname]) => getCachedHealthStatus(hostname) === 'critical');
         const criticalHtml = criticalHosts.map(([hostname, data]) => {
             if (data.heart_beat_ts) {
                 const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
@@ -1064,7 +1111,7 @@ function updateStats(hosts) {
     const miaHostsList = document.getElementById('miaHostsList');
 
     if (stats.mia > 0) {
-        const miaHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'mia');
+        const miaHosts = hosts.filter(([hostname]) => getCachedHealthStatus(hostname) === 'mia');
         const miaHtml = miaHosts.map(([hostname, data]) => {
             if (data.heart_beat_ts) {
                 const hoursSince = Math.floor((Math.floor(Date.now() / 1000) - data.heart_beat_ts) / 3600);
@@ -1087,10 +1134,10 @@ function updateStats(hosts) {
     const warningSection = document.getElementById('warningSection');
     const warningHostsList = document.getElementById('warningHostsList');
     if (stats.warning > 0) {
-        const warningHosts = hosts.filter(([hostname, data]) => getHealthStatus(hostname, data) === 'warning');
+        const warningHosts = hosts.filter(([hostname]) => getCachedHealthStatus(hostname) === 'warning');
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
-            if (data.used_disk_percent && parseFloat(data.used_disk_percent) > THRESHOLDS.DISK_WARNING_PERCENT) {
+            if (data.used_disk_percent && diskWarningState[hostname]) {
                 warningReason += `High disk usage: ${data.used_disk_percent}%`;
             }
             if (data.config_warning) {
@@ -1150,13 +1197,13 @@ function filterHosts(filter, event) {
     }
     // Filter hosts
     const filteredHosts = allHosts.filter(([hostname, data]) => {
-        const status = getHealthStatus(hostname, data);
+        const status = getCachedHealthStatus(hostname);
         return filter === 'all' || status === filter;
     });
     // Sort: critical first, then warning, then healthy, then historical, then dead, then by last seen (most recent first)
     filteredHosts.sort(([hostnameA, dataA], [hostnameB, dataB]) => {
-        const statusA = getHealthStatus(hostnameA, dataA);
-        const statusB = getHealthStatus(hostnameB, dataB);
+        const statusA = getCachedHealthStatus(hostnameA);
+        const statusB = getCachedHealthStatus(hostnameB);
         const priority = { critical: 6, mia: 5, warning: 4, healthy: 3, historical: 2, dead: 1 };
         
         // First sort by health status
@@ -1234,7 +1281,9 @@ async function loadData() {
         
         // Reset the full refresh timer
         lastFullRefresh = Date.now();
-        
+
+        // Issue #49: Refresh health statuses with disk hysteresis
+        refreshHealthStatuses(allHosts);
         updateStats(allHosts);
         filterHosts(currentFilter);
         initializeTooltips();
@@ -1316,9 +1365,11 @@ async function loadDataIncremental() {
                 previousHosts.set(hostname, JSON.stringify(hostData));
             });
             
+            // Issue #49: Refresh health statuses with disk hysteresis
+            refreshHealthStatuses(allHosts);
             // Update stats
             updateStats(allHosts);
-            
+
             // Update individual changed cards if they're currently visible
             changedHosts.forEach(([hostname, hostData]) => {
                 updateHostCard(hostname, hostData);

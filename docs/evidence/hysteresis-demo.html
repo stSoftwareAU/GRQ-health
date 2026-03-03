@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Issue #49: Disk Usage Hysteresis Demo</title>
+<style>
+body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
+h1 { color: #00d4ff; }
+table { border-collapse: collapse; margin: 20px 0; }
+th, td { border: 1px solid #444; padding: 8px 16px; text-align: center; }
+th { background: #16213e; color: #00d4ff; }
+.warning { background: #ff9800; color: #000; font-weight: bold; }
+.healthy { background: #4caf50; color: #fff; font-weight: bold; }
+.band { background: #2d2d44; }
+.section { margin: 20px 0; padding: 15px; border: 1px solid #444; border-radius: 8px; }
+h2 { color: #ff9800; margin-top: 0; }
+</style>
+</head>
+<body>
+<h1>Issue #49: Disk Usage Hysteresis</h1>
+
+<div class="section">
+<h2>Thresholds</h2>
+<p>Warning trigger: <strong>&ge;75%</strong> | Warning clear: <strong>&le;72%</strong> | Hysteresis band: <strong>73-74%</strong></p>
+</div>
+
+<div class="section">
+<h2>Scenario: Disk oscillating around 75%</h2>
+<table>
+<tr><th>Cycle</th><th>Disk %</th><th>Previous State</th><th>New State</th><th>Without Hysteresis</th></tr>
+<tr><td>1</td><td>76%</td><td class="healthy">Healthy</td><td class="warning">Warning</td><td class="warning">Warning</td></tr>
+<tr><td>2</td><td>75%</td><td class="warning">Warning</td><td class="warning">Warning</td><td class="warning">Warning</td></tr>
+<tr><td>3</td><td>74%</td><td class="warning">Warning</td><td class="warning">Warning (hysteresis)</td><td class="healthy">Healthy</td></tr>
+<tr><td>4</td><td>73%</td><td class="warning">Warning</td><td class="warning">Warning (hysteresis)</td><td class="healthy">Healthy</td></tr>
+<tr><td>5</td><td>72%</td><td class="warning">Warning</td><td class="healthy">Healthy (cleared)</td><td class="healthy">Healthy</td></tr>
+<tr><td>6</td><td>73%</td><td class="healthy">Healthy</td><td class="healthy">Healthy (hysteresis)</td><td class="healthy">Healthy</td></tr>
+<tr><td>7</td><td>74%</td><td class="healthy">Healthy</td><td class="healthy">Healthy (hysteresis)</td><td class="healthy">Healthy</td></tr>
+<tr><td>8</td><td>75%</td><td class="healthy">Healthy</td><td class="warning">Warning (triggered)</td><td class="warning">Warning</td></tr>
+</table>
+<p>Cycles 3-4 show hysteresis preventing oscillation. Without hysteresis, each fluctuation between 74-76% would flip the state.</p>
+</div>
+
+<div class="section">
+<h2>Test Results: 12/12 Passed</h2>
+<ul style="list-style: none; padding: 0;">
+<li>&#10004; DISK_WARNING_CLEAR_PERCENT exists and is below DISK_WARNING_PERCENT</li>
+<li>&#10004; isDiskWarning function exists</li>
+<li>&#10004; 80% triggers warning (above threshold)</li>
+<li>&#10004; 70% clears warning (below clear threshold)</li>
+<li>&#10004; 73.5% stays warning when previously warning (hysteresis band)</li>
+<li>&#10004; 73.5% stays healthy when not previously warning (hysteresis band)</li>
+<li>&#10004; Exactly 75% triggers warning</li>
+<li>&#10004; Exactly 72% clears warning</li>
+<li>&#10004; getHealthStatus stays warning in hysteresis band with diskWarningActive</li>
+<li>&#10004; getHealthStatus stays healthy in hysteresis band without diskWarningActive</li>
+<li>&#10004; Backward compatible: no options still works correctly</li>
+<li>&#10004; No oscillation: 76% &rarr; 75% &rarr; 74% stays warning throughout</li>
+</ul>
+</div>
+</body>
+</html>

@@ -222,8 +222,8 @@ The "last updated" timestamp shown in the dashboard is calculated from the most 
   - Heartbeat within 24 hours
   - Disk usage under 75%
   - OS version up to date
-- **Warning**: 
-  - Disk usage over 75%
+- **Warning**:
+  - Disk usage at or above 75% (with hysteresis: clears only when dropping to or below 72%)
   - Outdated OS version
   - Heartbeat within 24 hours
 - **Critical**: 
