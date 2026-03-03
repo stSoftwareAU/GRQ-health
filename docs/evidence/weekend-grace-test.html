@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Issue #47: Weekend Grace Period Evidence</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 20px; background: #1a1a2e; color: #e0e0e0; }
+h1 { color: #4fc3f7; }
+h2 { color: #81d4fa; margin-top: 30px; }
+table { border-collapse: collapse; margin: 10px 0; width: 100%; }
+th, td { border: 1px solid #444; padding: 8px 12px; text-align: left; }
+th { background: #2a2a4a; }
+.healthy { color: #4caf50; font-weight: bold; }
+.warning { color: #ff9800; font-weight: bold; }
+.error { color: #f44336; font-weight: bold; }
+.section { background: #2a2a3e; border-radius: 8px; padding: 15px; margin: 15px 0; }
+</style>
+</head>
+<body>
+<h1>Issue #47: Weekend Grace Period Evidence</h1>
+<p>This page demonstrates the weekend-aware staleness logic for repo commit checks.</p>
+
+<div class="section">
+<h2>Default Threshold Repos (Business Days)</h2>
+<p>Repos without explicit thresholds use business days (weekdays only). Default: 1 business day warning, 2 business days error.</p>
+<table>
+<tr><th>Scenario</th><th>Committed</th><th>Checked</th><th>Calendar Days</th><th>Business Days</th><th>Status</th></tr>
+<tr id="row1"><td>Friday commit, Monday check</td><td>Fri 12:00</td><td>Mon 12:00</td><td>3</td><td id="bd1">-</td><td id="st1">-</td></tr>
+<tr id="row2"><td>Thursday commit, Monday check</td><td>Thu 12:00</td><td>Mon 12:00</td><td>4</td><td id="bd2">-</td><td id="st2">-</td></tr>
+<tr id="row3"><td>Wednesday commit, Monday check</td><td>Wed 12:00</td><td>Mon 12:00</td><td>5</td><td id="bd3">-</td><td id="st3">-</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>Explicit Threshold Repos (Calendar Days)</h2>
+<p>Repos with explicit warning_days/error_days continue to use calendar days.</p>
+<table>
+<tr><th>Scenario</th><th>Committed</th><th>Checked</th><th>Thresholds</th><th>Calendar Days</th><th>Status</th></tr>
+<tr id="row4"><td>Friday commit, Monday check (warn=1, err=2)</td><td>Fri 12:00</td><td>Mon 12:00</td><td>1d/2d</td><td>3</td><td id="st4">-</td></tr>
+<tr id="row5"><td>Friday commit, Monday check (warn=5, err=10)</td><td>Fri 12:00</td><td>Mon 12:00</td><td>5d/10d</td><td>3</td><td id="st5">-</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>Test Results</h2>
+<p id="result">Running tests...</p>
+</div>
+
+<script>
+// Inline the functions we need
+function countBusinessDays(fromTs, toTs) {
+    if (toTs <= fromTs) return 0;
+    const msPerDay = 86400 * 1000;
+    const fromDate = new Date(fromTs * 1000);
+    const toDate = new Date(toTs * 1000);
+    const fromMidnight = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()));
+    const toMidnight = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate()));
+    let count = 0;
+    let cursor = new Date(fromMidnight.getTime() + msPerDay);
+    while (cursor <= toMidnight) {
+        const day = cursor.getUTCDay();
+        if (day !== 0 && day !== 6) count++;
+        cursor = new Date(cursor.getTime() + msPerDay);
+    }
+    return count;
+}
+
+function getRepoStatus(repo, nowTs) {
+    if (!repo || !repo.last_commit_ts || repo.last_commit_ts <= 0) return 'error';
+    const hasExplicitThresholds = repo.warning_days !== undefined || repo.error_days !== undefined;
+    const warningDays = repo.warning_days !== undefined ? repo.warning_days : 1;
+    const errorDays = repo.error_days !== undefined ? repo.error_days : 2;
+    const now = nowTs || Math.floor(Date.now() / 1000);
+    if (hasExplicitThresholds) {
+        const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
+        if (hoursSinceCommit > errorDays * 24) return 'error';
+        if (hoursSinceCommit > warningDays * 24) return 'warning';
+        return 'healthy';
+    } else {
+        const businessDays = countBusinessDays(repo.last_commit_ts, now);
+        if (businessDays > errorDays) return 'error';
+        if (businessDays > warningDays) return 'warning';
+        return 'healthy';
+    }
+}
+
+// Timestamps
+const friNoon = 1772755200 + 43200;
+const thuNoon = 1772668800 + 43200;
+const wedNoon = 1772582400 + 43200;
+const monNoon = 1773014400 + 43200;
+
+// Default threshold tests
+const tests = [
+    { id: 1, ts: friNoon, bd: countBusinessDays(friNoon, monNoon), st: getRepoStatus({name:"Test", last_commit_ts: friNoon}, monNoon) },
+    { id: 2, ts: thuNoon, bd: countBusinessDays(thuNoon, monNoon), st: getRepoStatus({name:"Test", last_commit_ts: thuNoon}, monNoon) },
+    { id: 3, ts: wedNoon, bd: countBusinessDays(wedNoon, monNoon), st: getRepoStatus({name:"Test", last_commit_ts: wedNoon}, monNoon) },
+];
+
+tests.forEach(t => {
+    document.getElementById('bd' + t.id).textContent = t.bd;
+    const el = document.getElementById('st' + t.id);
+    el.textContent = t.st.toUpperCase();
+    el.className = t.st;
+});
+
+// Explicit threshold tests
+const st4 = getRepoStatus({name:"Explicit", last_commit_ts: friNoon, warning_days: 1, error_days: 2}, monNoon);
+document.getElementById('st4').textContent = st4.toUpperCase();
+document.getElementById('st4').className = st4;
+
+const st5 = getRepoStatus({name:"Wide", last_commit_ts: friNoon, warning_days: 5, error_days: 10}, monNoon);
+document.getElementById('st5').textContent = st5.toUpperCase();
+document.getElementById('st5').className = st5;
+
+// Summary
+const allPassed = tests[0].st === 'healthy' && tests[1].st === 'warning' && tests[2].st === 'error' && st4 === 'error' && st5 === 'healthy';
+document.getElementById('result').innerHTML = allPassed
+    ? '<span class="healthy">ALL TESTS PASSED</span> — Weekend grace period working correctly'
+    : '<span class="error">SOME TESTS FAILED</span>';
+</script>
+</body>
+</html>
