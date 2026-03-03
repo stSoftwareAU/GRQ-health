@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.82";
+const VERSION = "1.0.85";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -221,7 +221,7 @@ function getIdleWorkerStatus(data) {
 
     // Check for recently stopped work - 15m is higher than current (1m/5m)
     // This is informational, not a warning - work may have just finished
-    if (load15m > THRESHOLDS.IDLE_HIGH_LOAD && load1m < THRESHOLDS.IDLE_LOAD_1M && load5m < THRESHOLDS.IDLE_LOAD_15M) {
+    if (load15m > THRESHOLDS.IDLE_HIGH_LOAD && load1m < THRESHOLDS.IDLE_LOAD_1M && load5m < THRESHOLDS.IDLE_LOAD_5M) {
         // Work appears to have finished recently - not idle, just completed work
         return result;
     }

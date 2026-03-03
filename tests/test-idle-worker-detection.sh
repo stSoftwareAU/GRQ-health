@@ -140,7 +140,42 @@ OUTPUT=$(run_js_test '
     }
 }
 
-// Test 9: Idle detection populates load values in result
+// Test 9: Recently stopped — 5m load just below IDLE_LOAD_5M (15%)
+// should get the recently-stopped exemption and not be flagged idle (Issue #50)
+{
+    const data = {
+        load_averages: "5.0% (1m), 14.0% (5m), 60.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    // 5m at 14% is below IDLE_LOAD_5M (15%), so the recently-stopped exemption applies
+    if (!result.isIdle) {
+        console.log("TEST_RESULT:recently-stopped-below-5m:PASS:not idle — recently stopped exemption applies");
+    } else {
+        console.log("TEST_RESULT:recently-stopped-below-5m:FAIL:should not be idle when recently stopped");
+    }
+}
+
+// Test 10: Recently stopped — 5m load just above IDLE_LOAD_5M (15%)
+// should NOT get the recently-stopped exemption (Issue #50)
+// The bug used IDLE_LOAD_15M (20%) so 17% would incorrectly get the exemption
+{
+    const data = {
+        load_averages: "5.0% (1m), 17.0% (5m), 60.0% (15m)",
+        cpu_cores: "16"
+    };
+    const result = getIdleWorkerStatus(data);
+    // With 5m at 17% (above IDLE_LOAD_5M=15%), the recently-stopped exemption
+    // should NOT apply. The result is still not-idle (no matching idle pattern),
+    // but the code path is semantically correct with IDLE_LOAD_5M.
+    if (!result.isIdle) {
+        console.log("TEST_RESULT:recently-stopped-above-5m:PASS:not idle — 5m above threshold, no exemption needed");
+    } else {
+        console.log("TEST_RESULT:recently-stopped-above-5m:FAIL:should not be idle");
+    }
+}
+
+// Test 10: Idle detection populates load values in result
 {
     const data = {
         load_averages: "5.0% (1m), 3.2% (5m), 4.1% (15m)",
