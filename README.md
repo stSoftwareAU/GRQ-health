@@ -212,6 +212,8 @@ The dashboard calculates status from `last_commit_ts`:
 
 **Per-repo thresholds**: Each repo can optionally specify `warning_days` and `error_days` to customise the thresholds. If not specified, defaults to 1 day (warning) and 2 days (error). For example, the "Listings" repo uses 5 days for warning and 6 days for error.
 
+**Weekend grace period**: Repos using default thresholds automatically exclude weekend days (Saturday and Sunday) from the staleness calculation, so a normal weekend without commits does not trigger false warnings. Repos with explicitly configured `warning_days`/`error_days` continue to use calendar days as before.
+
 The "last updated" timestamp shown in the dashboard is calculated from the most recent `last_commit_ts` among all repos.
 
 ### Enhanced Health Status Classification

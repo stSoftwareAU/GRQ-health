@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.85";
+const VERSION = "1.0.86";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -35,7 +35,9 @@ const THRESHOLDS = {
     HEARTBEAT_CRITICAL_HOURS: 24, // Hours without heartbeat before marking host critical
     USER_STALE_DEFAULT_HOURS: 24, // Default hours before a user is marked stale (3x the 8h heartbeat threshold)
     MACOS_MIN_VERSION: '14.0',    // macOS versions below this trigger a warning
-    UBUNTU_MIN_VERSION: '22.04'   // Ubuntu versions below this trigger a warning
+    UBUNTU_MIN_VERSION: '22.04',  // Ubuntu versions below this trigger a warning
+    REPO_DEFAULT_WARNING_DAYS: 1, // Default repo staleness warning threshold (business days)
+    REPO_DEFAULT_ERROR_DAYS: 2    // Default repo staleness error threshold (business days)
 };
 
 function formatUptime(seconds) {
@@ -245,24 +247,53 @@ function buildIdleWorkerWarning(data) {
     return idleStatus.reason;
 }
 
-function getRepoStatus(repo) {
+// Count full weekend days (Saturday and Sunday) between two unix timestamps (Issue #47)
+function countWeekendDays(startTs, endTs) {
+    let count = 0;
+    const startDate = new Date(startTs * 1000);
+    // Begin from the calendar day after the start timestamp
+    const current = new Date(startDate);
+    current.setUTCHours(0, 0, 0, 0);
+    current.setUTCDate(current.getUTCDate() + 1);
+
+    const endDate = new Date(endTs * 1000);
+    endDate.setUTCHours(23, 59, 59, 999);
+
+    while (current <= endDate) {
+        const day = current.getUTCDay();
+        if (day === 0 || day === 6) { // Sunday = 0, Saturday = 6
+            count++;
+        }
+        current.setUTCDate(current.getUTCDate() + 1);
+    }
+    return count;
+}
+
+function getRepoStatus(repo, nowTs) {
     // Calculate status based on last_commit_ts
-    // Uses per-repo warning_days and error_days if provided, otherwise defaults to 1 day (warning) and 2 days (error)
+    // Repos with default thresholds get weekend grace — weekend days are subtracted from elapsed time (Issue #47)
+    // Repos with explicitly configured warning_days/error_days use calendar days as before
     if (!repo || !repo.last_commit_ts || repo.last_commit_ts <= 0) {
         return 'error'; // No timestamp or invalid repo means error
     }
-    
-    // Get thresholds (default: 1 day warning, 2 days error)
-    const warningDays = repo.warning_days !== undefined ? repo.warning_days : 1;
-    const errorDays = repo.error_days !== undefined ? repo.error_days : 2;
-    
+
+    const hasExplicitThresholds = repo.warning_days !== undefined || repo.error_days !== undefined;
+    const warningDays = repo.warning_days !== undefined ? repo.warning_days : THRESHOLDS.REPO_DEFAULT_WARNING_DAYS;
+    const errorDays = repo.error_days !== undefined ? repo.error_days : THRESHOLDS.REPO_DEFAULT_ERROR_DAYS;
+
     // Convert days to hours
     const warningHours = warningDays * 24;
     const errorHours = errorDays * 24;
-    
-    const now = Math.floor(Date.now() / 1000);
-    const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
-    
+
+    const now = nowTs !== undefined ? nowTs : Math.floor(Date.now() / 1000);
+    let hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
+
+    // For repos using default thresholds, subtract weekend days so weekends do not count toward staleness
+    if (!hasExplicitThresholds) {
+        const weekendDays = countWeekendDays(repo.last_commit_ts, now);
+        hoursSinceCommit -= weekendDays * 24;
+    }
+
     if (hoursSinceCommit > errorHours) {
         return 'error';
     } else if (hoursSinceCommit > warningHours) {
