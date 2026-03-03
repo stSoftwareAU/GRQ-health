@@ -25,14 +25,14 @@ fail_test() {
     FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-# createHostCard (lines 702-984) is outside the default pure-function range
+# createHostCard (lines 723-1018) is outside the default pure-function range
 # but it only generates HTML strings — no real DOM access needed.
-# Extract it separately and provide a minimal DOM mock.
+# Extract it separately (includes getHealthStatusWithHysteresis wrapper).
 extract_card_function() {
-    sed -n '702,984p' "$SCRIPT_DIR/../docs/dashboard.js"
+    sed -n '723,1018p' "$SCRIPT_DIR/../docs/dashboard.js"
 }
 
-# renderRepoHealth (lines 347-420) uses document.getElementById
+# renderRepoHealth (lines 352-428) uses document.getElementById
 # but we mock it. It's already within the pure range.
 
 run_js_test_with_card() {
@@ -43,7 +43,8 @@ run_js_test_with_card() {
     card_fn="$(extract_card_function)"
 
     # Provide globals that are declared outside the pure-function range
-    local globals="let repoHealthData = { repos: [] };"
+    local globals="let repoHealthData = { repos: [] };
+const diskWarningState = {};"
 
     echo "${globals}
 ${functions}

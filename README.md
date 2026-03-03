@@ -218,12 +218,12 @@ The "last updated" timestamp shown in the dashboard is calculated from the most 
 
 ### Enhanced Health Status Classification
 
-- **Healthy**: 
+- **Healthy**:
   - Heartbeat within 24 hours
-  - Disk usage under 75%
+  - Disk usage under 75% (or below 72% to clear a previous warning)
   - OS version up to date
-- **Warning**: 
-  - Disk usage over 75%
+- **Warning**:
+  - Disk usage over 75% (with hysteresis: must drop below 72% to clear — Issue #49)
   - Outdated OS version
   - Heartbeat within 24 hours
 - **Critical**: 

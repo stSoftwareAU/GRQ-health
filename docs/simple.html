@@ -207,6 +207,9 @@
             return result;
         }
 
+        // Per-host disk warning state for hysteresis (Issue #49)
+        const diskWarningState = {};
+
         function getHealthStatus(hostname, data) {
             // Check if this is a dead machine
             if (data.death_date) {
@@ -243,9 +246,23 @@
 
             // Check for warning states
             if (hoursSinceHeartbeat <= 24) {
-                // Disk usage warning (over 75% used)
-                if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
-                    return 'warning';
+                // Disk usage warning with hysteresis (Issue #49)
+                if (data.used_disk_percent) {
+                    const diskPercent = parseFloat(data.used_disk_percent);
+                    const previousDiskWarning = diskWarningState[hostname] || false;
+                    if (previousDiskWarning) {
+                        if (diskPercent >= 72) {
+                            diskWarningState[hostname] = true;
+                            return 'warning';
+                        } else {
+                            diskWarningState[hostname] = false;
+                        }
+                    } else {
+                        if (diskPercent > 75) {
+                            diskWarningState[hostname] = true;
+                            return 'warning';
+                        }
+                    }
                 }
 
                 // Config warning (missing PRIMARY_READ_URL or TRAINING_WRITE_URL)

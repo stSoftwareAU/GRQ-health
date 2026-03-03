@@ -1,15 +1,15 @@
 #!/bin/bash
 # Extract pure functions from dashboard.js for unit testing
-# Pure functions are lines 27-661 (no DOM dependencies)
+# Pure functions are lines 31-720 (no DOM dependencies)
 # Usage: source this file, then call run_js_test 'your JS test code'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
 DENO="$HOME/.deno/bin/deno"
 
-# Extract pure functions (lines 27-700) from dashboard.js
+# Extract pure functions (lines 31-720) from dashboard.js
 extract_pure_functions() {
-    sed -n '27,700p' "$DASHBOARD_JS"
+    sed -n '31,720p' "$DASHBOARD_JS"
 }
 
 # Run a JS test using deno
