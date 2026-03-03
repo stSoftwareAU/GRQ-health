@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.87"
+VERSION="1.0.88"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -968,11 +968,25 @@ commit_and_push() {
         fi
         git commit -m "Update health status for $HOSTNAME at $commit_date" 2>/dev/null || true
         
-        # Try to push (might fail if no remote or no changes)
-        if git push 2>/dev/null; then
-            echo "Changes pushed to remote repository"
-        else
-            echo "No changes to push or push failed"
+        # Try to push with retry logic (Issue #51)
+        # Retries up to 3 times with a brief delay to handle transient failures
+        # (git conflicts, network blips) that would otherwise cause false critical alerts
+        local max_retries=3
+        local push_succeeded=false
+        for attempt in $(seq 1 "$max_retries"); do
+            if git push 2>/dev/null; then
+                echo "Changes pushed to remote repository"
+                push_succeeded=true
+                break
+            fi
+            if [ "$attempt" -lt "$max_retries" ]; then
+                echo "Push failed (attempt $attempt/$max_retries), retrying after pull --rebase..."
+                sleep 2
+                git pull --rebase 2>/dev/null || true
+            fi
+        done
+        if [ "$push_succeeded" = false ]; then
+            echo "Push failed after $max_retries attempts"
         fi
     else
         echo "Not a git repository, skipping commit/push"
