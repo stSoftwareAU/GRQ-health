@@ -29,7 +29,7 @@ fail_test() {
 # but it only generates HTML strings — no real DOM access needed.
 # Extract it separately and provide a minimal DOM mock.
 extract_card_function() {
-    sed -n '702,984p' "$SCRIPT_DIR/../docs/dashboard.js"
+    sed -n '725,1031p' "$SCRIPT_DIR/../docs/dashboard.js"
 }
 
 # renderRepoHealth (lines 347-420) uses document.getElementById
@@ -43,7 +43,7 @@ run_js_test_with_card() {
     card_fn="$(extract_card_function)"
 
     # Provide globals that are declared outside the pure-function range
-    local globals="let repoHealthData = { repos: [] };"
+    local globals="let repoHealthData = { repos: [] }; const diskWarningState = {};"
 
     echo "${globals}
 ${functions}

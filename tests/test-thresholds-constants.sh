@@ -28,7 +28,7 @@ OUTPUT=$(run_js_test '
 // Test 1: THRESHOLDS object exists with expected keys
 {
     const keys = ["IDLE_MIN_CORES", "IDLE_LOAD_1M", "IDLE_LOAD_5M", "IDLE_LOAD_15M",
-                  "DISK_WARNING_PERCENT", "HEARTBEAT_CRITICAL_HOURS",
+                  "DISK_WARNING_PERCENT", "DISK_WARNING_CLEAR_PERCENT", "HEARTBEAT_CRITICAL_HOURS",
                   "MACOS_MIN_VERSION", "UBUNTU_MIN_VERSION"];
     const missing = keys.filter(k => THRESHOLDS[k] === undefined);
     if (missing.length === 0) {
@@ -120,7 +120,7 @@ OUTPUT=$(run_js_test '
 // Test 8: THRESHOLDS values are sensible numbers/strings
 {
     const numericKeys = ["IDLE_MIN_CORES", "IDLE_LOAD_1M", "IDLE_LOAD_5M", "IDLE_LOAD_15M",
-                         "DISK_WARNING_PERCENT", "HEARTBEAT_CRITICAL_HOURS",
+                         "DISK_WARNING_PERCENT", "DISK_WARNING_CLEAR_PERCENT", "HEARTBEAT_CRITICAL_HOURS",
                          "USER_STALE_DEFAULT_HOURS", "IDLE_HIGH_LOAD"];
     const badValues = numericKeys.filter(k => typeof THRESHOLDS[k] !== "number" || THRESHOLDS[k] <= 0);
     const stringKeys = ["MACOS_MIN_VERSION", "UBUNTU_MIN_VERSION"];
