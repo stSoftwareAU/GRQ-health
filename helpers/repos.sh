@@ -160,9 +160,22 @@ if git add "${REPOS_JSON}" 2>/dev/null; then
     if ! git diff --cached --quiet 2>/dev/null; then
         # Commit the changes
         if git commit -m "Update repo health: ${REPO_NAME}" --quiet 2>/dev/null; then
-            # Push the changes
-            if ! git push --quiet 2>/dev/null; then
-                echo "Warning: git push failed, but local changes are committed"
+            # Push the changes with retries (handles transient network/auth failures)
+            GIT_PUSH_MAX_ATTEMPTS=3
+            GIT_PUSH_RETRY_DELAY=5
+            GIT_PUSH_SUCCESS=false
+            for attempt in $(seq 1 "$GIT_PUSH_MAX_ATTEMPTS"); do
+                if git push --quiet 2>/dev/null; then
+                    GIT_PUSH_SUCCESS=true
+                    break
+                fi
+                if [ "$attempt" -lt "$GIT_PUSH_MAX_ATTEMPTS" ]; then
+                    echo "Warning: git push failed (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}), retrying in ${GIT_PUSH_RETRY_DELAY}s..."
+                    sleep "$GIT_PUSH_RETRY_DELAY"
+                fi
+            done
+            if [ "$GIT_PUSH_SUCCESS" = false ]; then
+                echo "Warning: git push failed after ${GIT_PUSH_MAX_ATTEMPTS} attempts, but local changes are committed"
             fi
         else
             echo "Warning: git commit failed (may be no changes or commit error)"
