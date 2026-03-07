@@ -759,7 +759,8 @@ scan_log_errors() {
         # Count other critical errors that should be flagged
         # Missing commands/tools (excluding aws which is only expected on Macs)
         # Focus on missing script files which indicate configuration issues
-        local missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+        # Exclude .cache/ paths — cache files may not exist after cleanup (normal concurrency)
+        local missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | grep -v '\.cache/' | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
         
         # Count warning emoji issues (⚠️)
         local warning_emoji_errors=$(grep -c "⚠️" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
