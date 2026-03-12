@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.88"
+VERSION="1.0.89"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -752,34 +752,43 @@ scan_log_errors() {
     exception_summary=""
     
     if [ -f "$log_file" ]; then
+        # Issue #61: Filter out [MemoryMonitor] lines — these are operational noise
+        # (cache clearing warnings) that should not be flagged as errors.
+        local filtered_log
+        filtered_log=$(mktemp)
+        grep -v '\[MemoryMonitor\]' "$log_file" > "$filtered_log" 2>/dev/null || true
+
         # Count actual exceptions by looking for error messages that precede stack traces
         # Each exception starts with an error message, followed by stack trace lines
-        local stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$log_file" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|^Error:|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        
+        local stack_trace_exceptions=$(grep -B1 "^[[:space:]]\+at " "$filtered_log" | grep -v "^[[:space:]]\+at " | grep -v "^--$" | grep -E "Exception|^Error:|MEMETIC" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+
         # Count other critical errors that should be flagged
         # Missing commands/tools (excluding aws which is only expected on Macs)
         # Focus on missing script files which indicate configuration issues
         # Exclude .cache/ paths — cache files may not exist after cleanup (normal concurrency)
-        local missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$log_file" | grep -v '\.cache/' | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        
+        local missing_command_errors=$(grep -E "line [0-9]+: .*: No such file or directory" "$filtered_log" | grep -v '\.cache/' | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+
         # Count warning emoji issues (⚠️)
-        local warning_emoji_errors=$(grep -c "⚠️" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
-        
+        local warning_emoji_errors=$(grep -c "⚠️" "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
+
         # Count failure emoji issues (❌)
-        local failure_emoji_errors=$(grep -c "❌" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
-        
-        
+        local failure_emoji_errors=$(grep -c "❌" "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
+
+
         # Lock acquisition failures (removed - these are expected for daily tasks)
         local lock_failures=0
-        
+
         # Permission/access errors
-        local permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$log_file" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
-        
+        local permission_errors=$(grep -E "Permission denied|access denied|EACCES" "$filtered_log" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+
         # Network/connection errors (removed - too unreliable, causing false positives)
         local network_errors=0
-        
+
         # Count all Deno crashes with C stack traces (includes out of memory, segfaults, etc.)
-        local deno_crashes=$(grep -c "==== C stack trace" "$log_file" 2>/dev/null | tr -d ' \n' || echo "0")
+        local deno_crashes=$(grep -c "==== C stack trace" "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
+
+        # Clean up filtered log
+        rm -f "$filtered_log"
         
         # Sum all error types
         exception_count=$((stack_trace_exceptions + missing_command_errors + warning_emoji_errors + failure_emoji_errors + lock_failures + permission_errors + network_errors + deno_crashes))
