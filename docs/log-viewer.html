@@ -200,8 +200,12 @@
                 const isCStackTraceLine = /^\s+\d+\s+[^\s]+\s+0x[0-9a-fA-F]+/.test(line);
                 
                 // Highlight different types of log messages
+                // Issue #61: Exclude [MemoryMonitor] lines — operational cache clearing noise
+                if (line.includes('[MemoryMonitor]')) {
+                    return `<div data-line-index="${index}">${escapeHtml(line)}</div>`;
+                }
                 // Be specific to avoid false positives from training metrics that mention "Error:"
-                if (line.includes('ERROR') || 
+                if (line.includes('ERROR') ||
                     line.includes('Exception') || 
                     line.startsWith('Error:') ||
                     /Discovery failed for .+ after .+: Error:/.test(line) ||
