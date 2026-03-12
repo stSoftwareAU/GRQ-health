@@ -30,9 +30,10 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 #### Exception Detection in run.sh:
 - **Stack traces**: Lines with "Exception", "Error", "MEMETIC" followed by stack trace lines
 - **Missing commands**: "No such file or directory" errors
-- **Warning emojis**: Lines containing "⚠️" 
+- **Warning emojis**: Lines containing "⚠️"
 - **Permission errors**: "Permission denied", "access denied", "EACCES"
 - **All exceptions trigger health updates** regardless of heartbeat timing
+- **Excluded**: Lines containing `[MemoryMonitor]` are filtered out before scanning — these are operational cache-clearing messages, not real errors
 
 #### Multi-user Hosts (per-user heartbeats):
 - **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
