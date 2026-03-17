@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.89"
+VERSION="1.0.90"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -1020,14 +1020,12 @@ main() {
         fi
         
         LOG_DEST_DIR="docs/$HOSTNAME"
-        # Keep a per-user log copy so multi-user hosts can be debugged independently,
-        # and also keep node.log as the most-recent log for backwards compatibility.
+        # Issue #63: Only upload the per-user log file (e.g. node-score.log),
+        # not a duplicate node.log. The dashboard links directly to per-user logs.
         LOG_DEST_USER="${LOG_DEST_DIR}/node-${USER_SLUG}.log"
-        LOG_DEST_LATEST="${LOG_DEST_DIR}/node.log"
         if [ -f "$LOG_SRC" ]; then
             mkdir -p "$LOG_DEST_DIR"
             cp "$LOG_SRC" "$LOG_DEST_USER"
-            cp "$LOG_SRC" "$LOG_DEST_LATEST"
         fi
         if [ "$NO_GIT" = false ]; then
             commit_and_push

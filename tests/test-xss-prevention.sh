@@ -29,7 +29,7 @@ fail_test() {
 # but it only generates HTML strings — no real DOM access needed.
 # Extract it separately and provide a minimal DOM mock.
 extract_card_function() {
-    sed -n '725,1031p' "$SCRIPT_DIR/../docs/dashboard.js"
+    sed -n '736,1046p' "$SCRIPT_DIR/../docs/dashboard.js"
 }
 
 # renderRepoHealth (lines 347-420) uses document.getElementById

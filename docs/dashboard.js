@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.89";
+const VERSION = "1.0.90";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -95,6 +95,17 @@ function getExpectedUsers(data) {
     // "Discovery" model: a user becomes expected only after they've reported at least once.
     // So expected users are the currently known keys in the host's users map.
     return getUserEntries(data).map(([u]) => u).sort((a, b) => a.localeCompare(b));
+}
+
+// Issue #63: Return the per-user log filename for single-user hosts,
+// or null when there are 0 or 2+ users (multi-user hosts use per-row buttons).
+function getHostLogFilename(data) {
+    const users = getExpectedUsers(data);
+    if (users.length !== 1) {
+        return null;
+    }
+    const slug = sanitizeUserSlug(users[0]);
+    return `node-${slug}.log`;
 }
 
 function getWorstUserHeartbeatTs(data) {
@@ -726,7 +737,11 @@ function createHostCard(hostname, data) {
     const healthStatus = getCachedHealthStatus(hostname);
     const statusClass = healthStatus;
     const safeHostname = escapeHtml(hostname);
-    const logUrl = `./log-viewer.html?file=./${safeHostname}/node.log`;
+    // Issue #63: Use per-user log filename for single-user hosts
+    const hostLogFile = getHostLogFilename(data);
+    const logUrl = hostLogFile
+        ? `./log-viewer.html?file=./${safeHostname}/${hostLogFile}`
+        : `./log-viewer.html?file=./${safeHostname}/node.log`;
     const emoji = escapeHtml(data.emoji || '');
     const location = escapeHtml(data.location || '');
 

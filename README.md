@@ -39,7 +39,7 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
 - **Storage**: `docs/index.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
 - **Health logic**: The dashboard treats the host as unhealthy if **any discovered user** is stale (uses the *oldest* user heartbeat for host health classification).
-- **Logs**: `run.sh` writes `docs/<HOST>/node-<user>.log` in addition to the usual `docs/<HOST>/node.log`.
+- **Logs**: `run.sh` writes only `docs/<HOST>/node-<user>.log` (one file per user). The generic `node.log` is no longer created.
 
 #### Market Feed Repository Freshness:
 - **Manual updates**: Each background task updates `docs/repos.json` immediately after it finishes, recording its latest commit/publish timestamp.
