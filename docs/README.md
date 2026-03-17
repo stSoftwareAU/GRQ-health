@@ -191,8 +191,7 @@ docs/
 ├── styles.css          # Styling
 ├── medical-check.png   # Favicon
 └── [hostname]/         # Individual host log directories
-    ├── node.log        # Most recent host log file (latest run)
-    └── node-<user>.log # Per-user logs for multi-user hosts
+    └── node-<user>.log # Per-user log file (one per unix user)
 ```
 
 ## Browser Compatibility
