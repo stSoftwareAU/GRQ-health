@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.90";
+const VERSION = "1.0.91";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -1304,11 +1304,18 @@ async function loadData() {
         initializeTooltips();
     } catch (error) {
         console.error('Error loading data:', error);
+        // Issue #65: Provide specific guidance for different failure modes
+        let advice = 'Make sure the index.json file exists and is accessible.';
+        if (error instanceof SyntaxError) {
+            advice = 'The index.json file appears to be corrupted. A health check from any host will automatically recover it.';
+        } else if (error.message && error.message.includes('404')) {
+            advice = 'The index.json file is missing. A health check from any host will recreate it.';
+        }
         content.innerHTML = `
             <div class="error">
                 <h3>Error Loading Data</h3>
                 <p>Failed to load health data: ${escapeHtml(error.message)}</p>
-                <p>Make sure the index.json file exists and is accessible.</p>
+                <p>${escapeHtml(advice)}</p>
             </div>
         `;
     }

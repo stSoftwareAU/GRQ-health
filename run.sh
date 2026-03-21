@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.90"
+VERSION="1.0.91"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -891,16 +891,30 @@ should_update() {
 # Function to update JSON file
 update_json() {
     local system_info=$(get_system_info)
-    
-    # Create backup (tmp file, clean up after)
+    local file_valid=false
+
+    # Issue #65: Validate existing JSON before updating
+    # If the file exists but is corrupted, recover gracefully
     if [ -f "$JSON_FILE" ]; then
-        cp "$JSON_FILE" "${JSON_FILE}.tmp"
+        if jq . "$JSON_FILE" > /dev/null 2>&1; then
+            file_valid=true
+        else
+            echo "WARNING: $JSON_FILE is corrupted or invalid JSON — recovering"
+            # Preserve the corrupted file for diagnosis
+            cp "$JSON_FILE" "${JSON_FILE}.corrupted.$(date +%s)"
+            rm -f "$JSON_FILE"
+        fi
     fi
-    
+
+    # Create backup of the valid file before modifying
+    if [ -f "$JSON_FILE" ] && [ "$file_valid" = true ]; then
+        cp "$JSON_FILE" "${JSON_FILE}.bak"
+    fi
+
     # Update or create JSON file
-    if [ -f "$JSON_FILE" ]; then
+    if [ -f "$JSON_FILE" ] && [ "$file_valid" = true ]; then
         # Update existing file - preserve existing attributes
-        jq --arg host "$HOSTNAME" \
+        if jq --arg host "$HOSTNAME" \
            --arg user "$USER_KEY" \
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
@@ -935,7 +949,15 @@ update_json() {
                    "No errors found"
                 end)
            ' \
-           "$JSON_FILE" > "${JSON_FILE}.tmp2" && mv "${JSON_FILE}.tmp2" "$JSON_FILE"
+           "$JSON_FILE" > "${JSON_FILE}.tmp2"; then
+            mv "${JSON_FILE}.tmp2" "$JSON_FILE"
+        else
+            echo "WARNING: jq update failed — restoring from backup"
+            if [ -f "${JSON_FILE}.bak" ]; then
+                cp "${JSON_FILE}.bak" "$JSON_FILE"
+            fi
+            rm -f "${JSON_FILE}.tmp2"
+        fi
     else
         # Create new file
         jq --arg host "$HOSTNAME" \
@@ -957,10 +979,22 @@ update_json() {
            })}' \
            > "$JSON_FILE"
     fi
-    # Clean up tmp backup
+
+    # Issue #65: Post-write validation — ensure we never leave a corrupted file
+    if [ -f "$JSON_FILE" ]; then
+        if ! jq . "$JSON_FILE" > /dev/null 2>&1; then
+            echo "ERROR: Post-write validation failed — $JSON_FILE is invalid"
+            if [ -f "${JSON_FILE}.bak" ]; then
+                echo "Restoring from backup"
+                cp "${JSON_FILE}.bak" "$JSON_FILE"
+            fi
+        fi
+    fi
+
+    # Clean up temporary files (keep .bak as last-resort recovery)
     [ -f "${JSON_FILE}.tmp" ] && rm -f "${JSON_FILE}.tmp"
     [ -f "${JSON_FILE}.tmp2" ] && rm -f "${JSON_FILE}.tmp2"
-    
+
     echo "Updated health information for $HOSTNAME"
 }
 
