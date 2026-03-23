@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.91";
+const VERSION = "1.0.92";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -286,20 +286,22 @@ function countBusinessDays(fromTs, toTs) {
 
 function getRepoStatus(repo, nowTs) {
     // Calculate status based on last_commit_ts
-    // Repos with explicit warning_days/error_days use calendar days.
+    // Repos with explicit warning_days/error_days use calendar days by default.
     // Repos using defaults skip weekends (business days only) — Issue #47.
+    // Repos with business_days_only: true skip weekends even with explicit thresholds — Issue #67.
     if (!repo || !repo.last_commit_ts || repo.last_commit_ts <= 0) {
         return 'error'; // No timestamp or invalid repo means error
     }
 
     const hasExplicitThresholds = repo.warning_days !== undefined || repo.error_days !== undefined;
+    const useBusinessDays = repo.business_days_only === true;
     const warningDays = repo.warning_days !== undefined ? repo.warning_days : 1;
     const errorDays = repo.error_days !== undefined ? repo.error_days : 2;
 
     const now = nowTs || Math.floor(Date.now() / 1000);
 
-    if (hasExplicitThresholds) {
-        // Explicit thresholds: use calendar hours as before
+    if (hasExplicitThresholds && !useBusinessDays) {
+        // Explicit thresholds without business_days_only: use calendar hours
         const warningHours = warningDays * 24;
         const errorHours = errorDays * 24;
         const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
@@ -312,7 +314,7 @@ function getRepoStatus(repo, nowTs) {
             return 'healthy';
         }
     } else {
-        // Default thresholds: count only business days (skip weekends)
+        // Default thresholds or business_days_only: count only business days (skip weekends)
         const businessDays = countBusinessDays(repo.last_commit_ts, now);
 
         if (businessDays > errorDays) {

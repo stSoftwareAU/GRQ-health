@@ -186,7 +186,10 @@ The system uses a simple structure where each hostname is a key:
   "repos": [
     {
       "name": "FX",
-      "last_commit_ts": 1752806400
+      "last_commit_ts": 1752806400,
+      "warning_days": 1.5,
+      "error_days": 4,
+      "business_days_only": true
     },
     {
       "name": "shareprices2025Q3",
@@ -214,6 +217,8 @@ The dashboard calculates status from `last_commit_ts`:
 **Weekend grace period (Issue #47)**: Repos using default thresholds count only business days (weekdays), so a normal weekend without commits does not trigger false alarms. Repos with explicitly configured `warning_days` and/or `error_days` continue to use calendar days.
 
 **Per-repo thresholds**: Each repo can optionally specify `warning_days` and `error_days` to customise the thresholds (in calendar days). If not specified, defaults to 1 business day (warning) and 2 business days (error). For example, the "Listings" repo uses 5 days for warning and 6 days for error.
+
+**Weekend-aware repos (Issue #67)**: Repos that only receive data on weekdays (e.g., FX market feeds that run Monday–Friday) can set `"business_days_only": true` to skip weekends when calculating staleness, even with explicit thresholds. Without this flag, explicit thresholds count calendar days/hours. With it, only business days are counted, preventing false alarms on Monday mornings.
 
 The "last updated" timestamp shown in the dashboard is calculated from the most recent `last_commit_ts` among all repos.
 
