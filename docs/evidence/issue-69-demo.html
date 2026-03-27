@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Issue #69 - Per-user Exception Status Fix</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; background: #1a1a2e; color: #eee; }
+        h2 { color: #e94560; }
+        .demo-table { border-collapse: collapse; margin: 10px 0 20px 0; }
+        .demo-table th, .demo-table td { border: 1px solid #444; padding: 8px 16px; text-align: left; }
+        .demo-table th { background: #16213e; }
+        .badge { padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
+        .bg-success { background: #28a745; color: white; }
+        .bg-danger { background: #dc3545; color: white; }
+        .bg-warning { background: #ffc107; color: #333; }
+        .section { background: #16213e; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .before { border-left: 4px solid #dc3545; }
+        .after { border-left: 4px solid #28a745; }
+        code { background: #0f3460; padding: 2px 6px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h2>Issue #69: Per-user Exception Status Badge Fix</h2>
+
+    <div class="section before">
+        <h3>Before (Bug)</h3>
+        <p>The per-user status badge only checked heartbeat staleness. A user with exceptions but a recent heartbeat showed as <span class="badge bg-success">ok</span></p>
+        <table class="demo-table">
+            <tr><th>User</th><th>Last heartbeat</th><th>Exceptions</th><th>Status (old)</th></tr>
+            <tr><td>elephant</td><td>5h ago</td><td>1 errors found (1 failure issues)</td><td><span class="badge bg-success">ok</span></td></tr>
+            <tr><td>nigelleck</td><td>1h ago</td><td>No errors found</td><td><span class="badge bg-success">ok</span></td></tr>
+        </table>
+    </div>
+
+    <div class="section after">
+        <h3>After (Fixed)</h3>
+        <p>The <code>getUserStatus()</code> function now checks both staleness AND <code>exception_count</code>. Users with errors show <span class="badge bg-warning">errors</span></p>
+        <table class="demo-table">
+            <tr><th>User</th><th>Last heartbeat</th><th>Exceptions</th><th>Status (new)</th></tr>
+            <tr><td>elephant</td><td>5h ago</td><td>1 errors found (1 failure issues)</td><td><span class="badge bg-warning">errors</span></td></tr>
+            <tr><td>nigelleck</td><td>1h ago</td><td>No errors found</td><td><span class="badge bg-success">ok</span></td></tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h3>Priority Order</h3>
+        <ol>
+            <li><span class="badge bg-danger">stale</span> — heartbeat beyond threshold (highest priority)</li>
+            <li><span class="badge bg-warning">errors</span> — has exception_count &gt; 0</li>
+            <li><span class="badge bg-success">ok</span> — heartbeat recent, no exceptions</li>
+        </ol>
+    </div>
+</body>
+</html>
