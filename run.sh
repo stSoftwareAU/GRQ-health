@@ -772,7 +772,9 @@ scan_log_errors() {
         local warning_emoji_errors=$(grep -c "⚠️" "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
 
         # Count failure emoji issues (❌)
-        local failure_emoji_errors=$(grep -c "❌" "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
+        # Exclude "❌ Error N in <file>. Exiting." — these are normal task exit messages
+        # from the GRQ application when a speculative optimisation task fails (expected behaviour)
+        local failure_emoji_errors=$(grep "❌" "$filtered_log" 2>/dev/null | grep -cv "❌ Error [0-9]" 2>/dev/null | tr -d ' \n' || echo "0")
 
 
         # Lock acquisition failures (removed - these are expected for daily tasks)
