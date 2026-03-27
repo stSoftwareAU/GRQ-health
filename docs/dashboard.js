@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.0.92";
+const VERSION = "1.0.93";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -131,6 +131,23 @@ function getUserHeartbeatWarningHours(data) {
     const h = Number(data?.user_stale_hours);
     if (Number.isFinite(h) && h > 0) return h;
     return THRESHOLDS.USER_STALE_DEFAULT_HOURS;
+}
+
+// Issue #69: Determine per-user status considering both staleness and exceptions.
+// Returns "stale" if the user's heartbeat is beyond the warning threshold,
+// "errors" if the user has exception_count > 0, or "ok" otherwise.
+function getUserStatus(userData, nowTs, warnHours) {
+    const ts = Number(userData?.heart_beat_ts || 0);
+    const hoursSince = ts > 0 && Number.isFinite(ts) ? (nowTs - ts) / 3600 : Number.POSITIVE_INFINITY;
+    const isStale = !ts || !Number.isFinite(ts) || hoursSince > warnHours;
+    if (isStale) {
+        return 'stale';
+    }
+    const exceptionCount = parseInt(userData?.exception_count || 0);
+    if (exceptionCount > 0) {
+        return 'errors';
+    }
+    return 'ok';
 }
 
 // Get list of stale users with their heartbeat information - Issue #22
@@ -685,6 +702,13 @@ function getHealthStatus(_hostname, data, options) {
             if (anyUserStale) {
                 return 'warning';
             }
+            // Issue #69: Per-user exception detection — if any user has errors, flag host as warning.
+            const anyUserExceptions = expectedUsers.some((u) => {
+                return parseInt(usersMap?.[u]?.exception_count || 0) > 0;
+            });
+            if (anyUserExceptions) {
+                return 'warning';
+            }
         }
 
         // Disk usage warning with hysteresis (Issue #49) - applies to all hosts including mobile
@@ -760,10 +784,12 @@ function createHostCard(hostname, data) {
                 const userData = usersMap?.[username] || {};
                 const ts = Number(userData.heart_beat_ts || 0);
                 const tsText = ts > 0 ? formatTimestamp(ts) : 'Unknown';
-                const hoursSince = ts > 0 ? (now - ts) / 3600 : Number.POSITIVE_INFINITY;
-                const isStale = hoursSince > warnHours;
-                const statusBadge = isStale
+                // Issue #69: Use getUserStatus to check staleness AND exceptions
+                const userSt = getUserStatus(userData, now, warnHours);
+                const statusBadge = userSt === 'stale'
                     ? '<span class="badge bg-danger">stale</span>'
+                    : userSt === 'errors'
+                    ? '<span class="badge bg-warning text-dark">errors</span>'
                     : '<span class="badge bg-success">ok</span>';
                 const slug = sanitizeUserSlug(username);
                 const userLogUrl = `./log-viewer.html?file=./${safeHostname}/node-${slug}.log`;

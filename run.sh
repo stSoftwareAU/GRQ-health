@@ -15,7 +15,7 @@ cd "${BASE_DIR}"
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.0.92"
+VERSION="1.0.93"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -772,7 +772,9 @@ scan_log_errors() {
         local warning_emoji_errors=$(grep -c "⚠️" "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
 
         # Count failure emoji issues (❌)
-        local failure_emoji_errors=$(grep -c "❌" "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
+        # Exclude "❌ Error N in <file>. Exiting." — these are normal task exit messages
+        # from the GRQ application when a speculative optimisation task fails (expected behaviour)
+        local failure_emoji_errors=$(grep "❌" "$filtered_log" 2>/dev/null | grep -cv "❌ Error [0-9]" 2>/dev/null | tr -d ' \n' || echo "0")
 
 
         # Lock acquisition failures (removed - these are expected for daily tasks)
