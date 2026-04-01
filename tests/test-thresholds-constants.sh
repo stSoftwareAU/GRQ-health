@@ -184,7 +184,25 @@ OUTPUT=$(run_js_test '
     }
 }
 
-// Test 13: Ubuntu version below THRESHOLDS.UBUNTU_MIN_VERSION triggers warning
+// Test 13: Issue #71 — Disk warning threshold is 80%
+{
+    if (THRESHOLDS.DISK_WARNING_PERCENT === 80) {
+        console.log("TEST_RESULT:disk-warning-80:PASS:DISK_WARNING_PERCENT is 80%");
+    } else {
+        console.log("TEST_RESULT:disk-warning-80:FAIL:expected 80, got " + THRESHOLDS.DISK_WARNING_PERCENT);
+    }
+}
+
+// Test 14: Issue #71 — Disk warning clear threshold is 77% (3-point hysteresis)
+{
+    if (THRESHOLDS.DISK_WARNING_CLEAR_PERCENT === 77) {
+        console.log("TEST_RESULT:disk-clear-77:PASS:DISK_WARNING_CLEAR_PERCENT is 77%");
+    } else {
+        console.log("TEST_RESULT:disk-clear-77:FAIL:expected 77, got " + THRESHOLDS.DISK_WARNING_CLEAR_PERCENT);
+    }
+}
+
+// Test 15: Ubuntu version below THRESHOLDS.UBUNTU_MIN_VERSION triggers warning
 {
     const now = Math.floor(Date.now() / 1000);
     const data = { heart_beat_ts: now, os_info: "Ubuntu", os_version: "20.04" };
