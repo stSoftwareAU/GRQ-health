@@ -145,16 +145,20 @@ const now = Math.floor(Date.now() / 1000);
     }
 }
 
-// Test 12: Disk at 75% (exactly threshold) does not oscillate — stays warning once triggered
+// Test 12: Disk at threshold does not oscillate — stays warning once triggered
 {
-    // First check: 76% triggers warning
-    const trigger = isDiskWarning(76, false);
-    // Second check: drops to 75% — still in hysteresis band, should stay warning
-    const stays = isDiskWarning(75, true);
-    // Third check: drops to 74% — still in hysteresis band, should stay warning
-    const stays2 = isDiskWarning(74, true);
+    // Use threshold-relative values to avoid hardcoding
+    const above = THRESHOLDS.DISK_WARNING_PERCENT + 1;
+    const atThreshold = THRESHOLDS.DISK_WARNING_PERCENT;
+    const belowThresholdInBand = THRESHOLDS.DISK_WARNING_PERCENT - 1;
+    // First check: above threshold triggers warning
+    const trigger = isDiskWarning(above, false);
+    // Second check: drops to exactly threshold — still in hysteresis band, should stay warning
+    const stays = isDiskWarning(atThreshold, true);
+    // Third check: drops below threshold but still in band — should stay warning
+    const stays2 = isDiskWarning(belowThresholdInBand, true);
     if (trigger && stays && stays2) {
-        console.log("TEST_RESULT:no-oscillation:PASS:76->75->74 does not oscillate");
+        console.log("TEST_RESULT:no-oscillation:PASS:" + above + "->" + atThreshold + "->" + belowThresholdInBand + " does not oscillate");
     } else {
         console.log("TEST_RESULT:no-oscillation:FAIL:expected true,true,true got " + trigger + "," + stays + "," + stays2);
     }
