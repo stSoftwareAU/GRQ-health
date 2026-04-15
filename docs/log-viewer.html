@@ -204,6 +204,12 @@
                 if (line.includes('[MemoryMonitor]')) {
                     return `<div data-line-index="${index}">${escapeHtml(line)}</div>`;
                 }
+                // Issue #73: Skip directory listing lines (ls -la output) — filenames
+                // may contain keywords like ERROR or Exception that are not real errors
+                const isDirListingLine = /^[dlcbps-][rwxsStT-]{9}/.test(line);
+                if (isDirListingLine) {
+                    return `<div data-line-index="${index}">${escapeHtml(line)}</div>`;
+                }
                 // Be specific to avoid false positives from training metrics that mention "Error:"
                 if (line.includes('ERROR') ||
                     line.includes('Exception') || 
