@@ -41,6 +41,13 @@ function classifyLine(line) {
     const isStackTraceLine = /^\s+at /.test(line);
     const isCStackTraceLine = /^\s+\d+\s+[^\s]+\s+0x[0-9a-fA-F]+/.test(line);
 
+    // Issue #73: Skip directory listing lines (ls -la output) — filenames
+    // may contain keywords like ERROR or Exception that are not real errors
+    const isDirListingLine = /^[dlcbps-][rwxsStT-]{9}/.test(line);
+    if (isDirListingLine) {
+        return 'normal';
+    }
+
     if (line.includes('ERROR') ||
         line.includes('Exception') ||
         line.startsWith('Error:') ||
@@ -192,6 +199,84 @@ function classifyLine(line) {
         console.log("TEST_RESULT:c-stack-trace:PASS:C stack trace flagged correctly");
     } else {
         console.log("TEST_RESULT:c-stack-trace:FAIL:expected stack-trace-line, got " + cls);
+    }
+}
+
+// Issue #73: Directory listing lines with ERROR in filenames should NOT be flagged
+// Test 13: ls -la output with CRISPR-ERROR filename should be normal
+{
+    const line = "-rw-r--r--  1 rocket staff  2003073 Oct 17 05:22 .CRISPR-ERROR-Industry 5th percentile.json";
+    const cls = classifyLine(line);
+    if (cls === "normal") {
+        console.log("TEST_RESULT:dir-listing-error-filename:PASS:directory listing with ERROR filename not flagged");
+    } else {
+        console.log("TEST_RESULT:dir-listing-error-filename:FAIL:expected normal, got " + cls);
+    }
+}
+
+// Test 14: ls -la output with another CRISPR-ERROR filename
+{
+    const line = "-rw-r--r--  1 rocket staff  2003134 Oct 17 05:22 .CRISPR-ERROR-Industry 95th percentile V2.json";
+    const cls = classifyLine(line);
+    if (cls === "normal") {
+        console.log("TEST_RESULT:dir-listing-error-filename-2:PASS:directory listing with ERROR filename not flagged");
+    } else {
+        console.log("TEST_RESULT:dir-listing-error-filename-2:FAIL:expected normal, got " + cls);
+    }
+}
+
+// Test 15: ls -la directory line with ERROR in name should be normal
+{
+    const line = "drwxr-xr-x  46 rocket staff  1472 Apr 16 05:29 .CRISPR-ERROR-Insider-Bullish-7-v1.json";
+    const cls = classifyLine(line);
+    if (cls === "normal") {
+        console.log("TEST_RESULT:dir-listing-error-dirname:PASS:directory listing with ERROR dirname not flagged");
+    } else {
+        console.log("TEST_RESULT:dir-listing-error-dirname:FAIL:expected normal, got " + cls);
+    }
+}
+
+// Test 16: ls -la output with Exception in filename should be normal
+{
+    const line = "-rw-r--r--  1 user staff  1024 Jan 10 12:00 ExceptionReport-2026.txt";
+    const cls = classifyLine(line);
+    if (cls === "normal") {
+        console.log("TEST_RESULT:dir-listing-exception-filename:PASS:directory listing with Exception filename not flagged");
+    } else {
+        console.log("TEST_RESULT:dir-listing-exception-filename:FAIL:expected normal, got " + cls);
+    }
+}
+
+// Test 17: ls -la output with WARNING in filename should be normal
+{
+    const line = "-rw-r--r--  1 user staff  512 Mar 05 09:30 WARNING-old-report.csv";
+    const cls = classifyLine(line);
+    if (cls === "normal") {
+        console.log("TEST_RESULT:dir-listing-warning-filename:PASS:directory listing with WARNING filename not flagged");
+    } else {
+        console.log("TEST_RESULT:dir-listing-warning-filename:FAIL:expected normal, got " + cls);
+    }
+}
+
+// Test 18: Real ERROR line should still be flagged (not a directory listing)
+{
+    const line = "ERROR: Disk space critically low";
+    const cls = classifyLine(line);
+    if (cls === "error-line") {
+        console.log("TEST_RESULT:real-error-still-flagged:PASS:real ERROR still flagged after dir listing fix");
+    } else {
+        console.log("TEST_RESULT:real-error-still-flagged:FAIL:expected error-line, got " + cls);
+    }
+}
+
+// Test 19: ls total line should be normal (not a directory listing but also not an error)
+{
+    const line = "total 47056";
+    const cls = classifyLine(line);
+    if (cls === "normal") {
+        console.log("TEST_RESULT:ls-total-line:PASS:ls total line is normal");
+    } else {
+        console.log("TEST_RESULT:ls-total-line:FAIL:expected normal, got " + cls);
     }
 }
 DENO_SCRIPT
