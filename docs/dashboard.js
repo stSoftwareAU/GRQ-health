@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.8";
+const VERSION = "1.1.9";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -301,12 +301,38 @@ function countBusinessDays(fromTs, toTs) {
     return count;
 }
 
+// Issue #77: A repo is "failed" when we have a recorded failure timestamp that
+// is at least as new as the most recent successful commit. A failed task is
+// more actionable than a stale one, so this state supersedes both healthy and
+// error (stale) when both would apply.
+function isRepoFailed(repo) {
+    if (!repo) return false;
+    const failureTs = Number(repo.last_failure_ts || 0);
+    if (!Number.isFinite(failureTs) || failureTs <= 0) {
+        return false;
+    }
+    const commitTs = Number(repo.last_commit_ts || 0);
+    // Failure wins on ties too — equal timestamps mean the failure is the most
+    // recent thing we know, so prefer the actionable state.
+    return failureTs >= (Number.isFinite(commitTs) ? commitTs : 0);
+}
+
 function getRepoStatus(repo, nowTs) {
-    // Calculate status based on last_commit_ts
+    // Calculate status based on last_commit_ts and last_failure_ts
     // Repos with explicit warning_days/error_days use calendar days by default.
     // Repos using defaults skip weekends (business days only) — Issue #47.
     // Repos with business_days_only: true skip weekends even with explicit thresholds — Issue #67.
-    if (!repo || !repo.last_commit_ts || repo.last_commit_ts <= 0) {
+    // Repos with a recent last_failure_ts return 'failed' — Issue #77.
+    if (!repo) {
+        return 'error';
+    }
+
+    // Issue #77: A recent failure is always the most actionable state.
+    if (isRepoFailed(repo)) {
+        return 'failed';
+    }
+
+    if (!repo.last_commit_ts || repo.last_commit_ts <= 0) {
         return 'error'; // No timestamp or invalid repo means error
     }
 
@@ -344,18 +370,48 @@ function getRepoStatus(repo, nowTs) {
     }
 }
 
-function getRepoStats() {
-    if (!repoHealthData || !Array.isArray(repoHealthData.repos)) {
-        return { total: 0, healthy: 0, warning: 0, error: 0 };
+// Issue #77: Build a safe URL to view the captured failure log. The stored
+// `last_failure_log` path is relative to the docs/ directory (e.g.
+// "logs/Quality/20260417-025717.log"), matching the repo layout produced by
+// helpers/repos.sh --failed. The "/" separators must be preserved while the
+// individual path segments are URI-encoded to handle task slugs that may still
+// contain unsafe characters (e.g. spaces in names such as "Vibe Coder-GRQ-23").
+function getRepoFailureLogUrl(repo) {
+    if (!repo) return '';
+    const raw = String(repo.last_failure_log || '').trim();
+    if (!raw) return '';
+    // Encode each path segment but leave "/" as a separator. Strip any leading
+    // "./" or "/" to produce a clean relative URL.
+    const trimmed = raw.replace(/^\.\/+/, '').replace(/^\/+/, '');
+    const encoded = trimmed
+        .split('/')
+        .map((segment) => encodeURIComponent(segment))
+        .join('/');
+    return `./log-viewer.html?file=./${encoded}`;
+}
+
+function getRepoStats(reposOverride) {
+    // Accepts an optional array of repos (used by tests). Falls back to the
+    // module-scope repoHealthData populated by fetchRepoHealth at runtime.
+    let repos = reposOverride;
+    if (!Array.isArray(repos)) {
+        if (typeof repoHealthData !== 'undefined'
+            && repoHealthData
+            && Array.isArray(repoHealthData.repos)) {
+            repos = repoHealthData.repos;
+        } else {
+            return { total: 0, healthy: 0, warning: 0, error: 0, failed: 0 };
+        }
     }
-    return repoHealthData.repos.reduce((acc, repo) => {
+    return repos.reduce((acc, repo) => {
         acc.total += 1;
         const status = getRepoStatus(repo);
-        if (status === 'warning') acc.warning += 1;
+        if (status === 'failed') acc.failed += 1;
+        else if (status === 'warning') acc.warning += 1;
         else if (status === 'error') acc.error += 1;
         else acc.healthy += 1;
         return acc;
-    }, { total: 0, healthy: 0, warning: 0, error: 0 });
+    }, { total: 0, healthy: 0, warning: 0, error: 0, failed: 0 });
 }
 
 async function fetchRepoHealth(timestamp = Date.now(), force = false) {
@@ -377,6 +433,24 @@ async function fetchRepoHealth(timestamp = Date.now(), force = false) {
     }
 }
 
+// Issue #77: Build tooltip text summarising a failure — absolute + relative
+// time plus optional exit code and message. Safe for use in a title attribute.
+function buildFailureTooltip(repo) {
+    if (!repo || !repo.last_failure_ts) return '';
+    const ts = Number(repo.last_failure_ts);
+    if (!Number.isFinite(ts) || ts <= 0) return '';
+    const iso = new Date(ts * 1000).toISOString().replace('T', ' ').replace(/\..+$/, ' UTC');
+    const relative = formatTimestamp(ts);
+    const parts = [`Failed ${relative} (${iso})`];
+    if (repo.last_failure_exit_code !== undefined && repo.last_failure_exit_code !== null && repo.last_failure_exit_code !== '') {
+        parts.push(`exit code ${repo.last_failure_exit_code}`);
+    }
+    if (repo.last_failure_message) {
+        parts.push(String(repo.last_failure_message));
+    }
+    return parts.join(' — ');
+}
+
 function renderRepoHealth(errorMessage = null) {
     const section = document.getElementById('repoHealthSection');
     if (!section) {
@@ -387,6 +461,7 @@ function renderRepoHealth(errorMessage = null) {
     const healthyCountElement = document.getElementById('repoHealthyCount');
     const warningCountElement = document.getElementById('repoWarningCount');
     const errorCountElement = document.getElementById('repoErrorCount');
+    const failedCountElement = document.getElementById('repoFailedCount');
     const repos = repoHealthData?.repos ?? [];
 
     if (!repos.length && !errorMessage) {
@@ -400,6 +475,12 @@ function renderRepoHealth(errorMessage = null) {
     healthyCountElement.textContent = `${repoStats.healthy} good`;
     warningCountElement.textContent = `${repoStats.warning} warning`;
     errorCountElement.textContent = `${repoStats.error} error`;
+    // Issue #77: Failed counter is displayed only when there is at least one
+    // failed task, otherwise it stays hidden to keep the header tidy.
+    if (failedCountElement) {
+        failedCountElement.textContent = `${repoStats.failed} failed`;
+        failedCountElement.style.display = repoStats.failed > 0 ? 'inline-flex' : 'none';
+    }
 
     // Calculate last update from most recent last_commit_ts
     if (repos.length > 0) {
@@ -421,16 +502,40 @@ function renderRepoHealth(errorMessage = null) {
     }
 
     const statusBadge = (status) => {
+        if (status === 'failed') return 'badge bg-danger repo-failed-badge';
         if (status === 'error') return 'badge bg-danger';
         if (status === 'warning') return 'badge bg-warning text-dark';
         return 'badge bg-success';
     };
 
     const repoItemsHtml = repos.map((repo) => {
-        // Calculate status from last_commit_ts
+        // Calculate status from last_commit_ts and last_failure_ts (Issue #77)
         const status = getRepoStatus(repo) || 'error';
         const repoName = escapeHtml(repo.name || 'Unknown');
         const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+
+        // Issue #77: For failed repos render a "View log" link with tooltip.
+        let failureHtml = '';
+        if (status === 'failed') {
+            const logUrl = getRepoFailureLogUrl(repo);
+            const tooltip = buildFailureTooltip(repo);
+            const failureTimeText = repo.last_failure_ts
+                ? `Failed ${formatTimestamp(repo.last_failure_ts)}`
+                : 'Failed';
+            const linkHtml = logUrl
+                ? `<a href="${escapeHtml(logUrl)}" target="_blank" rel="noopener" class="repo-view-log btn btn-sm btn-outline-danger"
+                      ${tooltip ? `title="${escapeHtml(tooltip)}" data-bs-toggle="tooltip" data-bs-placement="left"` : ''}>
+                      <i class="bi bi-file-earmark-text"></i> View log
+                   </a>`
+                : '';
+            failureHtml = `
+                <div class="repo-failure-info">
+                    <div class="repo-time text-danger">${escapeHtml(failureTimeText)}</div>
+                    ${linkHtml}
+                </div>
+            `;
+        }
+
         return `
         <div class="repo-health-item repo-${status}">
             <div class="repo-meta">
@@ -441,6 +546,7 @@ function renderRepoHealth(errorMessage = null) {
                 <span class="${statusBadge(status)} repo-status-badge">${statusLabel}</span>
                 <div class="repo-time">${repo.last_commit_ts > 0 ? `Last commit ${formatTimestamp(repo.last_commit_ts)}` : 'Commit time unavailable'}</div>
                 ${repo.error_message ? `<div class="repo-error text-danger"><small>${escapeHtml(repo.error_message)}</small></div>` : ''}
+                ${failureHtml}
             </div>
         </div>
     `;
@@ -451,6 +557,11 @@ function renderRepoHealth(errorMessage = null) {
         : '';
 
     listElement.innerHTML = `${alertHtml}${repoItemsHtml}`;
+
+    // Issue #77: Initialise Bootstrap tooltips for the failure links after render.
+    if (typeof initializeTooltips === 'function') {
+        try { initializeTooltips(); } catch (_e) { /* tooltips are best-effort */ }
+    }
 }
 
 // Offline indicator functionality
@@ -1084,6 +1195,10 @@ function updateStats(hosts) {
     const repoStats = getRepoStats();
     const hasRepoError = repoStats.error > 0;
     const hasRepoWarning = repoStats.warning > 0;
+    // Issue #77: a repo "failed" state is unhealthy — we have concrete evidence
+    // of a task failure, which is just as bad as stale data from the
+    // uptime-monitor's point of view.
+    const hasRepoFailed = repoStats.failed > 0;
 
     document.getElementById('totalHosts').textContent = stats.total;
     document.getElementById('healthyHosts').textContent = stats.healthy;
@@ -1091,30 +1206,35 @@ function updateStats(hosts) {
     document.getElementById('criticalHosts').textContent = stats.critical;
 
     // Update page title and header based on overall health
-    // Only count critical devices as unhealthy - MIA devices are just missing, not unhealthy
-    const isHealthy = stats.critical === 0 && !hasRepoError;
+    // Only count critical devices as unhealthy - MIA devices are just missing, not unhealthy.
+    // Issue #77: any failed repo is also considered unhealthy.
+    const isHealthy = stats.critical === 0 && !hasRepoError && !hasRepoFailed;
     const healthStatus = isHealthy ? "GRQ Healthy" : "GRQ Unhealthy";
     document.title = healthStatus;
-    
+
     // Update favicon based on health
     const favicon = document.querySelector('link[rel="icon"]');
     if (favicon) {
         favicon.href = isHealthy ? './medical-check.png' : './unhealthy.png';
     }
-    
+
     // Update the header title
     const headerTitle = document.querySelector('.header h1');
     if (headerTitle) {
         headerTitle.innerHTML = `<i class="bi bi-display"></i> ${healthStatus}`;
     }
-    
+
     // Update the header subtitle
     const headerSubtitle = document.querySelector('.header p');
     if (headerSubtitle) {
-        if (stats.critical > 0 && hasRepoError) {
+        if (stats.critical > 0 && (hasRepoError || hasRepoFailed)) {
             headerSubtitle.textContent = "Hosts and market feed tasks need attention";
         } else if (stats.critical > 0) {
             headerSubtitle.textContent = "Some hosts not responding";
+        } else if (hasRepoFailed && hasRepoError) {
+            headerSubtitle.textContent = "Market feed tasks have failed runs and are stale";
+        } else if (hasRepoFailed) {
+            headerSubtitle.textContent = `Market feed task${repoStats.failed > 1 ? 's have' : ' has'} failed — check the latest log`;
         } else if (hasRepoError) {
             headerSubtitle.textContent = "Market feed tasks are stale";
         } else if (stats.mia > 0) {
