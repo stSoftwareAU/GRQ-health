@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.5";
+const VERSION = "1.1.7";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
