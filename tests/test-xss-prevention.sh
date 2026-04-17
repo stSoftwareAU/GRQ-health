@@ -25,11 +25,25 @@ fail_test() {
     FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-# createHostCard (lines 702-984) is outside the default pure-function range
-# but it only generates HTML strings — no real DOM access needed.
-# Extract it separately and provide a minimal DOM mock.
+# createHostCard is outside the default pure-function range but it (plus
+# the nearby helpers refreshHealthStatuses and getCachedHealthStatus that
+# it depends on) only generates HTML strings — no real DOM access needed.
+# Extract the block from createHostCard up to, but not including,
+# updateStats by detecting line numbers dynamically so the test doesn't
+# break when nearby code shifts.
 extract_card_function() {
-    sed -n '762,1074p' "$SCRIPT_DIR/../docs/dashboard.js"
+    local dash_js="$SCRIPT_DIR/../docs/dashboard.js"
+    local start_line end_line
+    start_line=$(grep -n '^function createHostCard' "$dash_js" | head -1 | cut -d: -f1)
+    end_line=$(grep -n '^function updateStats' "$dash_js" | head -1 | cut -d: -f1)
+    if [ -z "$start_line" ] || [ -z "$end_line" ]; then
+        # Fall back to a conservative fixed range if the markers move.
+        start_line=762
+        end_line=1075
+    fi
+    # end_line is exclusive — stop on the line before updateStats.
+    end_line=$((end_line - 1))
+    sed -n "${start_line},${end_line}p" "$dash_js"
 }
 
 # renderRepoHealth (lines 347-420) uses document.getElementById

@@ -105,12 +105,14 @@
                 const repoStats = summariseRepoStats(repoData.repos || []);
                 const hasRepoError = repoStats.error > 0;
                 const hasRepoWarning = repoStats.warning > 0;
-                
+                // Issue #77: any failed repo makes the overall status unhealthy.
+                const hasRepoFailed = repoStats.failed > 0;
+
                 // Determine overall status
                 let overallStatus = 'OK';
                 let statusClass = 'ok';
-                
-                if (critical > 0 || hasRepoError) {
+
+                if (critical > 0 || hasRepoError || hasRepoFailed) {
                     overallStatus = 'ERROR';
                     statusClass = 'error';
                 } else if (warning > 0 || hasRepoWarning) {
@@ -281,10 +283,40 @@
             return 'healthy';
         }
 
+        // Issue #77: Detect a failed repo — a recorded failure timestamp at
+        // least as new as the most recent successful commit. A failed task is
+        // always unhealthy and always renders a "View log" link.
+        function isRepoFailed(repo) {
+            if (!repo) return false;
+            const failureTs = Number(repo.last_failure_ts || 0);
+            if (!Number.isFinite(failureTs) || failureTs <= 0) {
+                return false;
+            }
+            const commitTs = Number(repo.last_commit_ts || 0);
+            return failureTs >= (Number.isFinite(commitTs) ? commitTs : 0);
+        }
+
+        // Issue #77: Build a link to log-viewer.html for a captured failure log.
+        function buildRepoFailureLogUrl(repo) {
+            if (!repo) return '';
+            const raw = String(repo.last_failure_log || '').trim();
+            if (!raw) return '';
+            const trimmed = raw.replace(/^\.\/+/, '').replace(/^\/+/, '');
+            const encoded = trimmed
+                .split('/')
+                .map((segment) => encodeURIComponent(segment))
+                .join('/');
+            return `./log-viewer.html?file=./${encoded}`;
+        }
+
         function summariseRepoStats(repos) {
             return (repos || []).reduce((acc, repo) => {
                 acc.total += 1;
-                if (repo.status === 'error') {
+                // Issue #77: a recent failure dominates any other classification.
+                if (isRepoFailed(repo)) {
+                    acc.failed += 1;
+                    acc.failedEntries.push(repo);
+                } else if (repo.status === 'error') {
                     acc.error += 1;
                     acc.errorNames.push(repo.name);
                     if (repo.error_message) {
@@ -297,7 +329,9 @@
                     acc.healthy += 1;
                 }
                 return acc;
-            }, { total: 0, healthy: 0, warning: 0, error: 0, warningNames: [], errorNames: [], errorMessages: [] });
+            }, { total: 0, healthy: 0, warning: 0, error: 0, failed: 0,
+                 warningNames: [], errorNames: [], errorMessages: [],
+                 failedEntries: [] });
         }
 
         function updateRepoSummary(repoStats, generatedAt) {
@@ -317,6 +351,16 @@
             if (repoStats.error > 0) {
                 const errorNames = repoStats.errorNames.map(escapeHtml).join(', ');
                 parts.push(`${repoStats.error} error${errorNames ? ` (${errorNames})` : ''}`);
+            }
+            // Issue #77: surface failed tasks with links to their captured logs.
+            if (repoStats.failed > 0) {
+                const failedLinks = repoStats.failedEntries.map((entry) => {
+                    const name = escapeHtml(entry.name || 'Unknown');
+                    const url = buildRepoFailureLogUrl(entry);
+                    if (!url) return name;
+                    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${name}</a>`;
+                }).join(', ');
+                parts.push(`${repoStats.failed} failed${failedLinks ? ` (${failedLinks})` : ''}`);
             }
 
             summaryElement.innerHTML = `
