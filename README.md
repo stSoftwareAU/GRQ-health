@@ -204,6 +204,14 @@ The system uses a simple structure where each hostname is a key:
       "last_commit_ts": 1752806400,
       "warning_days": 5,
       "error_days": 6
+    },
+    {
+      "name": "Quality",
+      "last_commit_ts": 1776265324,
+      "last_failure_ts": 1776300000,
+      "last_failure_log": "logs/Quality/20260417-013200.log",
+      "last_failure_exit_code": 1,
+      "last_failure_message": "3 shellcheck errors"
     }
   ]
 }
@@ -220,7 +228,35 @@ The dashboard calculates status from `last_commit_ts`:
 
 **Weekend-aware repos (Issue #67)**: Repos that only receive data on weekdays (e.g., FX market feeds that run Monday–Friday) can set `"business_days_only": true` to skip weekends when calculating staleness, even with explicit thresholds. Without this flag, explicit thresholds count calendar days/hours. With it, only business days are counted, preventing false alarms on Monday mornings.
 
+**Task failure tracking (Issue #76)**: Each repo entry can optionally include failure fields to record the most recent failed run:
+- `last_failure_ts` — Unix timestamp of the last failure
+- `last_failure_log` — path to the stored log file, relative to `docs/` (e.g., `logs/Quality/20260417-013200.log`)
+- `last_failure_exit_code` — (optional) the non-zero exit status of the failed task
+- `last_failure_message` — (optional) a one-line summary of the failure
+
+When a successful run occurs (`last_commit_ts > last_failure_ts`), the failure fields are left in place so operators can still inspect the most recent failure, but the dashboard treats them as stale. Log files are stored under `docs/logs/<task-slug>/` with a retention cap of 5 files per task. Task slugs are derived from the task name with unsafe characters replaced by hyphens.
+
+**⚠️ Security note**: Log file contents are committed publicly. Callers must ensure logs do not contain secrets or sensitive data before passing them to `repos.sh --failed --log`.
+
 The "last updated" timestamp shown in the dashboard is calculated from the most recent `last_commit_ts` among all repos.
+
+#### Recording failures
+
+```bash
+# Record a successful run (unchanged)
+./helpers/repos.sh "Quality"
+
+# Record a failed run with log capture
+./helpers/repos.sh "Quality" --failed --log /path/to/run.log
+
+# Record a failed run reading log from stdin
+./helpers/repos.sh "Quality" --failed --log - < run.log
+
+# Optional: include exit code and message
+./helpers/repos.sh "Quality" --failed --log /path/to/run.log --exit-code 1 --message "3 shellcheck errors"
+```
+
+External task runners (e.g. a Quality gate in a worker repo) should follow the copy-paste patterns in [`helpers/REPO_HEALTH_SNIPPET.md`](helpers/REPO_HEALTH_SNIPPET.md), which documents both the inline if/else form and a sourceable `report_repo_health` helper that picks success vs. failure automatically from `$?`. See [Reporting failures with a log file](helpers/REPO_HEALTH_SNIPPET.md#reporting-failures-with-a-log-file) for the full caller contract (flags, public-log warning, retention).
 
 ### Enhanced Health Status Classification
 
