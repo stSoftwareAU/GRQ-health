@@ -3,17 +3,32 @@ set -euo pipefail
 
 # Script to update repos.json with a repo's last commit timestamp
 # Handles git operations including pull, commit, and push with conflict recovery
-# 
+#
 # Usage:
-#   ./helpers/repos.sh <repo_name>
+#   ./helpers/repos.sh <repo_name>                                    # record success
+#   ./helpers/repos.sh <repo_name> --failed --log /path/to/run.log    # record failure with log file
+#   ./helpers/repos.sh <repo_name> --failed --log - < run.log         # record failure with log from stdin
+#
+# Optional failure flags:
+#   --exit-code <N>     Record the non-zero exit status
+#   --message <text>    Record a one-line summary
+#
+# Testing flags:
+#   --validate <name>   Validate repo name without side effects
+#   --dry-run           Skip git operations (for testing)
+#   --project-root <p>  Override project root directory (for testing)
+#   --skip-rate-limit   Skip the 1-hour rate limit check (for testing)
 #
 # Example:
 #   ./helpers/repos.sh "Dividends"
+#   ./helpers/repos.sh "Quality" --failed --log /tmp/run.log --exit-code 1 --message "lint errors"
+
+# Maximum number of log files to retain per task
+LOG_RETENTION_COUNT=5
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-REPOS_JSON="${PROJECT_ROOT}/docs/repos.json"
 
 # Validate repo name: alphanumeric, hyphens, underscores, periods, colons, forward slashes, spaces
 validate_repo_name() {
@@ -29,9 +44,84 @@ validate_repo_name() {
     return 0
 }
 
+# Sanitise task name into a safe directory slug
+# Replaces any character that is not alphanumeric, hyphen, or underscore with a hyphen
+sanitise_task_slug() {
+    local name="$1"
+    echo "$name" | sed 's/[^a-zA-Z0-9_-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//'
+}
+
+# Validate a log file path for security
+# Rejects: path traversal, symlinks outside project, non-existent files, device files
+validate_log_path() {
+    local log_path="$1"
+
+    # stdin is always valid
+    if [ "$log_path" = "-" ]; then
+        return 0
+    fi
+
+    # Reject paths containing ..
+    if [[ "$log_path" == *".."* ]]; then
+        echo "Error: Log path must not contain '..' (path traversal)." >&2
+        return 1
+    fi
+
+    # Resolve the real path to check location
+    local resolved
+    resolved=$(readlink -f "$log_path" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$log_path'))" 2>/dev/null || echo "")
+
+    # For absolute paths, only allow files under temp directories or the project root
+    if [[ "$log_path" == /* ]]; then
+        if [ ! -f "$log_path" ]; then
+            echo "Error: Log file does not exist: $log_path" >&2
+            return 1
+        fi
+        # Resolve and check the file is under an allowed directory
+        if [ -z "$resolved" ]; then
+            echo "Error: Cannot resolve log path: $log_path" >&2
+            return 1
+        fi
+        # Allowed directories: temp dirs (various OS patterns), project root
+        local allowed=false
+        case "$resolved" in
+            /tmp/*|/private/tmp/*|/var/tmp/*|/private/var/folders/*)
+                allowed=true ;;
+        esac
+        # Also check TMPDIR if set
+        if [ "$allowed" = false ] && [ -n "${TMPDIR:-}" ]; then
+            local resolved_tmpdir
+            resolved_tmpdir=$(readlink -f "${TMPDIR}" 2>/dev/null || python3 -c "import os; print(os.path.realpath('${TMPDIR}'))" 2>/dev/null || echo "")
+            if [ -n "$resolved_tmpdir" ] && [[ "$resolved" == "${resolved_tmpdir}"/* ]]; then
+                allowed=true
+            fi
+        fi
+        # Check project root
+        local resolved_project
+        resolved_project=$(readlink -f "$PROJECT_ROOT" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$PROJECT_ROOT'))" 2>/dev/null || echo "$PROJECT_ROOT")
+        if [[ "$resolved" == "${resolved_project}"/* ]]; then
+            allowed=true
+        fi
+        if [ "$allowed" = false ]; then
+            echo "Error: Log path is outside allowed directories (project root or temp): $log_path" >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    # Relative path — check existence
+    if [ ! -f "$log_path" ]; then
+        echo "Error: Log file does not exist: $log_path" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 # Check arguments
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <repo_name>"
+    echo "       $0 <repo_name> --failed --log <path>"
     echo "Example: $0 \"Dividends\""
     exit 1
 fi
@@ -46,36 +136,143 @@ if [ "$1" = "--validate" ]; then
     exit $?
 fi
 
-REPO_NAME="$1"
+# Parse arguments
+DRY_RUN=false
+SKIP_RATE_LIMIT=false
+FAILED_MODE=false
+LOG_PATH=""
+FAILURE_EXIT_CODE=""
+FAILURE_MESSAGE=""
+REPO_NAME=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --project-root)
+            PROJECT_ROOT="$2"
+            shift 2
+            ;;
+        --skip-rate-limit)
+            SKIP_RATE_LIMIT=true
+            shift
+            ;;
+        --failed)
+            FAILED_MODE=true
+            shift
+            ;;
+        --log)
+            LOG_PATH="$2"
+            shift 2
+            ;;
+        --exit-code)
+            FAILURE_EXIT_CODE="$2"
+            shift 2
+            ;;
+        --message)
+            FAILURE_MESSAGE="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$REPO_NAME" ]; then
+                REPO_NAME="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+REPOS_JSON="${PROJECT_ROOT}/docs/repos.json"
 
 # Validate the repo name before proceeding
+if [ -z "$REPO_NAME" ]; then
+    echo "Error: Repo name is required." >&2
+    exit 1
+fi
 validate_repo_name "$REPO_NAME" || exit 1
+
+# In failed mode, --log is required
+if [ "$FAILED_MODE" = true ] && [ -z "$LOG_PATH" ]; then
+    echo "Error: --log is required when using --failed." >&2
+    exit 1
+fi
+
+# Validate the log path if provided
+if [ -n "$LOG_PATH" ]; then
+    validate_log_path "$LOG_PATH" || exit 1
+fi
 
 # Get current UTC timestamp (Unix timestamp)
 CURRENT_TS=$(date +%s)
 
-# Function to update repos.json
-update_repos_json() {
+# Function to store the failure log file and enforce retention
+store_failure_log() {
+    local task_slug
+    task_slug=$(sanitise_task_slug "$REPO_NAME")
+    local log_dir="${PROJECT_ROOT}/docs/logs/${task_slug}"
+    mkdir -p "$log_dir"
+
+    # Generate timestamped filename with unique suffix to avoid collisions
+    local log_ts
+    log_ts=$(date -u +"%Y%m%d-%H%M%S")
+    local log_filename="${log_ts}.log"
+    # If file already exists, append a numeric suffix
+    local suffix=1
+    while [ -f "${log_dir}/${log_filename}" ]; do
+        log_filename="${log_ts}-${suffix}.log"
+        suffix=$((suffix + 1))
+    done
+    local log_dest="${log_dir}/${log_filename}"
+
+    # Copy log content
+    if [ "$LOG_PATH" = "-" ]; then
+        cat > "$log_dest"
+    else
+        cp "$LOG_PATH" "$log_dest"
+    fi
+
+    # Enforce retention: keep only the last LOG_RETENTION_COUNT files
+    local file_count
+    file_count=$(find "$log_dir" -maxdepth 1 -name "*.log" -type f | wc -l | tr -d ' ')
+    if [ "$file_count" -gt "$LOG_RETENTION_COUNT" ]; then
+        # Delete oldest files (sorted by name which is timestamp-based)
+        local files_to_delete
+        files_to_delete=$(find "$log_dir" -maxdepth 1 -name "*.log" -type f | sort | head -n "$((file_count - LOG_RETENTION_COUNT))")
+        echo "$files_to_delete" | while IFS= read -r old_file; do
+            if [ -n "$old_file" ] && [ -f "$old_file" ]; then
+                rm -f "$old_file"
+            fi
+        done
+    fi
+
+    # Return the repo-relative path (relative to docs/)
+    echo "logs/${task_slug}/${log_filename}"
+}
+
+# Function to update repos.json for a successful run
+update_repos_json_success() {
     # Check if jq is available
     if ! command -v jq &> /dev/null; then
         echo "Error: jq is required but not found. Please install jq."
         exit 1
     fi
-    
+
     # Ensure repos.json exists with proper structure
     if [ ! -f "$REPOS_JSON" ]; then
         echo "{\"repos\": []}" > "$REPOS_JSON"
     fi
-    
+
     # Read current repos array
     REPOS=$(jq -c '.repos // []' "$REPOS_JSON")
-    
+
     # Check if repo already exists and get its last commit timestamp
     EXISTING_REPO=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .name // empty")
     LAST_UPDATE_TS=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .last_commit_ts // empty")
-    
+
     # If repo exists, check if it was updated within the last hour (3600 seconds)
-    if [ -n "$EXISTING_REPO" ] && [ -n "$LAST_UPDATE_TS" ]; then
+    if [ "$SKIP_RATE_LIMIT" = false ] && [ -n "$EXISTING_REPO" ] && [ -n "$LAST_UPDATE_TS" ]; then
         TIME_DIFF=$((CURRENT_TS - LAST_UPDATE_TS))
         if [ "$TIME_DIFF" -lt 3600 ]; then
             # Updated within the last hour, skip update
@@ -84,7 +281,7 @@ update_repos_json() {
             return 0
         fi
     fi
-    
+
     # Proceed with update (either new repo or last update was more than 1 hour ago)
     if [ -n "$EXISTING_REPO" ]; then
         # Update existing repo
@@ -96,7 +293,7 @@ update_repos_json() {
     else
         # Add new repo
         NEW_REPO="{\"name\": \"${REPO_NAME}\", \"last_commit_ts\": ${CURRENT_TS}}"
-        
+
         jq --argjson new_repo "$NEW_REPO" \
            '.repos += [$new_repo]' \
            "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
@@ -104,8 +301,94 @@ update_repos_json() {
     fi
 }
 
+# Function to update repos.json for a failed run
+update_repos_json_failure() {
+    local log_relative_path="$1"
+
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        echo "Error: jq is required but not found. Please install jq."
+        exit 1
+    fi
+
+    # Ensure repos.json exists with proper structure
+    if [ ! -f "$REPOS_JSON" ]; then
+        echo "{\"repos\": []}" > "$REPOS_JSON"
+    fi
+
+    # Read current repos array
+    REPOS=$(jq -c '.repos // []' "$REPOS_JSON")
+
+    # Check if repo already exists
+    EXISTING_REPO=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .name // empty")
+
+    if [ -n "$EXISTING_REPO" ]; then
+        # Update existing repo with failure fields (do NOT touch last_commit_ts)
+        local jq_filter
+        jq_filter='.repos |= map(if .name == $name then .last_failure_ts = ($ts | tonumber) | .last_failure_log = $log'
+
+        local jq_args=()
+        jq_args+=(--arg name "$REPO_NAME")
+        jq_args+=(--arg ts "$CURRENT_TS")
+        jq_args+=(--arg log "$log_relative_path")
+
+        if [ -n "$FAILURE_EXIT_CODE" ]; then
+            jq_filter="$jq_filter"' | .last_failure_exit_code = ($exit_code | tonumber)'
+            jq_args+=(--arg exit_code "$FAILURE_EXIT_CODE")
+        fi
+
+        if [ -n "$FAILURE_MESSAGE" ]; then
+            jq_filter="$jq_filter"' | .last_failure_message = $message'
+            jq_args+=(--arg message "$FAILURE_MESSAGE")
+        fi
+
+        jq_filter="$jq_filter"' else . end)'
+
+        jq "${jq_args[@]}" "$jq_filter" "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
+        echo "Updated repo '${REPO_NAME}' with failure at timestamp ${CURRENT_TS}"
+    else
+        # Add new repo entry with failure fields (no last_commit_ts since it never succeeded)
+        local new_entry
+        new_entry=$(jq -n --arg name "$REPO_NAME" --arg ts "$CURRENT_TS" --arg log "$log_relative_path" \
+            '{name: $name, last_commit_ts: 0, last_failure_ts: ($ts | tonumber), last_failure_log: $log}')
+
+        if [ -n "$FAILURE_EXIT_CODE" ]; then
+            new_entry=$(echo "$new_entry" | jq --arg ec "$FAILURE_EXIT_CODE" '. + {last_failure_exit_code: ($ec | tonumber)}')
+        fi
+        if [ -n "$FAILURE_MESSAGE" ]; then
+            new_entry=$(echo "$new_entry" | jq --arg msg "$FAILURE_MESSAGE" '. + {last_failure_message: $msg}')
+        fi
+
+        jq --argjson new_repo "$new_entry" '.repos += [$new_repo]' \
+            "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
+        echo "Added repo '${REPO_NAME}' with failure at timestamp ${CURRENT_TS}"
+    fi
+}
+
+# Main logic: decide between success and failure modes
+if [ "$FAILED_MODE" = true ]; then
+    # Store the log file first
+    LOG_RELATIVE_PATH=$(store_failure_log)
+
+    # Update repos.json with failure info
+    update_repos_json_failure "$LOG_RELATIVE_PATH"
+
+    # Commit message for failures
+    COMMIT_MSG="Update repo health (failure): ${REPO_NAME}"
+else
+    # Success mode (original behaviour)
+    update_repos_json_success
+
+    # Commit message for successes
+    COMMIT_MSG="Update repo health: ${REPO_NAME}"
+fi
+
+# Skip git operations in dry-run mode
+if [ "$DRY_RUN" = true ]; then
+    exit 0
+fi
+
 # Handle git operations: pull first, then update repos.json, then commit/push
-# This handles updates from other machines and merge conflicts
 # Temporarily disable strict error handling for git operations to allow graceful recovery
 set +e
 cd "${PROJECT_ROOT}"
@@ -117,7 +400,7 @@ if git pull --quiet 2>/dev/null; then
 else
     # If pull fails, try to recover from merge conflicts
     echo "Warning: git pull failed, attempting to recover..."
-    
+
     # Check if we're in a merge state
     if [ -f "${PROJECT_ROOT}/.git/MERGE_HEAD" ]; then
         # Check if repos.json is conflicted
@@ -135,7 +418,7 @@ else
             GIT_PULL_SUCCESS=true
         fi
     fi
-    
+
     # If still not successful, check for rebase state
     if [ "$GIT_PULL_SUCCESS" = false ]; then
         if [ -d "${PROJECT_ROOT}/.git/rebase-apply" ] || [ -d "${PROJECT_ROOT}/.git/rebase-merge" ]; then
@@ -145,21 +428,35 @@ else
             fi
         fi
     fi
-    
+
     if [ "$GIT_PULL_SUCCESS" = false ]; then
         echo "Warning: Could not resolve git state, will attempt to update repos.json anyway"
     fi
 fi
 
-# Step 2: Now update repos.json with our timestamp (works with pulled version)
-update_repos_json
+# Step 2: Stage all changed files (repos.json and any log files)
+FILES_TO_ADD=("${REPOS_JSON}")
+if [ "$FAILED_MODE" = true ]; then
+    # Also stage the logs directory
+    TASK_SLUG=$(sanitise_task_slug "$REPO_NAME")
+    LOG_DIR="${PROJECT_ROOT}/docs/logs/${TASK_SLUG}"
+    if [ -d "$LOG_DIR" ]; then
+        FILES_TO_ADD+=("$LOG_DIR")
+    fi
+fi
 
-# Step 3: Stage, commit, and push
-if git add "${REPOS_JSON}" 2>/dev/null; then
-    # Check if there are changes to commit
+STAGED_SOMETHING=false
+for f in "${FILES_TO_ADD[@]}"; do
+    if git add "$f" 2>/dev/null; then
+        STAGED_SOMETHING=true
+    fi
+done
+
+# Step 3: Commit and push
+if [ "$STAGED_SOMETHING" = true ]; then
     if ! git diff --cached --quiet 2>/dev/null; then
         # Commit the changes
-        if git commit -m "Update repo health: ${REPO_NAME}" --quiet 2>/dev/null; then
+        if git commit -m "$COMMIT_MSG" --quiet 2>/dev/null; then
             # Push the changes with retries (handles transient network/auth failures)
             GIT_PUSH_MAX_ATTEMPTS=3
             GIT_PUSH_RETRY_DELAY=5
@@ -186,4 +483,3 @@ fi
 cd - > /dev/null
 # Re-enable strict error handling
 set -euo pipefail
-
