@@ -256,6 +256,8 @@ The "last updated" timestamp shown in the dashboard is calculated from the most 
 ./helpers/repos.sh "Quality" --failed --log /path/to/run.log --exit-code 1 --message "3 shellcheck errors"
 ```
 
+External task runners (e.g. a Quality gate in a worker repo) should follow the copy-paste patterns in [`helpers/REPO_HEALTH_SNIPPET.md`](helpers/REPO_HEALTH_SNIPPET.md), which documents both the inline if/else form and a sourceable `report_repo_health` helper that picks success vs. failure automatically from `$?`. See [Reporting failures with a log file](helpers/REPO_HEALTH_SNIPPET.md#reporting-failures-with-a-log-file) for the full caller contract (flags, public-log warning, retention).
+
 ### Enhanced Health Status Classification
 
 - **Healthy**: 
