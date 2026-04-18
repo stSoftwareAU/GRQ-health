@@ -1,29 +1,26 @@
 ## Summary
-Clarify the "High disk usage" warning message so that when a host is flagged due to hysteresis (current usage below 80% but previously above it), the message makes the reason explicit. Closes #84.
+Clarify the "High disk usage" warning message so it distinguishes between above-threshold and hysteresis-band cases. When disk usage is >= 80%, the message reads `High disk usage: X% (>= 80%)`. When in the hysteresis band (77–80%), it reads `High disk usage: X% (in hysteresis band, will clear at or below 77%)`. Threshold values are read from `THRESHOLDS` constants, not hardcoded. Closes #84.
 
-Added `buildDiskWarningMessage(diskPercent, wasPreviouslyWarning)` which returns:
-- **At or above threshold**: `High disk usage: X% (>= 80%)`
-- **In hysteresis band**: `High disk usage: X% (in hysteresis band, will clear at or below 77%)`
-- **Not in warning**: empty string
-
-Threshold values are read from `THRESHOLDS.DISK_WARNING_PERCENT` and `THRESHOLDS.DISK_WARNING_CLEAR_PERCENT` — nothing is hardcoded.
+## Changes
+- Added `buildDiskWarningMessage(diskPercent)` pure function in `docs/dashboard.js` (after `isDiskWarning`)
+- Updated the warning section renderer to call `buildDiskWarningMessage` instead of inline string
+- Bumped VERSION to 1.1.10 and ran `update_version.sh`
 
 ## Evidence
-This is a backend/dashboard logic change with no visual layout changes. The warning text is generated in JavaScript and rendered in the warning hosts section. Verified via 11 new unit tests covering both message branches, edge cases, and threshold usage.
+This is a backend/JS logic change with no new UI layout. The message text is verified by unit tests:
+- `High disk usage: 85.2% (>= 80%)` — above threshold
+- `High disk usage: 78.4% (in hysteresis band, will clear at or below 77%)` — in band
 
-All 30 quality checks pass (including the 11 new tests in `test-disk-warning-message.sh`).
+All 30 quality checks pass including 8 new tests.
 
 ## Test Plan
-- Added `tests/test-disk-warning-message.sh` with 11 tests:
+- Added `tests/test-disk-warning-message.sh` with 8 tests covering:
   - `function-exists` — `buildDiskWarningMessage` is defined
-  - `above-threshold-msg` — message includes disk% and trigger threshold
-  - `above-threshold-gte` — message contains `>=` symbol
-  - `hysteresis-msg` — hysteresis band message mentions "hysteresis"
-  - `hysteresis-clear-threshold` — hysteresis message includes the clear threshold
-  - `at-threshold-msg` — at exactly the threshold uses the above-threshold message
-  - `uses-thresholds` — messages reference THRESHOLDS constants, not hardcoded values
-  - `prefix-above` — above-threshold message starts with "High disk usage:"
-  - `prefix-band` — hysteresis message starts with "High disk usage:"
-  - `no-warning-empty` — returns empty string when not in warning state
-  - `band-no-prev-warning` — returns empty when in band but not previously warning
+  - `above-threshold-msg` — above-threshold message includes usage and trigger threshold
+  - `at-threshold-msg` — at exactly the threshold uses `>=` notation
+  - `hysteresis-band-msg` — hysteresis message explains hysteresis and includes clear threshold
+  - `hysteresis-shows-usage` — hysteresis message includes actual usage percentage
+  - `above-no-hysteresis` — above-threshold message does not mention hysteresis
+  - `dynamic-thresholds` — threshold values come from `THRESHOLDS` constants
+  - `prefix-consistent` — both message variants share consistent prefix
 - All existing tests continue to pass (`./quality.sh` — 30/30)

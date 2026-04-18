@@ -1,15 +1,15 @@
 #!/bin/bash
-# Test for Issue #84: Clarify high-disk warning message when caused by hysteresis
-# Verifies that the disk warning message distinguishes between above-threshold
-# and hysteresis-band cases.
+# Test for Issue #84: Disk warning message clarifies hysteresis
+# Verifies that the warning message distinguishes between above-threshold
+# and hysteresis-band cases, using dynamic threshold values.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/extract-functions.sh"
 
-echo "Testing Issue #84: Disk warning message clarity"
-echo "================================================="
+echo "Testing Issue #84: Disk warning message clarifies hysteresis"
+echo "============================================================="
 echo ""
 
 PASS_COUNT=0
@@ -26,126 +26,93 @@ fail_test() {
 }
 
 OUTPUT=$(run_js_test '
-// Test 1: buildDiskWarningMessage exists
+// Test 1: buildDiskWarningMessage function exists
 {
     if (typeof buildDiskWarningMessage === "function") {
-        console.log("TEST_RESULT:function-exists:PASS:buildDiskWarningMessage exists");
+        console.log("TEST_RESULT:function-exists:PASS:buildDiskWarningMessage function exists");
     } else {
-        console.log("TEST_RESULT:function-exists:FAIL:buildDiskWarningMessage not found");
+        console.log("TEST_RESULT:function-exists:FAIL:buildDiskWarningMessage function not found");
     }
 }
 
 // Test 2: Above threshold — message references the trigger threshold
 {
-    const msg = buildDiskWarningMessage(85, true);
+    const msg = buildDiskWarningMessage(85.2);
     const expected = THRESHOLDS.DISK_WARNING_PERCENT;
-    if (msg.includes(String(expected)) && msg.includes("85")) {
-        console.log("TEST_RESULT:above-threshold-msg:PASS:message includes disk% and threshold: " + msg);
+    if (msg.includes("85.2%") && msg.includes(String(expected) + "%")) {
+        console.log("TEST_RESULT:above-threshold-msg:PASS:message includes usage and threshold: " + msg);
     } else {
-        console.log("TEST_RESULT:above-threshold-msg:FAIL:expected threshold " + expected + " and 85 in message, got: " + msg);
+        console.log("TEST_RESULT:above-threshold-msg:FAIL:expected usage 85.2% and threshold " + expected + "% in message, got: " + msg);
     }
 }
 
-// Test 3: Above threshold — message contains >= symbol
+// Test 3: At exactly the threshold — message references the trigger threshold
 {
-    const msg = buildDiskWarningMessage(85, true);
-    if (msg.includes(">=")) {
-        console.log("TEST_RESULT:above-threshold-gte:PASS:message contains >= for above-threshold case");
+    const atThreshold = THRESHOLDS.DISK_WARNING_PERCENT;
+    const msg = buildDiskWarningMessage(atThreshold);
+    if (msg.includes(String(atThreshold) + "%") && msg.includes(">=" )) {
+        console.log("TEST_RESULT:at-threshold-msg:PASS:message at threshold: " + msg);
     } else {
-        console.log("TEST_RESULT:above-threshold-gte:FAIL:expected >= in message, got: " + msg);
+        console.log("TEST_RESULT:at-threshold-msg:FAIL:expected >= and threshold in message, got: " + msg);
     }
 }
 
-// Test 4: In hysteresis band — message mentions hysteresis
+// Test 4: In hysteresis band — message mentions hysteresis and clear threshold
 {
-    const midPoint = (THRESHOLDS.DISK_WARNING_PERCENT + THRESHOLDS.DISK_WARNING_CLEAR_PERCENT) / 2;
-    const msg = buildDiskWarningMessage(midPoint, true);
-    if (msg.toLowerCase().includes("hysteresis")) {
-        console.log("TEST_RESULT:hysteresis-msg:PASS:hysteresis band message mentions hysteresis: " + msg);
-    } else {
-        console.log("TEST_RESULT:hysteresis-msg:FAIL:expected hysteresis in message, got: " + msg);
-    }
-}
-
-// Test 5: In hysteresis band — message references the clear threshold
-{
-    const midPoint = (THRESHOLDS.DISK_WARNING_PERCENT + THRESHOLDS.DISK_WARNING_CLEAR_PERCENT) / 2;
-    const msg = buildDiskWarningMessage(midPoint, true);
+    const inBand = THRESHOLDS.DISK_WARNING_PERCENT - 1;
+    const msg = buildDiskWarningMessage(inBand);
     const clearThreshold = THRESHOLDS.DISK_WARNING_CLEAR_PERCENT;
-    if (msg.includes(String(clearThreshold))) {
-        console.log("TEST_RESULT:hysteresis-clear-threshold:PASS:hysteresis message includes clear threshold " + clearThreshold);
+    if (msg.includes("hysteresis") && msg.includes(String(clearThreshold) + "%")) {
+        console.log("TEST_RESULT:hysteresis-band-msg:PASS:message explains hysteresis: " + msg);
     } else {
-        console.log("TEST_RESULT:hysteresis-clear-threshold:FAIL:expected clear threshold " + clearThreshold + " in message, got: " + msg);
+        console.log("TEST_RESULT:hysteresis-band-msg:FAIL:expected hysteresis and clear threshold " + clearThreshold + "% in message, got: " + msg);
     }
 }
 
-// Test 6: At exactly the warning threshold — uses above-threshold message
+// Test 5: In hysteresis band — message includes actual usage percentage
 {
-    const msg = buildDiskWarningMessage(THRESHOLDS.DISK_WARNING_PERCENT, true);
-    if (msg.includes(">=") && !msg.toLowerCase().includes("hysteresis")) {
-        console.log("TEST_RESULT:at-threshold-msg:PASS:at threshold uses above-threshold message: " + msg);
+    const inBand = 78.4;
+    const msg = buildDiskWarningMessage(inBand);
+    if (msg.includes("78.4%")) {
+        console.log("TEST_RESULT:hysteresis-shows-usage:PASS:hysteresis message includes usage: " + msg);
     } else {
-        console.log("TEST_RESULT:at-threshold-msg:FAIL:at threshold should use above-threshold message, got: " + msg);
+        console.log("TEST_RESULT:hysteresis-shows-usage:FAIL:expected 78.4% in message, got: " + msg);
     }
 }
 
-// Test 7: Threshold values come from THRESHOLDS constants, not hardcoded
+// Test 6: Above threshold — message does NOT mention hysteresis
 {
-    const msg85 = buildDiskWarningMessage(85, true);
+    const msg = buildDiskWarningMessage(85);
+    if (!msg.includes("hysteresis")) {
+        console.log("TEST_RESULT:above-no-hysteresis:PASS:above-threshold message does not mention hysteresis");
+    } else {
+        console.log("TEST_RESULT:above-no-hysteresis:FAIL:above-threshold message should not mention hysteresis, got: " + msg);
+    }
+}
+
+// Test 7: Threshold values are dynamic (not hardcoded 80/77)
+{
+    const aboveMsg = buildDiskWarningMessage(90);
+    const bandMsg = buildDiskWarningMessage(THRESHOLDS.DISK_WARNING_PERCENT - 1);
     const warnPct = THRESHOLDS.DISK_WARNING_PERCENT;
     const clearPct = THRESHOLDS.DISK_WARNING_CLEAR_PERCENT;
-    const midPoint = (warnPct + clearPct) / 2;
-    const msgBand = buildDiskWarningMessage(midPoint, true);
-    // Verify the above-threshold message contains the warning threshold
-    const aboveOk = msg85.includes(String(warnPct));
-    // Verify the hysteresis message contains the clear threshold
-    const bandOk = msgBand.includes(String(clearPct));
+    const aboveOk = aboveMsg.includes(String(warnPct) + "%");
+    const bandOk = bandMsg.includes(String(clearPct) + "%");
     if (aboveOk && bandOk) {
-        console.log("TEST_RESULT:uses-thresholds:PASS:messages use THRESHOLDS constants (warn=" + warnPct + ", clear=" + clearPct + ")");
+        console.log("TEST_RESULT:dynamic-thresholds:PASS:messages use THRESHOLDS values " + warnPct + " and " + clearPct);
     } else {
-        console.log("TEST_RESULT:uses-thresholds:FAIL:messages should reference THRESHOLDS constants, above:" + msg85 + " band:" + msgBand);
+        console.log("TEST_RESULT:dynamic-thresholds:FAIL:messages should use dynamic thresholds, aboveOk=" + aboveOk + " bandOk=" + bandOk);
     }
 }
 
-// Test 8: Message starts with "High disk usage:" prefix
+// Test 8: Message always starts with "High disk usage:"
 {
-    const msg = buildDiskWarningMessage(85, true);
-    if (msg.startsWith("High disk usage:")) {
-        console.log("TEST_RESULT:prefix-above:PASS:above-threshold message starts with correct prefix");
+    const msg1 = buildDiskWarningMessage(85);
+    const msg2 = buildDiskWarningMessage(78);
+    if (msg1.startsWith("High disk usage:") && msg2.startsWith("High disk usage:")) {
+        console.log("TEST_RESULT:prefix-consistent:PASS:both messages start with High disk usage:");
     } else {
-        console.log("TEST_RESULT:prefix-above:FAIL:expected prefix High disk usage:, got: " + msg);
-    }
-}
-
-// Test 9: Hysteresis message also starts with "High disk usage:" prefix
-{
-    const midPoint = (THRESHOLDS.DISK_WARNING_PERCENT + THRESHOLDS.DISK_WARNING_CLEAR_PERCENT) / 2;
-    const msg = buildDiskWarningMessage(midPoint, true);
-    if (msg.startsWith("High disk usage:")) {
-        console.log("TEST_RESULT:prefix-band:PASS:hysteresis message starts with correct prefix");
-    } else {
-        console.log("TEST_RESULT:prefix-band:FAIL:expected prefix High disk usage:, got: " + msg);
-    }
-}
-
-// Test 10: Not in warning — returns empty string
-{
-    const msg = buildDiskWarningMessage(50, false);
-    if (msg === "") {
-        console.log("TEST_RESULT:no-warning-empty:PASS:returns empty when not in warning");
-    } else {
-        console.log("TEST_RESULT:no-warning-empty:FAIL:expected empty string, got: " + msg);
-    }
-}
-
-// Test 11: In hysteresis band but not previously warning — returns empty string
-{
-    const midPoint = (THRESHOLDS.DISK_WARNING_PERCENT + THRESHOLDS.DISK_WARNING_CLEAR_PERCENT) / 2;
-    const msg = buildDiskWarningMessage(midPoint, false);
-    if (msg === "") {
-        console.log("TEST_RESULT:band-no-prev-warning:PASS:returns empty when in band but not previously warning");
-    } else {
-        console.log("TEST_RESULT:band-no-prev-warning:FAIL:expected empty string for band without prev warning, got: " + msg);
+        console.log("TEST_RESULT:prefix-consistent:FAIL:messages should start with High disk usage:, got: [" + msg1 + "] and [" + msg2 + "]");
     }
 }
 ')
@@ -166,7 +133,7 @@ while IFS= read -r line; do
 done <<< "$OUTPUT"
 
 echo ""
-echo "================================================="
+echo "============================================================="
 echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
 
 if [ "$FAIL_COUNT" -gt 0 ]; then

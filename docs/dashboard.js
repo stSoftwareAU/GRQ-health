@@ -748,17 +748,13 @@ function isDiskWarning(diskPercent, wasPreviouslyWarning) {
     return !!wasPreviouslyWarning;
 }
 
-// Issue #84: Build a descriptive disk warning message that clarifies
-// whether the warning is from exceeding the threshold or from hysteresis.
-// Returns an empty string when the disk is not in a warning state.
-function buildDiskWarningMessage(diskPercent, wasPreviouslyWarning) {
-    if (!isDiskWarning(diskPercent, wasPreviouslyWarning)) {
-        return '';
-    }
+// Issue #84: Build a descriptive disk warning message that distinguishes
+// above-threshold from hysteresis-band cases.
+function buildDiskWarningMessage(diskPercent) {
     if (diskPercent >= THRESHOLDS.DISK_WARNING_PERCENT) {
         return `High disk usage: ${diskPercent}% (>= ${THRESHOLDS.DISK_WARNING_PERCENT}%)`;
     }
-    // In the hysteresis band — explain the behaviour
+    // In hysteresis band (below warning threshold but above clear threshold)
     return `High disk usage: ${diskPercent}% (in hysteresis band, will clear at or below ${THRESHOLDS.DISK_WARNING_CLEAR_PERCENT}%)`;
 }
 
@@ -1315,10 +1311,7 @@ function updateStats(hosts) {
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
             if (data.used_disk_percent && diskWarningState[hostname]) {
-                warningReason += buildDiskWarningMessage(
-                    parseFloat(data.used_disk_percent),
-                    true
-                );
+                warningReason += buildDiskWarningMessage(parseFloat(data.used_disk_percent));
             }
             if (data.config_warning) {
                 if (warningReason) warningReason += ', ';
