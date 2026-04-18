@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.9";
+const VERSION = "1.1.10";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -748,6 +748,16 @@ function isDiskWarning(diskPercent, wasPreviouslyWarning) {
     return !!wasPreviouslyWarning;
 }
 
+// Issue #84: Build a descriptive disk warning message that distinguishes
+// above-threshold from hysteresis-band cases.
+function buildDiskWarningMessage(diskPercent) {
+    if (diskPercent >= THRESHOLDS.DISK_WARNING_PERCENT) {
+        return `High disk usage: ${diskPercent}% (>= ${THRESHOLDS.DISK_WARNING_PERCENT}%)`;
+    }
+    // In hysteresis band (below warning threshold but above clear threshold)
+    return `High disk usage: ${diskPercent}% (in hysteresis band, will clear at or below ${THRESHOLDS.DISK_WARNING_CLEAR_PERCENT}%)`;
+}
+
 function getHealthStatus(_hostname, data, options) {
     // Check if this is a dead machine
     if (data.death_date) {
@@ -1301,7 +1311,7 @@ function updateStats(hosts) {
         const warningHtml = warningHosts.map(([hostname, data]) => {
             let warningReason = '';
             if (data.used_disk_percent && diskWarningState[hostname]) {
-                warningReason += `High disk usage: ${data.used_disk_percent}%`;
+                warningReason += buildDiskWarningMessage(parseFloat(data.used_disk_percent));
             }
             if (data.config_warning) {
                 if (warningReason) warningReason += ', ';
