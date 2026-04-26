@@ -453,27 +453,82 @@ for f in "${FILES_TO_ADD[@]}"; do
 done
 
 # Step 3: Commit and push
+# Issue #1862: When git push fails, the most common cause is non-fast-forward
+# (the remote moved on while we were preparing our commit). Between push
+# retries we attempt a fetch + rebase --autostash so the next push has a
+# chance to fast-forward. If the rebase conflicts on repos.json, abort and
+# reset to the remote — repos.json is a regenerated artefact and stale
+# conflicts are safe to discard. On final failure we surface the actual
+# `git push` stderr plus `git status --porcelain=v2 --branch` so operators
+# can diagnose the real cause instead of seeing a generic warning.
 if [ "$STAGED_SOMETHING" = true ]; then
     if ! git diff --cached --quiet 2>/dev/null; then
         # Commit the changes
         if git commit -m "$COMMIT_MSG" --quiet 2>/dev/null; then
-            # Push the changes with retries (handles transient network/auth failures)
             GIT_PUSH_MAX_ATTEMPTS=3
-            GIT_PUSH_RETRY_DELAY=5
+            # Allow tests to drive the loop without sleeping.
+            GIT_PUSH_RETRY_DELAY="${GIT_PUSH_RETRY_DELAY_OVERRIDE:-5}"
             GIT_PUSH_SUCCESS=false
+            LAST_PUSH_STDERR=""
+            PUSH_STDERR_FILE=$(mktemp 2>/dev/null || echo "/tmp/repos_push_stderr.$$")
+
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
             for attempt in $(seq 1 "$GIT_PUSH_MAX_ATTEMPTS"); do
-                if git push --quiet 2>/dev/null; then
+                : > "$PUSH_STDERR_FILE"
+                if git push --quiet 2>"$PUSH_STDERR_FILE"; then
                     GIT_PUSH_SUCCESS=true
                     break
                 fi
+                LAST_PUSH_STDERR=$(cat "$PUSH_STDERR_FILE" 2>/dev/null || echo "")
+
                 if [ "$attempt" -lt "$GIT_PUSH_MAX_ATTEMPTS" ]; then
-                    echo "Warning: git push failed (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}), retrying in ${GIT_PUSH_RETRY_DELAY}s..."
+                    echo "Warning: git push failed (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}): ${LAST_PUSH_STDERR}"
+
+                    # Try to recover from non-fast-forward via fetch + rebase
+                    # before the next attempt. Skip if we are not on a named
+                    # branch — there is nothing to rebase onto in detached HEAD.
+                    if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
+                        if git fetch --quiet origin "$CURRENT_BRANCH" 2>/dev/null; then
+                            if git rebase --autostash "origin/${CURRENT_BRANCH}" 2>/dev/null; then
+                                echo "Info: rebased onto origin/${CURRENT_BRANCH}, retrying push"
+                            else
+                                # Rebase failed — almost always a conflict on
+                                # repos.json. The repo is a regenerated
+                                # artefact, so the safe move is to abort and
+                                # reset to remote, discarding our stale local
+                                # commit. The next scheduled run will record
+                                # the latest timestamp again.
+                                echo "Warning: rebase onto origin/${CURRENT_BRANCH} failed; discarding stale local commit and resetting to remote"
+                                git rebase --abort 2>/dev/null || true
+                                rm -rf .git/rebase-merge .git/rebase-apply 2>/dev/null || true
+                                git reset --hard "origin/${CURRENT_BRANCH}" 2>/dev/null || true
+                                # Nothing left to push — exit the retry loop
+                                # cleanly. A subsequent run will re-record the
+                                # timestamp.
+                                GIT_PUSH_SUCCESS=true
+                                break
+                            fi
+                        else
+                            echo "Warning: git fetch origin ${CURRENT_BRANCH} failed; cannot rebase before retry"
+                        fi
+                    fi
+
                     sleep "$GIT_PUSH_RETRY_DELAY"
                 fi
             done
+
             if [ "$GIT_PUSH_SUCCESS" = false ]; then
                 echo "Warning: git push failed after ${GIT_PUSH_MAX_ATTEMPTS} attempts, but local changes are committed"
+                if [ -n "$LAST_PUSH_STDERR" ]; then
+                    echo "Last git push stderr:"
+                    echo "$LAST_PUSH_STDERR" | sed 's/^/  /'
+                fi
+                echo "Branch status (git status --porcelain=v2 --branch):"
+                git status --porcelain=v2 --branch 2>&1 | sed 's/^/  /' || true
             fi
+
+            rm -f "$PUSH_STDERR_FILE" 2>/dev/null || true
         else
             echo "Warning: git commit failed (may be no changes or commit error)"
         fi
