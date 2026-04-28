@@ -530,6 +530,101 @@ When making code changes, you must:
 2. Run `./update_version.sh` to automatically update version numbers in all HTML and JavaScript files
 3. This ensures version consistency across the entire project
 
+## Dependency Maintenance
+
+Third-party GitHub Actions are pinned to commit SHAs and refreshed by an
+automated weekly job. The flow looks like:
+
+```mermaid
+flowchart LR
+    A[Cron: Mon 06:00 UTC] --> B[bump-deps.sh]
+    B --> C{Audit gate<br/>./quality.sh}
+    C -- pass --> D[PR on chore/bump-deps]
+    C -- fail --> E[Worker reverts]
+```
+
+### SHA pinning convention
+
+Every `uses:` line in `.github/workflows/*.yml` is pinned to a 40-char
+commit SHA, with the human-readable version recorded as a trailing
+comment. Never replace the SHA with a moving tag (e.g. `@v4`) — pinning
+to a SHA defends against supply-chain attacks where a release tag is
+re-pointed at malicious code. When the SHA is bumped, update the `# vX.Y.Z`
+comment in lock-step so reviewers can see the version change at a glance.
+
+```yaml
+- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+```
+
+### `bump-deps.sh`
+
+`./bump-deps.sh` walks every `uses:` line in `.github/workflows/*.yml`,
+resolves each action's latest release tag to its commit SHA, and rewrites
+the SHA + version comment in place. After applying bumps it runs
+`./quality.sh` as the audit gate; any failure exits non-zero so the
+worker can revert the change.
+
+Flags:
+
+- `--dry-run` — print the planned bumps without writing files; the audit
+  gate is skipped.
+- `--quarantine-hours <H>` — override `VIBE_BUMP_QUARANTINE_HOURS` for
+  this run. Must be a non-negative integer.
+- `--help`, `-h` — print full usage and exit.
+
+Run a manual bump locally:
+
+```bash
+# Preview the bumps without touching files
+./bump-deps.sh --dry-run
+
+# Apply bumps and run the audit gate
+./bump-deps.sh
+
+# Use a longer quarantine window (e.g. 72h)
+./bump-deps.sh --quarantine-hours 72
+```
+
+### Scheduled workflow
+
+`.github/workflows/bump-deps.yml` runs `./bump-deps.sh` on a weekly
+schedule at **06:00 UTC every Monday** — outside Australian business
+hours so any resulting PR is ready at the start of the week. It can also
+be triggered on demand via `workflow_dispatch` from the Actions tab.
+
+The workflow opens (or updates) a PR titled `chore: bump GitHub Action
+SHAs` on branch `chore/bump-deps`. It does not run on `pull_request` so
+the PR does not retrigger itself.
+
+### Quarantine policy
+
+External actions are quarantined to dodge fast-flagged supply-chain
+attacks: a release is only eligible to be bumped once it is at least
+`VIBE_BUMP_QUARANTINE_HOURS` old (default 24 hours). Internal actions
+under `stSoftwareAU/*` skip the quarantine and bump immediately, since
+we control the upstream.
+
+### Audit gate
+
+After applying bumps, `bump-deps.sh` invokes `./quality.sh` as the audit
+gate. If quality checks fail, the script exits non-zero and prints the
+offending bump diff so the worker can revert the change per the
+VibeCoding #1613 contract. The scheduled workflow only opens a PR when
+the audit gate passes.
+
+### Reviewer responsibilities
+
+Before merging an auto-generated `chore: bump GitHub Action SHAs` PR:
+
+- Confirm each new 40-char SHA matches the release tag listed in the
+  trailing `# vX.Y.Z` comment (spot-check on GitHub).
+- Confirm only `.github/workflows/*.yml` files changed — no unrelated
+  edits should appear.
+- Confirm CI is green; the audit gate has already run, but a fresh CI
+  run on the PR branch catches any flakiness.
+- For any new external action, confirm the upstream repository looks
+  legitimate (recent activity, real maintainer, not a typosquat).
+
 ## License
 
 This project is open source. Feel free to modify and distribute as needed.
