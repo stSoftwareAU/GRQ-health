@@ -1,0 +1,85 @@
+name: Bump Dependencies
+
+# Supply-chain policy: every third-party action is pinned to a 40-char
+# commit SHA with the human-readable version recorded as a trailing
+# comment. Do not replace the SHA with a moving tag (e.g. @v4) when
+# bumping versions — resolve the new tag to its commit SHA and update
+# both the SHA and the trailing # vX.Y.Z comment in lock-step.
+# See issue #93 / VibeCoding #1613.
+#
+# This workflow runs ./bump-deps.sh on a weekly schedule (06:00 UTC
+# Mondays — outside Australian business hours so any resulting PR is
+# ready at the start of the week) and on demand via workflow_dispatch.
+# It opens (or updates) a PR titled "chore: bump GitHub Action SHAs"
+# on branch chore/bump-deps. The workflow does not run on
+# pull_request to avoid re-triggering itself when the PR is opened.
+# See issue #95 / parent #88.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-deps:
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout v6.0.2 — pinned to commit SHA per supply-chain policy
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify jq is available
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "jq not found on runner — installing"
+            sudo apt-get update -y
+            sudo apt-get install -y jq
+          fi
+          jq --version
+
+      - name: Run bump-deps.sh
+        id: bump
+        # Audit gate inside bump-deps.sh must succeed for this step to pass.
+        # Failures are surfaced loudly — the workflow fails so a human notices.
+        run: |
+          set -euo pipefail
+          # Capture stdout for the PR body. Stderr is left to flow to the
+          # workflow log so audit-gate failures stay visible.
+          ./bump-deps.sh | tee bump-deps.out
+          {
+            echo 'output<<BUMP_EOF'
+            cat bump-deps.out
+            echo 'BUMP_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # peter-evans/create-pull-request v8.1.1 — pinned to commit SHA per supply-chain policy
+      - name: Open or update bump PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          commit-message: "chore: bump GitHub Action SHAs"
+          title: "chore: bump GitHub Action SHAs"
+          branch: chore/bump-deps
+          delete-branch: true
+          body: |
+            Automated dependency bump produced by `.github/workflows/bump-deps.yml`,
+            which runs `./bump-deps.sh` weekly (06:00 UTC Mondays) and on demand.
+
+            The script walks every `uses:` line in `.github/workflows/*.yml`,
+            classifies each action as internal (`stSoftwareAU/*`, bumped
+            immediately) or external (quarantined for `VIBE_BUMP_QUARANTINE_HOURS`,
+            default 24h), then resolves the latest release tag to a 40-char
+            commit SHA and rewrites the SHA + trailing `# vX.Y.Z` comment in
+            lock-step. The workflow's audit gate (`./quality.sh` inside
+            `bump-deps.sh`) must pass before this PR is opened.
+
+            Bumped actions:
+
+            ```
+            ${{ steps.bump.outputs.output }}
+            ```
+
+            Part of #88. See `bump-deps.sh` for the full contract.
