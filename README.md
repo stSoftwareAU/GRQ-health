@@ -228,6 +228,19 @@ The dashboard calculates status from `last_commit_ts`:
 
 **Weekend-aware repos (Issue #67)**: Repos that only receive data on weekdays (e.g., FX market feeds that run Monday–Friday) can set `"business_days_only": true` to skip weekends when calculating staleness, even with explicit thresholds. Without this flag, explicit thresholds count calendar days/hours. With it, only business days are counted, preventing false alarms on Monday mornings.
 
+**Hour-grain thresholds (Issue #105)**: Repos that report frequently — for example Vibe Coders that should check in every hour — can specify `warning_hours` and/or `error_hours` instead of (or in addition to) the day-based thresholds. When either hour field is set it takes precedence over `warning_days`/`error_days`, and the elapsed time is compared in calendar hours so dead workers are flagged within hours rather than waiting ~24h for the day-grain check.
+
+```json
+{
+  "name": "Vibe Coder:GRQ-23",
+  "last_commit_ts": 1777588547,
+  "warning_hours": 2,
+  "error_hours": 4
+}
+```
+
+In the example above the worker is flagged as `warning` after 2 hours of silence and `error` after 4 hours.
+
 **Task failure tracking (Issue #76)**: Each repo entry can optionally include failure fields to record the most recent failed run:
 - `last_failure_ts` — Unix timestamp of the last failure
 - `last_failure_log` — path to the stored log file, relative to `docs/` (e.g., `logs/Quality/20260417-013200.log`)
