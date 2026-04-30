@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.10";
+const VERSION = "1.1.11";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -323,6 +323,8 @@ function getRepoStatus(repo, nowTs) {
     // Repos using defaults skip weekends (business days only) — Issue #47.
     // Repos with business_days_only: true skip weekends even with explicit thresholds — Issue #67.
     // Repos with a recent last_failure_ts return 'failed' — Issue #77.
+    // Repos with warning_hours/error_hours use sub-day calendar hours — Issue #105
+    // (e.g. Vibe Coders that should check in every hour).
     if (!repo) {
         return 'error';
     }
@@ -336,12 +338,33 @@ function getRepoStatus(repo, nowTs) {
         return 'error'; // No timestamp or invalid repo means error
     }
 
+    const now = nowTs || Math.floor(Date.now() / 1000);
+
+    // Issue #105: hour-grain thresholds win over day-grain thresholds when set.
+    // This lets repos with high heartbeat frequency (e.g. Vibe Coders that
+    // check in every hour) be flagged within hours of going stale, instead of
+    // waiting for the day-grain default to elapse.
+    if (repo.warning_hours !== undefined || repo.error_hours !== undefined) {
+        const warningHours = repo.warning_hours !== undefined
+            ? repo.warning_hours
+            : (repo.warning_days !== undefined ? repo.warning_days * 24 : 24);
+        const errorHours = repo.error_hours !== undefined
+            ? repo.error_hours
+            : (repo.error_days !== undefined ? repo.error_days * 24 : 48);
+        const hoursSinceCommit = (now - repo.last_commit_ts) / 3600;
+        if (hoursSinceCommit > errorHours) {
+            return 'error';
+        } else if (hoursSinceCommit > warningHours) {
+            return 'warning';
+        } else {
+            return 'healthy';
+        }
+    }
+
     const hasExplicitThresholds = repo.warning_days !== undefined || repo.error_days !== undefined;
     const useBusinessDays = repo.business_days_only === true;
     const warningDays = repo.warning_days !== undefined ? repo.warning_days : 1;
     const errorDays = repo.error_days !== undefined ? repo.error_days : 2;
-
-    const now = nowTs || Math.floor(Date.now() / 1000);
 
     if (hasExplicitThresholds && !useBusinessDays) {
         // Explicit thresholds without business_days_only: use calendar hours
