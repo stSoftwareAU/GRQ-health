@@ -234,12 +234,12 @@ The dashboard calculates status from `last_commit_ts`:
 {
   "name": "Vibe Coder:GRQ-23",
   "last_commit_ts": 1777588547,
-  "warning_hours": 2,
-  "error_hours": 4
+  "warning_hours": 4,
+  "error_hours": 8
 }
 ```
 
-In the example above the worker is flagged as `warning` after 2 hours of silence and `error` after 4 hours.
+**Vibe Coder 8-hour dead threshold (Issue #112)**: Vibe Coders call `helpers/repos.sh` frequently while alive; the rate limit in `repos.sh` keeps the heartbeat to at most one update per hour. So if the heartbeat is more than 8 hours old, the worker is dead and the dashboard flags it as `error`. The default Vibe Coder configuration is `warning_hours: 4`, `error_hours: 8`.
 
 **Task failure tracking (Issue #76)**: Each repo entry can optionally include failure fields to record the most recent failed run:
 - `last_failure_ts` — Unix timestamp of the last failure
