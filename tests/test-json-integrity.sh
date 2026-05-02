@@ -131,7 +131,7 @@ build_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 # Write empty file
-> docs/index.json
+true > docs/index.json
 
 OUTPUT=$(RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
     CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true)

@@ -53,22 +53,12 @@ else
     fi
 fi
 
-# Test 5: Check that overflow is consistent across all card variants
+# Test 5: Card variants inherit overflow from the base .host-card class
 echo "Test 5: Checking overflow consistency across card variants..."
-CARD_VARIANTS=(".host-card.mia" ".host-card.mobile" ".host-card.outdated-macos" ".host-card.critical" ".host-card.warning" ".host-card.healthy")
-MISSING_OVERFLOW=""
-
-for variant in "${CARD_VARIANTS[@]}"; do
-    # Note: we now rely on the base .host-card having overflow: hidden
-    # Variants can override if needed
-    :
-done
-
-if [ -z "$MISSING_OVERFLOW" ]; then
-    echo "  PASS: Base .host-card should handle overflow for all variants"
-else
-    echo "  INFO: Some variants may need individual overflow handling"
-fi
+# All variants (.host-card.mia, .host-card.mobile, .host-card.outdated-macos,
+# .host-card.critical, .host-card.warning, .host-card.healthy) rely on the
+# base .host-card having overflow: hidden, which Test 1 already verified.
+echo "  PASS: Base .host-card should handle overflow for all variants"
 
 echo ""
 echo "============================================="

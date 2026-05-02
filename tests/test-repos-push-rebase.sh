@@ -254,7 +254,6 @@ OUTPUT3=$(cd "$TEST3_WORK" && GIT_PUSH_RETRY_DELAY_OVERRIDE=0 \
 
 # After the conflict-and-discard recovery, the working clone must NOT have
 # a backlog of unpushed commits relative to remote main.
-REMOTE_MAIN=$(cd "$TEST3_REMOTE" && git rev-parse main 2>/dev/null || echo "")
 (cd "$TEST3_WORK" && git fetch --quiet 2>/dev/null || true)
 UNPUSHED3=$(cd "$TEST3_WORK" && git rev-list --count "origin/main..HEAD" 2>/dev/null || echo "?")
 
