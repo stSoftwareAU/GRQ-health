@@ -49,12 +49,17 @@ EOF
 HOME="$WORK_DIR"
 mkdir -p "$WORK_DIR/logs"
 cp "$LOG_FILE" "$WORK_DIR/logs/node.log"
+# NODE_PID is read by the eval'd scan_log_errors function from run.sh
+# shellcheck disable=SC2034
 NODE_PID=""
 scan_log_errors
 
+# exception_count and exception_summary are set as globals inside scan_log_errors
+# shellcheck disable=SC2154
 if [ "$exception_count" -eq 0 ]; then
     pass_test "Cache file not found is not flagged as error (count=$exception_count)"
 else
+    # shellcheck disable=SC2154
     fail_test "Cache file not found was falsely flagged: $exception_summary"
 fi
 

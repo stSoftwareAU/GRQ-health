@@ -60,7 +60,10 @@ cd "$REPO_DIR"
 
 # Source run.sh functions but don't execute main
 HOSTNAME="TEST-HOST"
+# CURRENT_TS and NO_GIT are read by the eval'd commit_and_push function from run.sh
+# shellcheck disable=SC2034
 CURRENT_TS=$(date +%s)
+# shellcheck disable=SC2034
 NO_GIT=false
 # Source just the commit_and_push function
 eval "$(sed -n '/^commit_and_push()/,/^}/p' "$RUN_SH")"
@@ -162,6 +165,8 @@ sed -i.bak "s|PLACEHOLDER_COUNT_FILE|${PUSH_COUNT_FILE3}|g" "${MOCK_BIN3}/git"
 sed -i.bak "s|PLACEHOLDER_REAL_GIT|${REAL_GIT}|g" "${MOCK_BIN3}/git"
 chmod +x "${MOCK_BIN3}/git"
 
+# CURRENT_TS is read by the eval'd commit_and_push function from run.sh
+# shellcheck disable=SC2034
 CURRENT_TS=$(date +%s)
 eval "$(sed -n '/^commit_and_push()/,/^}/p' "$RUN_SH")"
 

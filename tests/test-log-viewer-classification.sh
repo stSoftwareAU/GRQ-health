@@ -5,8 +5,6 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_VIEWER="$SCRIPT_DIR/../docs/log-viewer.html"
 DENO="$HOME/.deno/bin/deno"
 
 echo "Testing Issue #29: Log line classification"
