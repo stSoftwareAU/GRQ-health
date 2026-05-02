@@ -41,6 +41,8 @@ echo "------------------------------------"
 echo "Test 1: MemoryMonitor warning lines are excluded..."
 HOME="$WORK_DIR"
 mkdir -p "$WORK_DIR/logs"
+# NODE_PID is read by the eval'd scan_log_errors function from run.sh
+# shellcheck disable=SC2034
 NODE_PID=""
 cat > "$WORK_DIR/logs/node.log" << 'EOF'
 run_core pid=20689 start=Sat Mar  7 21:30:59 AEDT 2026
@@ -54,9 +56,12 @@ EOF
 
 scan_log_errors
 
+# exception_count and exception_summary are set as globals inside scan_log_errors
+# shellcheck disable=SC2154
 if [ "$exception_count" -eq 0 ]; then
     pass_test "MemoryMonitor-only log has zero errors (count=$exception_count)"
 else
+    # shellcheck disable=SC2154
     fail_test "MemoryMonitor lines were falsely flagged: $exception_summary"
 fi
 
