@@ -30,6 +30,13 @@ LOG_RETENTION_COUNT=5
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Source shared git retry helpers (Issue #117).
+# shellcheck source=./git-retry.sh
+if [ -f "${SCRIPT_DIR}/git-retry.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${SCRIPT_DIR}/git-retry.sh"
+fi
+
 # Validate repo name: alphanumeric, hyphens, underscores, periods, colons, forward slashes, spaces
 validate_repo_name() {
     local name="$1"
@@ -453,21 +460,31 @@ for f in "${FILES_TO_ADD[@]}"; do
 done
 
 # Step 3: Commit and push
-# Issue #1862: When git push fails, the most common cause is non-fast-forward
-# (the remote moved on while we were preparing our commit). Between push
-# retries we attempt a fetch + rebase --autostash so the next push has a
-# chance to fast-forward. If the rebase conflicts on repos.json, abort and
-# reset to the remote — repos.json is a regenerated artefact and stale
-# conflicts are safe to discard. On final failure we surface the actual
-# `git push` stderr plus `git status --porcelain=v2 --branch` so operators
-# can diagnose the real cause instead of seeing a generic warning.
+# Issue #117 + #1862: Push retries use exponential backoff (default 1s, 4s,
+# 16s) and wrap each git call in a 120s timeout to handle slow networks.
+# A non-fast-forward failure is recovered by fetch + rebase --autostash so
+# the next push can fast-forward. If the rebase conflicts on repos.json we
+# abort and reset to the remote — repos.json is a regenerated artefact, so
+# discarding the stale local commit is safe. A GitHub rate-limit response
+# (HTTP 429 / abuse detection / "rate limit" in stderr) triggers a sleep
+# until the reset window (probed via `gh api rate_limit` when available)
+# before the next attempt. When all retries are exhausted we reset the
+# local clone to origin/<branch> + clean -fd so the next service update
+# does not commit on top of a stale unpushed commit (which would falsely
+# mark the previous service as alive), surface the actual stderr, and exit
+# non-zero so the failure itself is observable.
+PUSH_FINAL_STATUS=0
 if [ "$STAGED_SOMETHING" = true ]; then
     if ! git diff --cached --quiet 2>/dev/null; then
         # Commit the changes
         if git commit -m "$COMMIT_MSG" --quiet 2>/dev/null; then
-            GIT_PUSH_MAX_ATTEMPTS=3
-            # Allow tests to drive the loop without sleeping.
-            GIT_PUSH_RETRY_DELAY="${GIT_PUSH_RETRY_DELAY_OVERRIDE:-5}"
+            # Backoff defaults from git-retry.sh; legacy
+            # GIT_PUSH_RETRY_DELAY_OVERRIDE still honoured (back-compat).
+            BACKOFF_DELAYS_RAW=$(grq_backoff_delays 2>/dev/null || echo "1 4 16")
+            # shellcheck disable=SC2206
+            BACKOFF_DELAYS=( $BACKOFF_DELAYS_RAW )
+            GIT_PUSH_MAX_ATTEMPTS=$(grq_max_push_attempts 2>/dev/null || echo 3)
+            LEGACY_DELAY="${GIT_PUSH_RETRY_DELAY_OVERRIDE:-}"
             GIT_PUSH_SUCCESS=false
             LAST_PUSH_STDERR=""
             PUSH_STDERR_FILE=$(mktemp 2>/dev/null || echo "/tmp/repos_push_stderr.$$")
@@ -476,11 +493,25 @@ if [ "$STAGED_SOMETHING" = true ]; then
 
             for attempt in $(seq 1 "$GIT_PUSH_MAX_ATTEMPTS"); do
                 : > "$PUSH_STDERR_FILE"
-                if git push --quiet 2>"$PUSH_STDERR_FILE"; then
+                if grq_run_git push --quiet 2>"$PUSH_STDERR_FILE"; then
                     GIT_PUSH_SUCCESS=true
                     break
                 fi
                 LAST_PUSH_STDERR=$(cat "$PUSH_STDERR_FILE" 2>/dev/null || echo "")
+
+                # Decide the inter-attempt sleep up-front so rate-limit
+                # responses can override the standard backoff.
+                IDX=$((attempt - 1))
+                BACKOFF_SECS="${BACKOFF_DELAYS[$IDX]:-${BACKOFF_DELAYS[-1]}}"
+                if [ -n "$LEGACY_DELAY" ]; then
+                    BACKOFF_SECS="$LEGACY_DELAY"
+                fi
+                SLEEP_SECS="$BACKOFF_SECS"
+
+                if echo "$LAST_PUSH_STDERR" | grq_is_rate_limit_error; then
+                    SLEEP_SECS=$(grq_rate_limit_sleep_secs "$BACKOFF_SECS")
+                    echo "Warning: GitHub rate limit detected (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}); sleeping ${SLEEP_SECS}s before retry"
+                fi
 
                 if [ "$attempt" -lt "$GIT_PUSH_MAX_ATTEMPTS" ]; then
                     echo "Warning: git push failed (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}): ${LAST_PUSH_STDERR}"
@@ -489,8 +520,8 @@ if [ "$STAGED_SOMETHING" = true ]; then
                     # before the next attempt. Skip if we are not on a named
                     # branch — there is nothing to rebase onto in detached HEAD.
                     if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
-                        if git fetch --quiet origin "$CURRENT_BRANCH" 2>/dev/null; then
-                            if git rebase --autostash "origin/${CURRENT_BRANCH}" 2>/dev/null; then
+                        if grq_run_git fetch --quiet origin "$CURRENT_BRANCH" 2>/dev/null; then
+                            if grq_run_git rebase --autostash "origin/${CURRENT_BRANCH}" 2>/dev/null; then
                                 echo "Info: rebased onto origin/${CURRENT_BRANCH}, retrying push"
                             else
                                 # Rebase failed — almost always a conflict on
@@ -514,18 +545,28 @@ if [ "$STAGED_SOMETHING" = true ]; then
                         fi
                     fi
 
-                    sleep "$GIT_PUSH_RETRY_DELAY"
+                    sleep "$SLEEP_SECS"
                 fi
             done
 
             if [ "$GIT_PUSH_SUCCESS" = false ]; then
-                echo "Warning: git push failed after ${GIT_PUSH_MAX_ATTEMPTS} attempts, but local changes are committed"
+                echo "ERROR: git push failed after ${GIT_PUSH_MAX_ATTEMPTS} attempts"
                 if [ -n "$LAST_PUSH_STDERR" ]; then
                     echo "Last git push stderr:"
                     echo "$LAST_PUSH_STDERR" | sed 's/^/  /'
                 fi
                 echo "Branch status (git status --porcelain=v2 --branch):"
                 git status --porcelain=v2 --branch 2>&1 | sed 's/^/  /' || true
+
+                # Discard the stale local commit so the next service update
+                # does not commit on top of it (which would falsely mark
+                # the previous service as alive).
+                if grq_recover_to_remote 2>/dev/null; then
+                    echo "Info: reset local clone to origin/${CURRENT_BRANCH} and cleaned working tree"
+                else
+                    echo "Warning: failed to reset local clone to origin/${CURRENT_BRANCH}"
+                fi
+                PUSH_FINAL_STATUS=1
             fi
 
             rm -f "$PUSH_STDERR_FILE" 2>/dev/null || true
@@ -538,3 +579,8 @@ fi
 cd - > /dev/null
 # Re-enable strict error handling
 set -euo pipefail
+
+# Surface push failure as a non-zero exit so the worker can observe it.
+if [ "$PUSH_FINAL_STATUS" -ne 0 ]; then
+    exit "$PUSH_FINAL_STATUS"
+fi
