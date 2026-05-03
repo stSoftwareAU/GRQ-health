@@ -58,7 +58,10 @@ setup_diverged_clone() {
     mkdir -p "$upstream_dir/docs" "$upstream_dir/helpers"
     echo '{"repos": []}' > "$upstream_dir/docs/repos.json"
     cp "$REPOS_SCRIPT" "$upstream_dir/helpers/repos.sh"
-    chmod +x "$upstream_dir/helpers/repos.sh"
+    # Issue #117: repos.sh sources helpers/git-retry.sh for the push retry
+    # helpers (timeout wrapping, rate-limit detection, recovery).
+    cp "$SCRIPT_DIR/../helpers/git-retry.sh" "$upstream_dir/helpers/git-retry.sh"
+    chmod +x "$upstream_dir/helpers/repos.sh" "$upstream_dir/helpers/git-retry.sh"
     (
         cd "$upstream_dir"
         git add docs helpers >/dev/null 2>&1
@@ -219,7 +222,9 @@ git clone --quiet "$TEST3_REMOTE" "$TEST3_UPSTREAM" >/dev/null 2>&1
 mkdir -p "$TEST3_UPSTREAM/docs" "$TEST3_UPSTREAM/helpers"
 echo '{"repos": []}' > "$TEST3_UPSTREAM/docs/repos.json"
 cp "$REPOS_SCRIPT" "$TEST3_UPSTREAM/helpers/repos.sh"
-chmod +x "$TEST3_UPSTREAM/helpers/repos.sh"
+# Issue #117: repos.sh sources helpers/git-retry.sh.
+cp "$SCRIPT_DIR/../helpers/git-retry.sh" "$TEST3_UPSTREAM/helpers/git-retry.sh"
+chmod +x "$TEST3_UPSTREAM/helpers/repos.sh" "$TEST3_UPSTREAM/helpers/git-retry.sh"
 (
     cd "$TEST3_UPSTREAM"
     git add docs helpers >/dev/null 2>&1

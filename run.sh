@@ -12,6 +12,14 @@ BASE_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 cd "${BASE_DIR}"
 
+# Source shared git retry helpers (Issue #117) when present. They are
+# loaded eagerly so commit_and_push can use them and so the script remains
+# usable when the helpers directory has not yet been provisioned.
+if [ -f "${BASE_DIR}/helpers/git-retry.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${BASE_DIR}/helpers/git-retry.sh"
+fi
+
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
@@ -1008,43 +1016,104 @@ update_json() {
 }
 
 # Function to commit and push changes
+#
+# Issue #117: Push uses exponential backoff (default 1s, 4s, 16s) and wraps
+# every git call in a 120s timeout to handle slow networks. GitHub
+# rate-limit responses (429 / "rate limit" / abuse detection) trigger a
+# sleep until the rate-limit reset window (probed via `gh api rate_limit`
+# when available) before the next attempt. When all retries are exhausted
+# we surface the actual stderr, reset the local clone to origin/<branch>
+# + clean -fd (so the next service update does not commit on top of a
+# stale unpushed commit, which would falsely mark the previous service as
+# alive), and return non-zero so the failure itself is observable.
 commit_and_push() {
-    if [ -d ".git" ]; then
-        git add docs/
-        # Cross-platform date formatting
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS - use -r flag
-            commit_date=$(date -r $CURRENT_TS 2>/dev/null || date)
-        else
-            # Linux - use @timestamp format
-            commit_date=$(date -d "@$CURRENT_TS" 2>/dev/null || date)
-        fi
-        git commit -m "Update health status for $HOSTNAME at $commit_date" 2>/dev/null || true
-        
-        # Try to push with retry logic (Issue #51)
-        # Retries up to 3 times with a brief delay to handle transient failures
-        # (git conflicts, network blips) that would otherwise cause false critical alerts
-        local max_retries=3
-        local push_succeeded=false
-        for attempt in $(seq 1 "$max_retries"); do
-            if git push 2>/dev/null; then
-                echo "Changes pushed to remote repository"
-                push_succeeded=true
-                break
-            fi
-            if [ "$attempt" -lt "$max_retries" ]; then
-                echo "Push failed (attempt $attempt/$max_retries), retrying after pull --rebase..."
-                sleep 2
-                git pull --rebase 2>/dev/null || true
-            fi
-        done
-        if [ "$push_succeeded" = false ]; then
-            echo "Push failed after $max_retries attempts"
-        fi
-    else
+    if [ ! -d ".git" ]; then
         echo "Not a git repository, skipping commit/push"
         exit 1
     fi
+
+    git add docs/
+    # Cross-platform date formatting
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS - use -r flag
+        commit_date=$(date -r "$CURRENT_TS" 2>/dev/null || date)
+    else
+        # Linux - use @timestamp format
+        commit_date=$(date -d "@$CURRENT_TS" 2>/dev/null || date)
+    fi
+    git commit -m "Update health status for $HOSTNAME at $commit_date" 2>/dev/null || true
+
+    # Backoff defaults from helpers/git-retry.sh (1s, 4s, 16s).
+    local backoff_raw
+    backoff_raw=$(grq_backoff_delays 2>/dev/null || echo "1 4 16")
+    # shellcheck disable=SC2206
+    local backoff_delays=( $backoff_raw )
+    local max_retries
+    max_retries=$(grq_max_push_attempts 2>/dev/null || echo 3)
+
+    local push_succeeded=false
+    local last_push_stderr=""
+    local push_stderr_file
+    push_stderr_file=$(mktemp 2>/dev/null || echo "/tmp/run_push_stderr.$$")
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+    local attempt
+    for attempt in $(seq 1 "$max_retries"); do
+        : > "$push_stderr_file"
+        if grq_run_git push 2>"$push_stderr_file"; then
+            echo "Changes pushed to remote repository"
+            push_succeeded=true
+            break
+        fi
+        last_push_stderr=$(cat "$push_stderr_file" 2>/dev/null || echo "")
+
+        local idx=$((attempt - 1))
+        local backoff_secs="${backoff_delays[$idx]:-${backoff_delays[-1]}}"
+        local sleep_secs="$backoff_secs"
+
+        if echo "$last_push_stderr" | grq_is_rate_limit_error; then
+            sleep_secs=$(grq_rate_limit_sleep_secs "$backoff_secs")
+            echo "Warning: GitHub rate limit detected (attempt ${attempt}/${max_retries}); sleeping ${sleep_secs}s before retry"
+        fi
+
+        if [ "$attempt" -lt "$max_retries" ]; then
+            echo "Push failed (attempt ${attempt}/${max_retries}), retrying after pull --rebase: ${last_push_stderr}"
+            # Try a fetch + pull --rebase to recover from a non-fast-forward
+            # before the next attempt. Failures here are non-fatal — we will
+            # still retry the push.
+            if [ -n "$current_branch" ] && [ "$current_branch" != "HEAD" ]; then
+                grq_run_git fetch --quiet origin "$current_branch" 2>/dev/null || true
+            fi
+            grq_run_git pull --rebase --autostash 2>/dev/null || true
+            sleep "$sleep_secs"
+        fi
+    done
+
+    rm -f "$push_stderr_file" 2>/dev/null || true
+
+    if [ "$push_succeeded" = true ]; then
+        return 0
+    fi
+
+    echo "ERROR: Push failed after ${max_retries} attempts"
+    if [ -n "$last_push_stderr" ]; then
+        echo "Last git push stderr:"
+        echo "$last_push_stderr" | sed 's/^/  /'
+    fi
+    echo "Branch status (git status --porcelain=v2 --branch):"
+    git status --porcelain=v2 --branch 2>&1 | sed 's/^/  /' || true
+
+    # Reset the local clone to origin so the next service update does not
+    # commit on top of the stale unpushed commit (which would falsely mark
+    # the previous service as alive).
+    if grq_recover_to_remote 2>/dev/null; then
+        echo "Info: reset local clone to origin/${current_branch} and cleaned working tree"
+    else
+        echo "Warning: failed to reset local clone to origin/${current_branch}"
+    fi
+
+    return 1
 }
 
 # Main execution
