@@ -6,6 +6,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_SH="$SCRIPT_DIR/../run.sh"
+GIT_RETRY_LIB="$SCRIPT_DIR/../helpers/git-retry.sh"
+
+# Issue #117: commit_and_push now uses helpers from git-retry.sh
+# (grq_run_git, grq_backoff_delays, grq_recover_to_remote, etc.). Source
+# the library so the extracted function can find them.
+# shellcheck disable=SC1090
+. "$GIT_RETRY_LIB"
+
+# Speed the retry loop up for tests so we don't wait 1+4+16=21s per retry.
+export GRQ_PUSH_RETRY_DELAYS_OVERRIDE="0 0 0"
 
 echo "Testing Issue #51: Heartbeat push retry on failure"
 echo "==================================================="
@@ -170,7 +180,13 @@ chmod +x "${MOCK_BIN3}/git"
 CURRENT_TS=$(date +%s)
 eval "$(sed -n '/^commit_and_push()/,/^}/p' "$RUN_SH")"
 
+# Issue #117: commit_and_push now exits non-zero when all retries are
+# exhausted so the failure is observable. Capture both the output and the
+# exit code via `|| true` to keep `set -e` happy.
+set +e
 PATH="${MOCK_BIN3}:${PATH}" OUTPUT=$(commit_and_push 2>&1)
+COMMIT_PUSH_EXIT=$?
+set -e
 FINAL_PUSH_COUNT3=$(cat "$PUSH_COUNT_FILE3")
 
 if [ "$FINAL_PUSH_COUNT3" -ge 3 ]; then
@@ -183,6 +199,13 @@ if echo "$OUTPUT" | grep -qi "failed\|push failed"; then
     pass_test "Failure message logged after all retries exhausted"
 else
     fail_test "Expected failure message, got: $OUTPUT"
+fi
+
+# Issue #117: confirm the function returns non-zero when push is exhausted.
+if [ "$COMMIT_PUSH_EXIT" -ne 0 ]; then
+    pass_test "commit_and_push exits non-zero on exhausted retries (Issue #117)"
+else
+    fail_test "Expected non-zero exit on exhausted retries, got: $COMMIT_PUSH_EXIT"
 fi
 
 # Summary
