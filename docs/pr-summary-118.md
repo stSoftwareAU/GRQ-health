@@ -1,62 +1,43 @@
 ## Summary
 
-Raised the Vibe Coder staleness thresholds in `docs/repos.json` from
-`warning_hours: 2, error_hours: 4` to `warning_hours: 4, error_hours: 8`.
-A Vibe Coder routinely takes more than 2 hours to refine, build and
-test a single issue, so the previous 2-hour warning was firing on
-healthy workers mid-task. The new 4-hour warning matches the typical
-worst-case work cycle, and the 8-hour error matches the documented dead
-threshold from Issue #112 (also already documented in `README.md`).
+Raise the Vibe Coder warning threshold from 2 hours to 4 hours and the
+dead/error threshold from 4 hours to 8 hours, matching the documented
+behaviour in `README.md` and the existing dead-after-8h test (Issue #112).
 
-This brings the live `repos.json` back into line with the README and the
-existing `tests/test-vibe-coder-dead-after-8h.sh` test, which had been
-failing because the file had drifted to the more aggressive 2/4 values.
-
-Closes #118.
+The earlier 2-hour warning was firing on healthy Vibe Coders that were
+mid-task — refining, building, and testing a single issue can quietly
+burn well over an hour between heartbeats. Closes #118.
 
 ## Evidence
 
-Backend/CLI change — no UI to screenshot. Verified via tests.
+This is a backend/config change with no UI to screenshot. Verification
+is via the test suite:
+
+- Existing `tests/test-vibe-coder-dead-after-8h.sh` (Issue #112) was
+  already encoded with `error_hours = 8` but was failing because
+  `docs/repos.json` had drifted to `error_hours = 4`. After this change
+  it passes 6/6.
+- New `tests/test-vibe-coder-warning-4h.sh` enforces the 4-hour warning
+  threshold and asserts every `Vibe Coder:*` entry in `docs/repos.json`
+  has `warning_hours = 4`. Passes 6/6 after the change.
 
 ```mermaid
 flowchart LR
-    A[heartbeat 0h] --> B[under 4h: healthy]
-    B --> C[4h-8h: warning]
-    C --> D[over 8h: error/dead]
-```
-
-`tests/test-vibe-coder-warning-4h.sh` (new) — passes:
-
-```
-Test 1: Vibe Coder at 3h stays healthy (under new 4h warning)...
-  PASS: vibe-healthy-3h: 3h still healthy (under 4h)
-Test 2: Vibe Coder at 5h is warning (past 4h, before 8h dead)...
-  PASS: vibe-warning-5h: 5h is warning
-Test 3: repos.json Vibe Coder entries have warning_hours = 4...
-  PASS: Vibe Coder:GRQ-23 has warning_hours=4
-  PASS: Vibe Coder:GRQ-25 has warning_hours=4
-  PASS: Vibe Coder:Mac-Ultra-M2 has warning_hours=4
-  PASS: Vibe Coder:GRQ-3 has warning_hours=4
-Passed: 6  Failed: 0
-```
-
-`tests/test-vibe-coder-dead-after-8h.sh` (was failing on `error_hours`
-drift) — now passes:
-
-```
-Passed: 6  Failed: 0
+    A[Vibe Coder commits] --> B{Hours since heartbeat}
+    B -->|< 4h| C[healthy]
+    B -->|4h - 8h| D[warning]
+    B -->|> 8h| E[error / dead]
 ```
 
 ## Test Plan
 
 - Added `tests/test-vibe-coder-warning-4h.sh` covering:
-  - 3h-stale Vibe Coder is `healthy` (regression of the bug — used to
-    be `warning` under the 2h threshold).
-  - 5h-stale Vibe Coder is `warning`.
+  - 3h-stale Vibe Coder is still `healthy` under the new 4h warning.
+  - 5h-stale Vibe Coder is `warning` (past 4h, before 8h dead).
   - Every `Vibe Coder:*` entry in `docs/repos.json` has
     `warning_hours = 4`.
-- Re-ran existing `tests/test-vibe-coder-dead-after-8h.sh`
-  (`error_hours = 8` assertion now passes).
-- Ran `./quality.sh`. The single remaining failure
-  (`test-gitleaks-workflow`) is unrelated to this change and was
-  already failing before this PR.
+- Re-ran `tests/test-vibe-coder-dead-after-8h.sh` — now passes (was
+  failing before this change due to the `repos.json` drift).
+- Ran `./quality.sh` — the two remaining failures
+  (`test-gitleaks-workflow`, `test-scan-log-errors`) are pre-existing
+  and unrelated to this change.
