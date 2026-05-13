@@ -393,6 +393,50 @@ function getRepoStatus(repo, nowTs) {
     }
 }
 
+// Issue #121: A "Vibe Coder:<host>" row that is warning/error/failed while
+// the host itself is fresh is a different (more actionable) signal than the
+// host vanishing — the host is alive but the worker process on it has
+// silently stopped reporting. Surface that mismatch early so the 4h
+// warning threshold becomes useful, instead of waiting for the 8h error
+// threshold to trip.
+function findVibeCoderRepo(repos, hostname) {
+    if (!Array.isArray(repos) || !hostname) return null;
+    const target = `Vibe Coder:${hostname}`;
+    return repos.find((r) => r && r.name === target) || null;
+}
+
+// Worker repo states that indicate the worker has gone silent.
+function isWorkerSilentState(status) {
+    return status === 'warning' || status === 'error' || status === 'failed';
+}
+
+// Return descriptive info when the host's Vibe Coder repo is silent.
+// Callers decide whether the host's own heartbeat is fresh enough to
+// classify this as "worker silent on alive host" — this helper only
+// reports the worker repo state.
+function getWorkerSilentInfo(hostname, repos, nowTs) {
+    const repo = findVibeCoderRepo(repos, hostname);
+    if (!repo) return null;
+    const status = getRepoStatus(repo, nowTs);
+    if (!isWorkerSilentState(status)) return null;
+    return {
+        repoName: repo.name,
+        repoStatus: status,
+        lastCommitTs: Number(repo.last_commit_ts || 0)
+    };
+}
+
+// Build a short human-readable reason for the warning panel, e.g.
+// "Worker silent: Vibe Coder:GRQ-23 last reported 5h ago (warning)".
+function buildWorkerSilentWarning(hostname, repos, nowTs) {
+    const info = getWorkerSilentInfo(hostname, repos, nowTs);
+    if (!info) return '';
+    const when = info.lastCommitTs > 0
+        ? `last reported ${formatTimestamp(info.lastCommitTs)}`
+        : 'has never reported';
+    return `Worker silent: ${info.repoName} ${when} (${info.repoStatus})`;
+}
+
 // Issue #77: Build a safe URL to view the captured failure log. The stored
 // `last_failure_log` path is relative to the docs/ directory (e.g.
 // "logs/Quality/20260417-025717.log"), matching the repo layout produced by
@@ -1117,6 +1161,13 @@ function createHostCard(hostname, data) {
         }
     }
     
+    // Issue #121: Surface a "Worker silent" badge when the host's heartbeat
+    // is fresh but its Vibe Coder worker has gone quiet. This is the strong
+    // "alive host, dead worker" signal — distinct from a host that is offline.
+    const workerSilent = getCachedWorkerSilentInfo(hostname);
+    const workerSilentBadge = workerSilent
+        ? `<span class="badge bg-warning text-dark ms-2 worker-silent-badge" title="${escapeHtml(workerSilent.repoName)} ${escapeHtml(workerSilent.repoStatus)}" data-bs-toggle="tooltip" data-bs-placement="top"><i class="bi bi-robot"></i> Worker silent</span>`
+        : '';
     return `
         <div class="col-lg-6 col-xl-4">
             <div class="host-card ${statusClass}${mobileClass}${outdatedMacClass}" data-status="${healthStatus}" data-hostname="${escapeHtml(hostname)}">
@@ -1124,6 +1175,7 @@ function createHostCard(hostname, data) {
                     <h5 class="mb-0 d-flex align-items-center">
                         ${emoji} ${safeHostname}
                         ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${escapeHtml(data.machine_type)}</span>` : ''}
+                        ${workerSilentBadge}
                     </h5>
                     <span class="health-status ${statusClass}">${healthStatus}</span>
                 </div>
@@ -1195,13 +1247,32 @@ function createHostCard(hostname, data) {
 
 // Issue #49: Wrapper that applies disk hysteresis state tracking.
 // Call once per host per refresh cycle to update state, then use cached result.
+// Issue #121: Also tracks worker-silent state so a fresh host whose Vibe
+// Coder worker has gone quiet shows up as a warning instead of staying
+// silently healthy until the 8h error threshold trips.
 const _healthStatusCache = {};
+const _workerSilentCache = {};
 function refreshHealthStatuses(hosts) {
-    // Clear cache for new refresh cycle
+    // Clear caches for new refresh cycle
     Object.keys(_healthStatusCache).forEach(k => delete _healthStatusCache[k]);
+    Object.keys(_workerSilentCache).forEach(k => delete _workerSilentCache[k]);
+    const repos = Array.isArray(repoHealthData?.repos) ? repoHealthData.repos : [];
+    const nowTs = Math.floor(Date.now() / 1000);
     for (const [hostname, data] of hosts) {
         const opts = { diskWarningActive: !!diskWarningState[hostname] };
-        const status = getHealthStatus(hostname, data, opts);
+        let status = getHealthStatus(hostname, data, opts);
+        // Issue #121: A fresh host (healthy) whose worker is silent should be
+        // surfaced as a warning so the diagnostic signal is not delayed by
+        // the 8h error threshold. Only elevate from healthy — if the host is
+        // already in critical/mia/dead/warning, the existing classification
+        // is preserved.
+        const workerInfo = getWorkerSilentInfo(hostname, repos, nowTs);
+        if (workerInfo) {
+            _workerSilentCache[hostname] = workerInfo;
+            if (status === 'healthy') {
+                status = 'warning';
+            }
+        }
         _healthStatusCache[hostname] = status;
         // Update disk warning state for next cycle
         if (data.used_disk_percent) {
@@ -1211,6 +1282,10 @@ function refreshHealthStatuses(hosts) {
             );
         }
     }
+}
+
+function getCachedWorkerSilentInfo(hostname) {
+    return _workerSilentCache[hostname] || null;
 }
 
 function getCachedHealthStatus(hostname) {
@@ -1366,6 +1441,13 @@ function updateStats(hosts) {
             if (staleUserWarning) {
                 if (warningReason) warningReason += ', ';
                 warningReason += staleUserWarning;
+            }
+            // Issue #121: Worker silent on an otherwise-fresh host
+            const repos = Array.isArray(repoHealthData?.repos) ? repoHealthData.repos : [];
+            const workerSilentReason = buildWorkerSilentWarning(hostname, repos, now);
+            if (workerSilentReason) {
+                if (warningReason) warningReason += ', ';
+                warningReason += workerSilentReason;
             }
             return `<div class="warning-host-item">
                 <strong>${escapeHtml(hostname)}</strong> - ${escapeHtml(warningReason)}
