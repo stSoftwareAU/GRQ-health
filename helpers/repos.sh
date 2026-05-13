@@ -22,6 +22,16 @@ set -euo pipefail
 # Example:
 #   ./helpers/repos.sh "Dividends"
 #   ./helpers/repos.sh "Quality" --failed --log /tmp/run.log --exit-code 1 --message "lint errors"
+#
+# Status signalling (Issue #122):
+#   On every exit, a one-line machine-readable status is written to stderr:
+#     repos.sh status=<status> reason=<reason> name='<repo_name>'
+#   Statuses: skipped | updated | added | failed-recorded | failed | unknown
+#   Reasons : rate-limited | success | failure-recorded | push-failed |
+#             validation-failed | unknown
+#   Callers that suppress stdout (e.g. runWithTimeout(..., { quiet: true }))
+#   can capture stderr to distinguish pushed/skipped/failed outcomes
+#   without parsing localised user-facing messages.
 
 # Maximum number of log files to retain per task
 LOG_RETENTION_COUNT=5
@@ -29,6 +39,25 @@ LOG_RETENTION_COUNT=5
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Issue #122: emit a machine-readable status line to stderr on exit.
+# Callers that suppress stdout (e.g. the Deno worker's
+# runWithTimeout(..., { quiet: true })) can capture stderr to distinguish
+# pushed / skipped / failed outcomes without parsing localised messages.
+# Format:
+#   repos.sh status=<status> reason=<reason> name='<repo_name>'
+# Statuses: skipped | updated | added | failed-recorded | failed | unknown
+RUN_STATUS="unknown"
+RUN_REASON="unknown"
+REPO_NAME=""
+
+emit_status_on_exit() {
+    local rc=$?
+    # Do not emit if status was never set (e.g. usage banner before parsing).
+    echo "repos.sh status=${RUN_STATUS} reason=${RUN_REASON} name='${REPO_NAME}'" >&2
+    return "$rc"
+}
+trap emit_status_on_exit EXIT
 
 # Source shared git retry helpers (Issue #117).
 # shellcheck source=./git-retry.sh
@@ -127,6 +156,8 @@ validate_log_path() {
 
 # Check arguments
 if [ $# -lt 1 ]; then
+    RUN_STATUS="failed"
+    RUN_REASON="validation-failed"
     echo "Usage: $0 <repo_name>"
     echo "       $0 <repo_name> --failed --log <path>"
     echo "Example: $0 \"Dividends\""
@@ -136,11 +167,21 @@ fi
 # Support --validate flag for testing validation without side effects
 if [ "$1" = "--validate" ]; then
     if [ $# -lt 2 ]; then
+        RUN_STATUS="failed"
+        RUN_REASON="validation-failed"
         echo "Usage: $0 --validate <repo_name>" >&2
         exit 1
     fi
-    validate_repo_name "$2"
-    exit $?
+    REPO_NAME="$2"
+    if validate_repo_name "$2"; then
+        RUN_STATUS="updated"
+        RUN_REASON="success"
+        exit 0
+    else
+        RUN_STATUS="failed"
+        RUN_REASON="validation-failed"
+        exit 1
+    fi
 fi
 
 # Parse arguments
@@ -150,7 +191,6 @@ FAILED_MODE=false
 LOG_PATH=""
 FAILURE_EXIT_CODE=""
 FAILURE_MESSAGE=""
-REPO_NAME=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -195,20 +235,32 @@ REPOS_JSON="${PROJECT_ROOT}/docs/repos.json"
 
 # Validate the repo name before proceeding
 if [ -z "$REPO_NAME" ]; then
+    RUN_STATUS="failed"
+    RUN_REASON="validation-failed"
     echo "Error: Repo name is required." >&2
     exit 1
 fi
-validate_repo_name "$REPO_NAME" || exit 1
+if ! validate_repo_name "$REPO_NAME"; then
+    RUN_STATUS="failed"
+    RUN_REASON="validation-failed"
+    exit 1
+fi
 
 # In failed mode, --log is required
 if [ "$FAILED_MODE" = true ] && [ -z "$LOG_PATH" ]; then
+    RUN_STATUS="failed"
+    RUN_REASON="validation-failed"
     echo "Error: --log is required when using --failed." >&2
     exit 1
 fi
 
 # Validate the log path if provided
 if [ -n "$LOG_PATH" ]; then
-    validate_log_path "$LOG_PATH" || exit 1
+    if ! validate_log_path "$LOG_PATH"; then
+        RUN_STATUS="failed"
+        RUN_REASON="validation-failed"
+        exit 1
+    fi
 fi
 
 # Get current UTC timestamp (Unix timestamp)
@@ -285,6 +337,8 @@ update_repos_json_success() {
             # Updated within the last hour, skip update
             MINUTES_AGO=$((TIME_DIFF / 60))
             echo "Skipping update for '${REPO_NAME}' - last updated ${MINUTES_AGO} minutes ago (within 1 hour threshold)"
+            RUN_STATUS="skipped"
+            RUN_REASON="rate-limited"
             return 0
         fi
     fi
@@ -297,6 +351,8 @@ update_repos_json_success() {
            '.repos |= map(if .name == $name then .last_commit_ts = ($ts | tonumber) else . end)' \
            "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
         echo "Updated repo '${REPO_NAME}' with timestamp ${CURRENT_TS}"
+        RUN_STATUS="updated"
+        RUN_REASON="success"
     else
         # Add new repo
         NEW_REPO="{\"name\": \"${REPO_NAME}\", \"last_commit_ts\": ${CURRENT_TS}}"
@@ -305,6 +361,8 @@ update_repos_json_success() {
            '.repos += [$new_repo]' \
            "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
         echo "Added repo '${REPO_NAME}' with timestamp ${CURRENT_TS}"
+        RUN_STATUS="added"
+        RUN_REASON="success"
     fi
 }
 
@@ -379,6 +437,11 @@ if [ "$FAILED_MODE" = true ]; then
 
     # Update repos.json with failure info
     update_repos_json_failure "$LOG_RELATIVE_PATH"
+
+    # Status: a failure was recorded successfully (--failed mode is a
+    # successful invocation of repos.sh recording an upstream failure).
+    RUN_STATUS="failed-recorded"
+    RUN_REASON="failure-recorded"
 
     # Commit message for failures
     COMMIT_MSG="Update repo health (failure): ${REPO_NAME}"
@@ -582,5 +645,7 @@ set -euo pipefail
 
 # Surface push failure as a non-zero exit so the worker can observe it.
 if [ "$PUSH_FINAL_STATUS" -ne 0 ]; then
+    RUN_STATUS="failed"
+    RUN_REASON="push-failed"
     exit "$PUSH_FINAL_STATUS"
 fi
