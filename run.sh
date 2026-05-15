@@ -1043,13 +1043,14 @@ commit_and_push() {
     fi
     git commit -m "Update health status for $HOSTNAME at $commit_date" 2>/dev/null || true
 
-    # Backoff defaults from helpers/git-retry.sh (1s, 4s, 16s).
+    # Backoff defaults from helpers/git-retry.sh
+    # (Issue #125: 1s, 4s, 16s, 30s, 60s over 5 attempts).
     local backoff_raw
-    backoff_raw=$(grq_backoff_delays 2>/dev/null || echo "1 4 16")
+    backoff_raw=$(grq_backoff_delays 2>/dev/null || echo "1 4 16 30 60")
     # shellcheck disable=SC2206
     local backoff_delays=( $backoff_raw )
     local max_retries
-    max_retries=$(grq_max_push_attempts 2>/dev/null || echo 3)
+    max_retries=$(grq_max_push_attempts 2>/dev/null || echo 5)
 
     local push_succeeded=false
     local last_push_stderr=""
@@ -1069,7 +1070,11 @@ commit_and_push() {
         last_push_stderr=$(cat "$push_stderr_file" 2>/dev/null || echo "")
 
         local idx=$((attempt - 1))
-        local backoff_secs="${backoff_delays[$idx]:-${backoff_delays[-1]}}"
+        # bash 3.2 errors on ${arr[-1]} under `set -u`; resolve the last
+        # index explicitly so test overrides with fewer entries than the
+        # attempt count still work.
+        local last_idx=$(( ${#backoff_delays[@]} - 1 ))
+        local backoff_secs="${backoff_delays[$idx]:-${backoff_delays[$last_idx]}}"
         local sleep_secs="$backoff_secs"
 
         if echo "$last_push_stderr" | grq_is_rate_limit_error; then

@@ -8,10 +8,12 @@
 #   grq_git_timeout_secs     — echoes the per-git-call timeout (default 120).
 #                              Override via GRQ_GIT_TIMEOUT_OVERRIDE.
 #   grq_backoff_delays       — echoes the space-separated backoff delays
-#                              (default "1 4 16"). Override via
-#                              GRQ_PUSH_RETRY_DELAYS_OVERRIDE for tests.
-#   grq_max_push_attempts    — echoes the max push attempts (default 3).
-#                              Override via GRQ_PUSH_MAX_ATTEMPTS.
+#                              (default "1 4 16 30 60" — ~111s total budget,
+#                              sized for 12+ concurrent Vibe Coder writers
+#                              racing on docs/repos.json; Issue #125).
+#                              Override via GRQ_PUSH_RETRY_DELAYS_OVERRIDE.
+#   grq_max_push_attempts    — echoes the max push attempts (default 5;
+#                              Issue #125). Override via GRQ_PUSH_MAX_ATTEMPTS.
 #   grq_run_git              — runs `git "$@"` wrapped in the timeout helper
 #                              (when available). Caller controls redirections.
 #   grq_is_rate_limit_error  — given stderr text on stdin, returns 0 if the
@@ -43,11 +45,14 @@ grq_git_timeout_secs() {
 }
 
 grq_backoff_delays() {
-    echo "${GRQ_PUSH_RETRY_DELAYS_OVERRIDE:-1 4 16}"
+    # Issue #125: bumped from "1 4 16" to "1 4 16 30 60" so a busy stretch
+    # with 12+ concurrent writers racing on docs/repos.json can clear.
+    echo "${GRQ_PUSH_RETRY_DELAYS_OVERRIDE:-1 4 16 30 60}"
 }
 
 grq_max_push_attempts() {
-    echo "${GRQ_PUSH_MAX_ATTEMPTS:-3}"
+    # Issue #125: bumped from 3 to 5 (paired with the longer backoff series).
+    echo "${GRQ_PUSH_MAX_ATTEMPTS:-5}"
 }
 
 # Run a git command wrapped with the timeout helper (when available).

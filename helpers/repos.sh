@@ -543,10 +543,14 @@ if [ "$STAGED_SOMETHING" = true ]; then
         if git commit -m "$COMMIT_MSG" --quiet 2>/dev/null; then
             # Backoff defaults from git-retry.sh; legacy
             # GIT_PUSH_RETRY_DELAY_OVERRIDE still honoured (back-compat).
-            BACKOFF_DELAYS_RAW=$(grq_backoff_delays 2>/dev/null || echo "1 4 16")
+            # Issue #125: defaults bumped to "1 4 16 30 60" / 5 attempts so
+            # 12+ concurrent Vibe Coder writers racing on docs/repos.json
+            # can clear within the retry budget instead of falling through
+            # to the recover-to-remote path and discarding the local commit.
+            BACKOFF_DELAYS_RAW=$(grq_backoff_delays 2>/dev/null || echo "1 4 16 30 60")
             # shellcheck disable=SC2206
             BACKOFF_DELAYS=( $BACKOFF_DELAYS_RAW )
-            GIT_PUSH_MAX_ATTEMPTS=$(grq_max_push_attempts 2>/dev/null || echo 3)
+            GIT_PUSH_MAX_ATTEMPTS=$(grq_max_push_attempts 2>/dev/null || echo 5)
             LEGACY_DELAY="${GIT_PUSH_RETRY_DELAY_OVERRIDE:-}"
             GIT_PUSH_SUCCESS=false
             LAST_PUSH_STDERR=""
@@ -565,7 +569,12 @@ if [ "$STAGED_SOMETHING" = true ]; then
                 # Decide the inter-attempt sleep up-front so rate-limit
                 # responses can override the standard backoff.
                 IDX=$((attempt - 1))
-                BACKOFF_SECS="${BACKOFF_DELAYS[$IDX]:-${BACKOFF_DELAYS[-1]}}"
+                # bash 3.2 (macOS default) errors on ${arr[-1]} with `set -u`,
+                # so compute the last index explicitly. The fallback covers
+                # the case where attempts > backoff entries (e.g. when a test
+                # override supplies fewer delays than the default 5 attempts).
+                LAST_IDX=$(( ${#BACKOFF_DELAYS[@]} - 1 ))
+                BACKOFF_SECS="${BACKOFF_DELAYS[$IDX]:-${BACKOFF_DELAYS[$LAST_IDX]}}"
                 if [ -n "$LEGACY_DELAY" ]; then
                     BACKOFF_SECS="$LEGACY_DELAY"
                 fi
