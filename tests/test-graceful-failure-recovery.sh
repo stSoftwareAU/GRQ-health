@@ -13,6 +13,7 @@
 #   5. Rate-limit responses trigger a sleep based on the reset window
 #      (probed via the GRQ_RATE_LIMIT_SLEEP_OVERRIDE hook).
 #   6. Backoff between retries follows the configured (1s, 4s, 16s) sequence.
+#   7. Default retry budget is 5 attempts over "1 4 16 30 60" (Issue #125).
 
 set -e
 
@@ -66,10 +67,29 @@ else
     fail_test "GRQ_GIT_TIMEOUT_OVERRIDE not honoured"
 fi
 
-if [ "$(grq_backoff_delays)" = "1 4 16" ]; then
-    pass_test "default backoff delays are 1 4 16"
+if [ "$(grq_backoff_delays)" = "1 4 16 30 60" ]; then
+    pass_test "default backoff delays are 1 4 16 30 60 (Issue #125)"
 else
-    fail_test "expected '1 4 16' backoff, got: $(grq_backoff_delays)"
+    fail_test "expected '1 4 16 30 60' backoff, got: $(grq_backoff_delays)"
+fi
+
+if [ "$(grq_max_push_attempts)" = "5" ]; then
+    pass_test "default max push attempts is 5 (Issue #125)"
+else
+    fail_test "expected 5 max push attempts, got: $(grq_max_push_attempts)"
+fi
+
+# Sanity: the override still works for both.
+if [ "$(GRQ_PUSH_RETRY_DELAYS_OVERRIDE='0 0' grq_backoff_delays)" = "0 0" ]; then
+    pass_test "GRQ_PUSH_RETRY_DELAYS_OVERRIDE is honoured"
+else
+    fail_test "GRQ_PUSH_RETRY_DELAYS_OVERRIDE not honoured"
+fi
+
+if [ "$(GRQ_PUSH_MAX_ATTEMPTS=2 grq_max_push_attempts)" = "2" ]; then
+    pass_test "GRQ_PUSH_MAX_ATTEMPTS is honoured"
+else
+    fail_test "GRQ_PUSH_MAX_ATTEMPTS not honoured"
 fi
 
 if echo "remote: error: API rate limit exceeded" | grq_is_rate_limit_error; then
