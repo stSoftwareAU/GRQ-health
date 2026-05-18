@@ -23,7 +23,7 @@ fi
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.13"
+VERSION="1.1.14"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -744,7 +744,14 @@ get_system_info() {
     exception_summary_escaped=$(escape_json "$exception_summary")
     config_warning_escaped=$(escape_json "$config_warning")
     
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space_escaped\", \"used_disk_percent\": \"$used_disk_percent_escaped\", \"total_disk_gb\": \"$total_disk_gb_escaped\", \"mem_usage_percent\": \"$mem_usage_percent_escaped\", \"total_mem_gb\": \"$total_mem_gb_escaped\", \"cpu_load\": \"$cpu_load_escaped\", \"cpu_cores\": \"$cpu_cores_escaped\", \"cpu_model\": \"$cpu_speed_escaped\", \"machine_type\": \"$machine_type_escaped\", \"cpu_breakdown\": \"$cpu_breakdown_escaped\", \"load_averages\": \"$load_averages_escaped\", \"timezone\": \"$timezone_escaped\", \"os_info\": \"$os_info_escaped\", \"os_version\": \"$os_version_escaped\", \"network_status\": \"$network_status_escaped\", \"ip_addresses\": \"$ip_addresses_escaped\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary_escaped\", \"config_warning\": \"$config_warning_escaped\"}"
+    # Issue #127: surface reporting_warning_count alongside exception_count
+    # so the dashboard can distinguish a healthy run with transient reporting
+    # issues from a real work-failure.
+    if [[ ! "${reporting_warning_count:-0}" =~ ^[0-9]+$ ]]; then
+        reporting_warning_count=0
+    fi
+
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space_escaped\", \"used_disk_percent\": \"$used_disk_percent_escaped\", \"total_disk_gb\": \"$total_disk_gb_escaped\", \"mem_usage_percent\": \"$mem_usage_percent_escaped\", \"total_mem_gb\": \"$total_mem_gb_escaped\", \"cpu_load\": \"$cpu_load_escaped\", \"cpu_cores\": \"$cpu_cores_escaped\", \"cpu_model\": \"$cpu_speed_escaped\", \"machine_type\": \"$machine_type_escaped\", \"cpu_breakdown\": \"$cpu_breakdown_escaped\", \"load_averages\": \"$load_averages_escaped\", \"timezone\": \"$timezone_escaped\", \"os_info\": \"$os_info_escaped\", \"os_version\": \"$os_version_escaped\", \"network_status\": \"$network_status_escaped\", \"ip_addresses\": \"$ip_addresses_escaped\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary_escaped\", \"reporting_warning_count\": $reporting_warning_count, \"config_warning\": \"$config_warning_escaped\"}"
 }
 
 # Function to scan log file for errors and return count
@@ -754,17 +761,59 @@ scan_log_errors() {
     if [[ -n "${NODE_PID:-}" ]]; then
       log_file="${HOME}/logs/node-${NODE_PID}.log"
     fi
-    
+
     # Initialize global variables
     exception_count=0
     exception_summary=""
-    
+    # Issue #127: count transient reporting-layer issues separately from
+    # work-failures so the dashboard can distinguish a healthy run from
+    # a healthy run with reporting hiccups.
+    reporting_warning_count=0
+
     if [ -f "$log_file" ]; then
         # Issue #61: Filter out [MemoryMonitor] lines — these are operational noise
         # (cache clearing warnings) that should not be flagged as errors.
         local filtered_log
         filtered_log=$(mktemp)
         grep -v '\[MemoryMonitor\]' "$log_file" > "$filtered_log" 2>/dev/null || true
+
+        # Issue #127: [reporting-warning] lines are transient reporting hiccups
+        # (e.g. failed-to-push a health update) and must NOT be treated as
+        # work-failures. Count them regardless of which classifier path runs.
+        reporting_warning_count=$(grep -c '\[reporting-warning\]' "$filtered_log" 2>/dev/null | tr -d ' \n' || echo "0")
+
+        # Issue #127: prefer the authoritative [stage-failure-health] line
+        # over noisy exit-code / "Task failed with status N" messages.
+        # Format: [stage-failure-health] failures=N firstStage=S firstExitCode=C firstHitLine=L
+        local stage_health_line
+        stage_health_line=$(grep -m1 '\[stage-failure-health\]' "$filtered_log" 2>/dev/null || true)
+
+        if [ -n "$stage_health_line" ]; then
+            local failures first_stage first_exit first_line
+            failures=$(echo "$stage_health_line" | sed -nE 's/.*failures=([0-9]+).*/\1/p')
+            [ -z "$failures" ] && failures=0
+
+            if [ "$failures" -eq 0 ]; then
+                exception_count=0
+                if [ "$reporting_warning_count" -gt 0 ]; then
+                    exception_summary="No errors found (${reporting_warning_count} reporting warning(s))"
+                else
+                    exception_summary="No errors found"
+                fi
+            else
+                exception_count="$failures"
+                first_stage=$(echo "$stage_health_line" | sed -nE 's/.*firstStage=([^ ]+).*/\1/p')
+                first_exit=$(echo "$stage_health_line" | sed -nE 's/.*firstExitCode=([^ ]+).*/\1/p')
+                first_line=$(echo "$stage_health_line" | sed -nE 's/.*firstHitLine=([^ ]+).*/\1/p')
+                exception_summary="${failures} stage failure(s) (first: ${first_stage:-unknown} exit=${first_exit:-?} line=${first_line:-?})"
+            fi
+
+            rm -f "$filtered_log"
+            return 0
+        fi
+
+        # Legacy fall-back: no [stage-failure-health] line (logs predating
+        # GRQ#2313). Continue with the original heuristic classifier.
 
         # Count actual exceptions by looking for error messages that precede stack traces
         # Each exception starts with an error message, followed by stack trace lines
@@ -944,7 +993,7 @@ update_json() {
            # Ensure users map exists and update this user entry
            | .[$host].users = (.[$host].users // {})
            | .[$host].users[$user] = ((.[$host].users[$user] // {})
-               + ($info | {exception_count, exception_summary, config_warning})
+               + ($info | {exception_count, exception_summary, reporting_warning_count, config_warning})
                | .heart_beat_ts = ($ts | tonumber)
                | .version = $version)
            # Aggregate across users so dashboard can flag a stuck user
@@ -954,6 +1003,7 @@ update_json() {
            | .[$host].heart_beat_ts = (.[$host].best_user_heart_beat_ts // ($ts | tonumber))
            | .[$host].version = $version
            | .[$host].exception_count = ([.[$host].users[]? | (.exception_count // 0)] | add // 0)
+           | .[$host].reporting_warning_count = ([.[$host].users[]? | (.reporting_warning_count // 0)] | add // 0)
            | .[$host].exception_summary =
                (if (.[$host].exception_count // 0) > 0 then
                    ( .[$host].users
@@ -988,7 +1038,7 @@ update_json() {
                "version": $version,
                "user_stale_hours": ($user_stale_hours | tonumber),
                "users": {
-                   ($user): (($info | {exception_count, exception_summary, config_warning}) + {"heart_beat_ts": ($ts | tonumber), "version": $version})
+                   ($user): (($info | {exception_count, exception_summary, reporting_warning_count, config_warning}) + {"heart_beat_ts": ($ts | tonumber), "version": $version})
                },
                "user_count": 1,
                "worst_user_heart_beat_ts": ($ts | tonumber),
