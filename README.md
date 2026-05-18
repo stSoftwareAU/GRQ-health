@@ -28,6 +28,24 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **All issues are counted** in the dashboard exception count
 
 #### Exception Detection in run.sh:
+- **Authoritative signal (Issue #127)**: When the log contains
+  `[stage-failure-health] failures=N firstStage=S firstExitCode=C firstHitLine=L`
+  (emitted by GRQ#2313), `scan_log_errors` trusts that line over every other
+  heuristic:
+  - `failures=0` → run classified as **successful**; any noisy
+    "Task failed with status N" line is ignored.
+  - `failures>0` → run classified as **failed**; `exception_count=N` and the
+    summary names `firstStage`, `firstExitCode`, `firstHitLine`.
+- **Reporting warnings (Issue #127)**: `[reporting-warning] …` lines are
+  counted into a separate `reporting_warning_count` field on the per-user
+  and per-host JSON, surfaced in `docs/index.json` so operators can
+  distinguish three states:
+  1. Healthy — `exception_count=0`, `reporting_warning_count=0`.
+  2. Healthy with transient reporting issues — `exception_count=0`,
+     `reporting_warning_count>0`.
+  3. Failed — `exception_count>0`.
+- **Legacy fall-back**: Logs without `[stage-failure-health]` (predating
+  GRQ#2313) continue to use the original heuristic classifier below.
 - **Stack traces**: Lines with "Exception", "Error", "MEMETIC" followed by stack trace lines
 - **Missing commands**: "No such file or directory" errors
 - **Warning emojis**: Lines containing "⚠️"
