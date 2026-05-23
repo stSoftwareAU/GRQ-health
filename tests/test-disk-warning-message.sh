@@ -37,12 +37,12 @@ OUTPUT=$(run_js_test '
 
 // Test 2: Above threshold — message references the trigger threshold
 {
-    const msg = buildDiskWarningMessage(85.2);
+    const msg = buildDiskWarningMessage(95.2);
     const expected = THRESHOLDS.DISK_WARNING_PERCENT;
-    if (msg.includes("85.2%") && msg.includes(String(expected) + "%")) {
+    if (msg.includes("95.2%") && msg.includes(String(expected) + "%")) {
         console.log("TEST_RESULT:above-threshold-msg:PASS:message includes usage and threshold: " + msg);
     } else {
-        console.log("TEST_RESULT:above-threshold-msg:FAIL:expected usage 85.2% and threshold " + expected + "% in message, got: " + msg);
+        console.log("TEST_RESULT:above-threshold-msg:FAIL:expected usage 95.2% and threshold " + expected + "% in message, got: " + msg);
     }
 }
 
@@ -82,7 +82,7 @@ OUTPUT=$(run_js_test '
 
 // Test 6: Above threshold — message does NOT mention hysteresis
 {
-    const msg = buildDiskWarningMessage(85);
+    const msg = buildDiskWarningMessage(95);
     if (!msg.includes("hysteresis")) {
         console.log("TEST_RESULT:above-no-hysteresis:PASS:above-threshold message does not mention hysteresis");
     } else {
@@ -90,9 +90,9 @@ OUTPUT=$(run_js_test '
     }
 }
 
-// Test 7: Threshold values are dynamic (not hardcoded 80/77)
+// Test 7: Threshold values are dynamic (not hardcoded 90/87)
 {
-    const aboveMsg = buildDiskWarningMessage(90);
+    const aboveMsg = buildDiskWarningMessage(THRESHOLDS.DISK_WARNING_PERCENT + 5);
     const bandMsg = buildDiskWarningMessage(THRESHOLDS.DISK_WARNING_PERCENT - 1);
     const warnPct = THRESHOLDS.DISK_WARNING_PERCENT;
     const clearPct = THRESHOLDS.DISK_WARNING_CLEAR_PERCENT;
@@ -107,8 +107,8 @@ OUTPUT=$(run_js_test '
 
 // Test 8: Message always starts with "High disk usage:"
 {
-    const msg1 = buildDiskWarningMessage(85);
-    const msg2 = buildDiskWarningMessage(78);
+    const msg1 = buildDiskWarningMessage(95);
+    const msg2 = buildDiskWarningMessage(88);
     if (msg1.startsWith("High disk usage:") && msg2.startsWith("High disk usage:")) {
         console.log("TEST_RESULT:prefix-consistent:PASS:both messages start with High disk usage:");
     } else {

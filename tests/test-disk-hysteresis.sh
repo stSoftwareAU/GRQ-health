@@ -50,11 +50,11 @@ const now = Math.floor(Date.now() / 1000);
 
 // Test 3: Disk clearly above threshold triggers warning (not previously warning)
 {
-    const result = isDiskWarning(80, false);
+    const result = isDiskWarning(95, false);
     if (result === true) {
-        console.log("TEST_RESULT:above-triggers:PASS:80% triggers warning");
+        console.log("TEST_RESULT:above-triggers:PASS:95% triggers warning");
     } else {
-        console.log("TEST_RESULT:above-triggers:FAIL:80% should trigger warning, got " + result);
+        console.log("TEST_RESULT:above-triggers:FAIL:95% should trigger warning, got " + result);
     }
 }
 

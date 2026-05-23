@@ -293,11 +293,11 @@ External task runners (e.g. a Quality gate in a worker repo) should follow the c
 
 - **Healthy**: 
   - Heartbeat within 24 hours
-  - Disk usage under 80%
+  - Disk usage under 90%
   - OS version up to date
 - **Warning**:
-  - Disk usage at or above 80% (with hysteresis: clears only when dropping to or below 77%)
-  - A host can remain in warning state between 77% and 80% until it drops below the clear threshold — this hysteresis band prevents status oscillation when disk usage hovers near the boundary
+  - Disk usage at or above 90% (with hysteresis: clears only when dropping to or below 87%)
+  - A host can remain in warning state between 87% and 90% until it drops below the clear threshold — this hysteresis band prevents status oscillation when disk usage hovers near the boundary
   - Outdated OS version
   - Heartbeat within 24 hours
 - **Critical**: 
