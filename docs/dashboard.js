@@ -33,8 +33,8 @@ const THRESHOLDS = {
     IDLE_LOAD_5M: 15,         // 5-minute load average threshold for idle detection (%)
     IDLE_LOAD_15M: 20,        // 15-minute load average threshold for idle detection (%)
     IDLE_HIGH_LOAD: 50,       // Load above this indicates active work (recently started/stopped)
-    DISK_WARNING_PERCENT: 80, // Disk usage at or above this triggers a warning (Issue #71)
-    DISK_WARNING_CLEAR_PERCENT: 77, // Disk usage must drop to or below this to clear warning (hysteresis)
+    DISK_WARNING_PERCENT: 90, // Disk usage at or above this triggers a warning (Issue #131)
+    DISK_WARNING_CLEAR_PERCENT: 87, // Disk usage must drop to or below this to clear warning (hysteresis)
     HEARTBEAT_CRITICAL_HOURS: 24, // Hours without heartbeat before marking host critical
     USER_STALE_DEFAULT_HOURS: 24, // Default hours before a user is marked stale (3x the 8h heartbeat threshold)
     MACOS_MIN_VERSION: '14.0',    // macOS versions below this trigger a warning
