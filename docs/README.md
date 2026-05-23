@@ -99,11 +99,11 @@ Mobile machines that are expected to be offline:
 
 ### Healthy
 - Heartbeat within 24 hours
-- Disk usage under 80%
+- Disk usage under 90%
 - OS version up to date
 
 ### Warning
-- Disk usage at or above 80% (with hysteresis: clears at or below 77%)
+- Disk usage at or above 90% (with hysteresis: clears at or below 87%)
 - Outdated OS version
 - Heartbeat within 24 hours
 
