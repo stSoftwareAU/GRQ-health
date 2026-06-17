@@ -23,7 +23,7 @@ fi
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.16"
+VERSION="1.1.17"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -119,6 +119,92 @@ if is_aws_instance; then
     echo "Skipping health monitoring - this is an AWS instance (spot/temporary)"
     exit 0
 fi
+
+# Issue #136: Collect GPU metrics cross-platform (non-privileged only).
+# Mirrors the CPU card: utilisation %, model, core count and memory in use.
+# No sudo/powermetrics is used. Any value that cannot be read degrades to
+# "N/A" so older chips, non-GPU hosts and non-NVIDIA hosts never error or
+# block the scan. Sets the gpu_* variables in the caller's scope.
+collect_gpu_info() {
+    gpu_load="N/A"
+    gpu_model="N/A"
+    gpu_cores="N/A"
+    gpu_memory="N/A"
+    gpu_breakdown="N/A"
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Apple Silicon: live "Device Utilization %" and GPU memory in use via
+        # ioreg (non-privileged). Unified memory means there is no dedicated
+        # VRAM figure, so the in-use system memory is reported instead.
+        if command -v ioreg >/dev/null 2>&1; then
+            local ioaccel
+            ioaccel=$(ioreg -r -d 1 -c IOAccelerator 2>/dev/null || echo "")
+            if [[ -n "$ioaccel" ]]; then
+                local gpu_util_raw gpu_mem_raw gpu_mem_gb
+                # ioreg reports PerformanceStatistics as a single-line dict, e.g.
+                #   ..."Device Utilization %"=4,..."In use system memory"=542097408}
+                # so extract each key's value with a targeted grep -o rather than
+                # splitting on "=". `|| true` keeps a no-match grep from aborting
+                # the scan under `set -euo pipefail` (older chips lack these keys).
+                gpu_util_raw=$( { echo "$ioaccel" | grep -o '"Device Utilization %"=[0-9]\{1,\}' | head -1 | tr -dc '0-9'; } 2>/dev/null || true)
+                if [[ "$gpu_util_raw" =~ ^[0-9]+$ ]]; then
+                    gpu_load="${gpu_util_raw}%"
+                fi
+                # Match the exact key (the closing quote before "=" excludes the
+                # separate "In use system memory (driver)" entry).
+                gpu_mem_raw=$( { echo "$ioaccel" | grep -o '"In use system memory"=[0-9]\{1,\}' | head -1 | tr -dc '0-9'; } 2>/dev/null || true)
+                if [[ "$gpu_mem_raw" =~ ^[0-9]+$ ]] && [[ "$gpu_mem_raw" -gt 0 ]]; then
+                    gpu_mem_gb=$(echo "scale=2; $gpu_mem_raw / 1024 / 1024 / 1024" | bc -l 2>/dev/null || echo "0")
+                    # bc drops the leading zero for values < 1 (".50"); restore it.
+                    [[ "$gpu_mem_gb" == .* ]] && gpu_mem_gb="0$gpu_mem_gb"
+                    gpu_memory="${gpu_mem_gb} GB in use"
+                fi
+            fi
+        fi
+        # GPU model + core count via system_profiler (non-privileged).
+        if command -v system_profiler >/dev/null 2>&1; then
+            local gpu_sp gpu_model_raw gpu_cores_raw
+            gpu_sp=$(system_profiler SPDisplaysDataType 2>/dev/null || echo "")
+            if [[ -n "$gpu_sp" ]]; then
+                gpu_model_raw=$( { echo "$gpu_sp" | grep -i "Chipset Model:" | head -1 | sed 's/.*Chipset Model:[[:space:]]*//' | tr -d '\n'; } 2>/dev/null || true)
+                if [[ -n "$gpu_model_raw" ]]; then
+                    gpu_model="$gpu_model_raw"
+                fi
+                gpu_cores_raw=$( { echo "$gpu_sp" | grep -i "Total Number of Cores:" | head -1 | tr -dc '0-9'; } 2>/dev/null || true)
+                if [[ "$gpu_cores_raw" =~ ^[0-9]+$ ]]; then
+                    gpu_cores="$gpu_cores_raw"
+                fi
+            fi
+        fi
+    fi
+
+    # NVIDIA (Linux/Windows): a single nvidia-smi call covers utilisation,
+    # VRAM used/total, temperature and model. Overrides the defaults above when
+    # present; if nvidia-smi is absent the host simply keeps "N/A".
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        local gpu_smi gpu_util_n gpu_mem_used_n gpu_mem_total_n gpu_temp_n gpu_name_n
+        gpu_smi=$( { nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,name --format=csv,noheader,nounits 2>/dev/null | head -1; } || true)
+        if [[ -n "$gpu_smi" ]]; then
+            gpu_util_n=$(echo "$gpu_smi" | awk -F',' '{gsub(/ /,"",$1); print $1}')
+            gpu_mem_used_n=$(echo "$gpu_smi" | awk -F',' '{gsub(/ /,"",$2); print $2}')
+            gpu_mem_total_n=$(echo "$gpu_smi" | awk -F',' '{gsub(/ /,"",$3); print $3}')
+            gpu_temp_n=$(echo "$gpu_smi" | awk -F',' '{gsub(/ /,"",$4); print $4}')
+            gpu_name_n=$(echo "$gpu_smi" | awk -F',' '{sub(/^[[:space:]]*/,"",$5); print $5}')
+            if [[ "$gpu_util_n" =~ ^[0-9]+$ ]]; then
+                gpu_load="${gpu_util_n}%"
+            fi
+            if [[ "$gpu_mem_used_n" =~ ^[0-9]+$ ]] && [[ "$gpu_mem_total_n" =~ ^[0-9]+$ ]]; then
+                gpu_memory="${gpu_mem_used_n} / ${gpu_mem_total_n} MB"
+            fi
+            if [[ "$gpu_temp_n" =~ ^[0-9]+$ ]]; then
+                gpu_breakdown="${gpu_temp_n}°C"
+            fi
+            if [[ -n "$gpu_name_n" ]]; then
+                gpu_model="$gpu_name_n"
+            fi
+        fi
+    fi
+}
 
 # Function to get system information
 get_system_info() {
@@ -575,7 +661,12 @@ get_system_info() {
     fi
     
     cpu_load="${cpu_load_percent}%"
-    
+
+    # Issue #136: Collect GPU metrics (sets gpu_load/gpu_model/gpu_cores/
+    # gpu_memory/gpu_breakdown). Always non-privileged; unreadable values
+    # degrade to "N/A" rather than blocking the scan.
+    collect_gpu_info
+
     # Get timezone
     timezone=$(date +%Z)
     
@@ -735,6 +826,11 @@ get_system_info() {
     cpu_speed_escaped=$(escape_json "$cpu_speed")
     machine_type_escaped=$(escape_json "$machine_type")
     cpu_breakdown_escaped=$(escape_json "$cpu_breakdown")
+    gpu_load_escaped=$(escape_json "$gpu_load")
+    gpu_model_escaped=$(escape_json "$gpu_model")
+    gpu_cores_escaped=$(escape_json "$gpu_cores")
+    gpu_memory_escaped=$(escape_json "$gpu_memory")
+    gpu_breakdown_escaped=$(escape_json "$gpu_breakdown")
     load_averages_escaped=$(escape_json "$load_averages")
     timezone_escaped=$(escape_json "$timezone")
     os_info_escaped=$(escape_json "$os_info")
@@ -751,7 +847,7 @@ get_system_info() {
         reporting_warning_count=0
     fi
 
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space_escaped\", \"used_disk_percent\": \"$used_disk_percent_escaped\", \"total_disk_gb\": \"$total_disk_gb_escaped\", \"mem_usage_percent\": \"$mem_usage_percent_escaped\", \"total_mem_gb\": \"$total_mem_gb_escaped\", \"cpu_load\": \"$cpu_load_escaped\", \"cpu_cores\": \"$cpu_cores_escaped\", \"cpu_model\": \"$cpu_speed_escaped\", \"machine_type\": \"$machine_type_escaped\", \"cpu_breakdown\": \"$cpu_breakdown_escaped\", \"load_averages\": \"$load_averages_escaped\", \"timezone\": \"$timezone_escaped\", \"os_info\": \"$os_info_escaped\", \"os_version\": \"$os_version_escaped\", \"network_status\": \"$network_status_escaped\", \"ip_addresses\": \"$ip_addresses_escaped\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary_escaped\", \"reporting_warning_count\": $reporting_warning_count, \"config_warning\": \"$config_warning_escaped\"}"
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space_escaped\", \"used_disk_percent\": \"$used_disk_percent_escaped\", \"total_disk_gb\": \"$total_disk_gb_escaped\", \"mem_usage_percent\": \"$mem_usage_percent_escaped\", \"total_mem_gb\": \"$total_mem_gb_escaped\", \"cpu_load\": \"$cpu_load_escaped\", \"cpu_cores\": \"$cpu_cores_escaped\", \"cpu_model\": \"$cpu_speed_escaped\", \"machine_type\": \"$machine_type_escaped\", \"cpu_breakdown\": \"$cpu_breakdown_escaped\", \"gpu_load\": \"$gpu_load_escaped\", \"gpu_model\": \"$gpu_model_escaped\", \"gpu_cores\": \"$gpu_cores_escaped\", \"gpu_memory\": \"$gpu_memory_escaped\", \"gpu_breakdown\": \"$gpu_breakdown_escaped\", \"load_averages\": \"$load_averages_escaped\", \"timezone\": \"$timezone_escaped\", \"os_info\": \"$os_info_escaped\", \"os_version\": \"$os_version_escaped\", \"network_status\": \"$network_status_escaped\", \"ip_addresses\": \"$ip_addresses_escaped\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary_escaped\", \"reporting_warning_count\": $reporting_warning_count, \"config_warning\": \"$config_warning_escaped\"}"
 }
 
 # Function to scan log file for errors and return count

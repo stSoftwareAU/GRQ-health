@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.15";
+const VERSION = "1.1.17";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -947,6 +947,44 @@ function getHealthStatus(_hostname, data, options) {
     return 'healthy';
 }
 
+// Issue #136: Format the per-host GPU display string, mirroring the CPU card.
+// Returns "<load> (<cores> cores, <model>)" with whichever parts are known,
+// or "N/A" when no GPU data is readable. Treats missing / "unknown" / "N/A"
+// values as absent so older chips and non-GPU hosts degrade gracefully.
+function formatGpuDisplay(data) {
+    const isNa = (v) => {
+        if (v === undefined || v === null) return true;
+        const s = String(v).trim().toLowerCase();
+        return s === '' || s === 'unknown' || s === 'n/a' || s === 'na';
+    };
+
+    // Live utilisation — normalise a bare number to a percentage.
+    let display = 'N/A';
+    if (!isNa(data.gpu_load)) {
+        const load = String(data.gpu_load).trim();
+        if (load.includes('%')) {
+            display = load;
+        } else {
+            const n = parseFloat(load);
+            display = Number.isNaN(n) ? 'N/A' : `${n}%`;
+        }
+    }
+
+    // Append core count and model where available, matching the CPU card.
+    const extras = [];
+    if (!isNa(data.gpu_cores)) {
+        extras.push(`${data.gpu_cores} cores`);
+    }
+    if (!isNa(data.gpu_model)) {
+        extras.push(String(data.gpu_model));
+    }
+    if (extras.length > 0) {
+        display += ` (${extras.join(', ')})`;
+    }
+
+    return display;
+}
+
 function createHostCard(hostname, data) {
     const healthStatus = getCachedHealthStatus(hostname);
     const statusClass = healthStatus;
@@ -1131,7 +1169,10 @@ function createHostCard(hostname, data) {
         }
         cpuDisplay += ')';
     }
-    
+
+    // Issue #136: Format GPU usage display (mirrors the CPU card).
+    const gpuDisplay = formatGpuDisplay(data);
+
     // Machine type is now displayed in the header
     
     // Format memory display
@@ -1217,6 +1258,12 @@ function createHostCard(hostname, data) {
                     </div>
                 </div>
                 <div class="row mt-2">
+                    <div class="col-6">
+                        <small class="text-muted">GPU Load</small>
+                        <div class="fw-bold">${escapeHtml(gpuDisplay)}</div>
+                        ${data.gpu_memory && data.gpu_memory !== 'N/A' ? `<small class="text-muted">${escapeHtml(data.gpu_memory)}</small>` : ''}
+                        ${data.gpu_breakdown && data.gpu_breakdown !== 'N/A' ? `<small class="text-muted">${escapeHtml(data.gpu_breakdown)}</small>` : ''}
+                    </div>
                     <div class="col-6">
                         <small class="text-muted">Timezone</small>
                         <div class="fw-bold">${escapeHtml(data.timezone)}</div>
