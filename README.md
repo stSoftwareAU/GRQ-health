@@ -139,9 +139,21 @@ The script performs the following operations:
    - Free disk space (in GB)
    - Memory usage percentage
    - CPU load average
+   - GPU usage (cross-platform, non-privileged — see below)
    - Operating system information
    - Network connectivity status
    - Timezone information
+
+   **GPU metrics (Issue #136)** are collected during the same scan, with no
+   `sudo`/`powermetrics` required. Any value that cannot be read degrades to
+   `N/A` rather than erroring or blocking the scan:
+   - **Apple Silicon** — live `Device Utilization %` and GPU memory in use via
+     `ioreg -r -d 1 -c IOAccelerator`; chipset model + core count via
+     `system_profiler SPDisplaysDataType`.
+   - **NVIDIA (Linux/Windows)** — utilisation %, VRAM used/total, temperature
+     and product name from a single `nvidia-smi` call.
+   - Other vendors (AMD, Intel integrated) and non-GPU hosts simply report
+     `N/A`. The dashboard shows a **GPU Load** card next to **CPU Load**.
 
 2. **Health Check Logic**:
    - Checks if the last heartbeat was more than 12 hours ago
@@ -170,6 +182,11 @@ The system uses a simple structure where each hostname is a key:
     "disk_usage_percent": "39.7",
     "mem_usage_percent": "65.2",
     "cpu_load": "1.25",
+    "gpu_load": "4%",
+    "gpu_model": "Apple M4 Pro",
+    "gpu_cores": "16",
+    "gpu_memory": "0.36 GB in use",
+    "gpu_breakdown": "N/A",
     "timezone": "AEST",
     "os_info": "macOS",
     "os_version": "15.5",
