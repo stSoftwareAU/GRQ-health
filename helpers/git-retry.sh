@@ -18,6 +18,10 @@
 #                              (when available). Caller controls redirections.
 #   grq_is_rate_limit_error  — given stderr text on stdin, returns 0 if the
 #                              text matches a GitHub rate-limit response.
+#   grq_is_non_fast_forward_error — given stderr text on stdin, returns 0 if
+#                              the text matches a non-fast-forward / "fetch
+#                              first" push rejection (the expected outcome of a
+#                              concurrent push to the shared branch; #2754).
 #   grq_rate_limit_sleep_secs — when called after a detected rate limit,
 #                              echoes how many seconds to sleep before the
 #                              next attempt. Honours
@@ -74,6 +78,17 @@ grq_run_git() {
 # stdin. Returns 0 (true) when it looks like a rate limit, 1 otherwise.
 grq_is_rate_limit_error() {
     grep -Eiq "rate limit|x-ratelimit|429|too many requests|abuse detection|secondary rate limit"
+}
+
+# Detect a non-fast-forward / "fetch first" push rejection in arbitrary
+# stderr text on stdin. This is the EXPECTED outcome when another host pushes
+# to the shared health branch concurrently: our push is rejected as a
+# non-fast-forward and is recovered transparently via `git pull --rebase`.
+# Treating it as routine lets callers log it quietly instead of emitting the
+# alarming raw `error:`/`! [rejected]` git output (Issue #2754). Returns 0
+# (true) when the text looks like a non-fast-forward rejection, 1 otherwise.
+grq_is_non_fast_forward_error() {
+    grep -Eiq "\[rejected\]|fetch first|non-fast-forward|updates were rejected|tip of your current branch is behind"
 }
 
 # Compute how long to sleep when a rate-limit response was detected.

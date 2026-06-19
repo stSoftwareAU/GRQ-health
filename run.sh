@@ -1229,7 +1229,16 @@ commit_and_push() {
         fi
 
         if [ "$attempt" -lt "$max_retries" ]; then
-            echo "Push failed (attempt ${attempt}/${max_retries}), retrying after pull --rebase: ${last_push_stderr}"
+            if printf '%s\n' "$last_push_stderr" | grq_is_non_fast_forward_error; then
+                # Expected on the shared health branch: another host pushed
+                # concurrently, so our push was a non-fast-forward rejection.
+                # This is routine and self-recovers via pull --rebase, so log
+                # it at info level WITHOUT echoing the raw git stderr (which
+                # carries alarming `error:`/`! [rejected]` lines). Issue #2754.
+                echo "Info: remote advanced — concurrent push detected (attempt ${attempt}/${max_retries}); syncing via pull --rebase before retry"
+            else
+                echo "Push failed (attempt ${attempt}/${max_retries}), retrying after pull --rebase: ${last_push_stderr}"
+            fi
             # Try a fetch + pull --rebase to recover from a non-fast-forward
             # before the next attempt. Failures here are non-fatal — we will
             # still retry the push.
