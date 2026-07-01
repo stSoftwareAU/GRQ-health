@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.17";
+const VERSION = "1.1.18";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -457,6 +457,28 @@ function getRepoFailureLogUrl(repo) {
     return `./log-viewer.html?file=./${encoded}`;
 }
 
+// Issue #140: merge per-host health records (each loaded from its own
+// docs/hosts/<slug>.json file) into a single repos array for rendering.
+// Invalid/missing records (a host file that failed to load returns null) are
+// dropped; records must be objects carrying a non-empty string `name`. When
+// two records share a name the later one wins (deterministic de-duplication).
+function mergeHostRecords(records) {
+    if (!Array.isArray(records)) {
+        return [];
+    }
+    const byName = new Map();
+    for (const record of records) {
+        if (!record || typeof record !== 'object') {
+            continue;
+        }
+        if (typeof record.name !== 'string' || record.name.trim() === '') {
+            continue;
+        }
+        byName.set(record.name, record);
+    }
+    return Array.from(byName.values());
+}
+
 function getRepoStats(reposOverride) {
     // Accepts an optional array of repos (used by tests). Falls back to the
     // module-scope repoHealthData populated by fetchRepoHealth at runtime.
@@ -481,17 +503,55 @@ function getRepoStats(reposOverride) {
     }, { total: 0, healthy: 0, warning: 0, error: 0, failed: 0 });
 }
 
+// Issue #140: fetch a single host's per-host health file. Returns the parsed
+// record, or null when the file is missing/unreadable so one absent host never
+// breaks the whole dashboard.
+async function fetchHostRecord(slug, timestamp) {
+    const safeSlug = encodeURIComponent(String(slug));
+    const response = await fetch(`./hosts/${safeSlug}.json?t=${timestamp}`);
+    if (!response.ok) {
+        return null;
+    }
+    return response.json();
+}
+
+// Issue #140: load repo health from the per-host files listed in the manifest
+// (docs/hosts/index.json), merging them at render time. Falls back to the
+// legacy shared repos.json when the manifest is unavailable (older deploys).
+async function loadPerHostRepoHealth(timestamp) {
+    try {
+        const manifestResponse = await fetch(`./hosts/index.json?t=${timestamp}`);
+        if (manifestResponse.ok) {
+            const manifest = await manifestResponse.json();
+            const slugs = Array.isArray(manifest.hosts) ? manifest.hosts : [];
+            const settled = await Promise.allSettled(
+                slugs.map((slug) => fetchHostRecord(slug, timestamp))
+            );
+            const records = settled
+                .filter((result) => result.status === 'fulfilled')
+                .map((result) => result.value);
+            return mergeHostRecords(records);
+        }
+    } catch (error) {
+        console.warn('Per-host health manifest unavailable, falling back to repos.json:', error);
+    }
+    // Legacy fallback: the single shared repos.json.
+    const response = await fetch(`./repos.json?t=${timestamp}`);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const legacy = await response.json();
+    return mergeHostRecords(Array.isArray(legacy?.repos) ? legacy.repos : []);
+}
+
 async function fetchRepoHealth(timestamp = Date.now(), force = false) {
     const now = Date.now();
     if (!force && now - lastRepoRefresh < 5 * 60 * 1000) {
         return;
     }
     try {
-        const response = await fetch(`./repos.json?t=${timestamp}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        repoHealthData = await response.json();
+        const repos = await loadPerHostRepoHealth(timestamp);
+        repoHealthData = { repos };
         lastRepoRefresh = now;
         renderRepoHealth();
     } catch (error) {
