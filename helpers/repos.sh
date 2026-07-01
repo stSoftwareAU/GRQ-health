@@ -235,7 +235,21 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-REPOS_JSON="${PROJECT_ROOT}/docs/repos.json"
+# Issue #140: each host writes its own artefact under docs/hosts/ instead of
+# the single shared docs/repos.json, so concurrent hosts never touch the same
+# file. Non-conflicting per-host files rebase cleanly, so a slow/high-latency
+# host is no longer starved by fast ones losing the push race on shared
+# content. The dashboard merges the per-host files (and the manifest) at render
+# time. docs/repos.json is retained read-only as a legacy fallback and is no
+# longer written here.
+#   HOST_JSON    docs/hosts/<slug>.json  — this host's own health record
+#   HOSTS_INDEX  docs/hosts/index.json   — manifest of known host slugs, only
+#                                          appended to when a new host appears
+HOSTS_DIR="${PROJECT_ROOT}/docs/hosts"
+HOSTS_INDEX="${HOSTS_DIR}/index.json"
+# HOST_SLUG / HOST_JSON are populated once REPO_NAME is validated below.
+HOST_SLUG=""
+HOST_JSON=""
 
 # Validate the repo name before proceeding
 if [ -z "$REPO_NAME" ]; then
@@ -267,8 +281,35 @@ if [ -n "$LOG_PATH" ]; then
     fi
 fi
 
+# Issue #140: resolve this host's per-host artefact path. The slug is reused as
+# both the filename and the manifest entry; the authoritative human name is
+# stored inside the file so slug sanitisation never loses it.
+HOST_SLUG=$(sanitise_task_slug "$REPO_NAME")
+HOST_JSON="${HOSTS_DIR}/${HOST_SLUG}.json"
+
 # Get current UTC timestamp (Unix timestamp)
 CURRENT_TS=$(date +%s)
+
+# Issue #140: register this host's slug in the manifest (docs/hosts/index.json)
+# so the static dashboard can discover the per-host files. The manifest is only
+# written when the slug is missing, so an established fleet leaves it untouched
+# and steady-state pushes carry only the host's own file (no shared-content
+# contention).
+register_host_in_manifest() {
+    if ! command -v jq &> /dev/null; then
+        return 0
+    fi
+    mkdir -p "$HOSTS_DIR"
+    if [ ! -f "$HOSTS_INDEX" ]; then
+        echo '{"hosts": []}' > "$HOSTS_INDEX"
+    fi
+    # Only rewrite when the slug is not already present — keeps the shared
+    # manifest static for known hosts.
+    if ! jq -e --arg slug "$HOST_SLUG" '(.hosts // []) | index($slug)' "$HOSTS_INDEX" > /dev/null 2>&1; then
+        jq --arg slug "$HOST_SLUG" '.hosts = (((.hosts // []) + [$slug]) | unique)' \
+            "$HOSTS_INDEX" > "${HOSTS_INDEX}.tmp" && mv "${HOSTS_INDEX}.tmp" "$HOSTS_INDEX"
+    fi
+}
 
 # Function to store the failure log file and enforce retention
 store_failure_log() {
@@ -314,7 +355,11 @@ store_failure_log() {
     echo "logs/${task_slug}/${log_filename}"
 }
 
-# Function to update repos.json for a successful run
+# Issue #140: update this host's per-host file (docs/hosts/<slug>.json) for a
+# successful run. The file holds a single object with the host's name plus its
+# live fields; any config fields already present (warning_days, error_hours,
+# business_days_only, …) are preserved because we read-modify-write the whole
+# object. Function name kept for the push-retry reapply path.
 update_repos_json_success() {
     # Check if jq is available
     if ! command -v jq &> /dev/null; then
@@ -322,23 +367,18 @@ update_repos_json_success() {
         exit 1
     fi
 
-    # Ensure repos.json exists with proper structure
-    if [ ! -f "$REPOS_JSON" ]; then
-        echo "{\"repos\": []}" > "$REPOS_JSON"
+    mkdir -p "$HOSTS_DIR"
+
+    # Read the host's current last_commit_ts (if any) for the rate-limit check.
+    local last_update_ts=""
+    if [ -f "$HOST_JSON" ]; then
+        last_update_ts=$(jq -r '.last_commit_ts // empty' "$HOST_JSON" 2>/dev/null || echo "")
     fi
 
-    # Read current repos array
-    REPOS=$(jq -c '.repos // []' "$REPOS_JSON")
-
-    # Check if repo already exists and get its last commit timestamp
-    EXISTING_REPO=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .name // empty")
-    LAST_UPDATE_TS=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .last_commit_ts // empty")
-
-    # If repo exists, check if it was updated within the last hour (3600 seconds)
-    if [ "$SKIP_RATE_LIMIT" = false ] && [ -n "$EXISTING_REPO" ] && [ -n "$LAST_UPDATE_TS" ]; then
-        TIME_DIFF=$((CURRENT_TS - LAST_UPDATE_TS))
+    # If the host was updated within the last hour (3600 seconds), skip.
+    if [ "$SKIP_RATE_LIMIT" = false ] && [ -n "$last_update_ts" ] && [ "$last_update_ts" -gt 0 ] 2>/dev/null; then
+        TIME_DIFF=$((CURRENT_TS - last_update_ts))
         if [ "$TIME_DIFF" -lt 3600 ]; then
-            # Updated within the last hour, skip update
             MINUTES_AGO=$((TIME_DIFF / 60))
             echo "Skipping update for '${REPO_NAME}' - last updated ${MINUTES_AGO} minutes ago (within 1 hour threshold)"
             RUN_STATUS="skipped"
@@ -347,30 +387,27 @@ update_repos_json_success() {
         fi
     fi
 
-    # Proceed with update (either new repo or last update was more than 1 hour ago)
-    if [ -n "$EXISTING_REPO" ]; then
-        # Update existing repo
-        jq --arg name "$REPO_NAME" \
-           --arg ts "$CURRENT_TS" \
-           '.repos |= map(if .name == $name then .last_commit_ts = ($ts | tonumber) else . end)' \
-           "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
+    if [ -f "$HOST_JSON" ]; then
+        # Update existing per-host file, preserving name and any config fields.
+        jq --arg name "$REPO_NAME" --arg ts "$CURRENT_TS" \
+           '.name = $name | .last_commit_ts = ($ts | tonumber)' \
+           "$HOST_JSON" > "${HOST_JSON}.tmp" && mv "${HOST_JSON}.tmp" "$HOST_JSON"
         echo "Updated repo '${REPO_NAME}' with timestamp ${CURRENT_TS}"
         RUN_STATUS="updated"
         RUN_REASON="success"
     else
-        # Add new repo
-        NEW_REPO="{\"name\": \"${REPO_NAME}\", \"last_commit_ts\": ${CURRENT_TS}}"
-
-        jq --argjson new_repo "$NEW_REPO" \
-           '.repos += [$new_repo]' \
-           "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
+        jq -n --arg name "$REPO_NAME" --arg ts "$CURRENT_TS" \
+           '{name: $name, last_commit_ts: ($ts | tonumber)}' > "$HOST_JSON"
         echo "Added repo '${REPO_NAME}' with timestamp ${CURRENT_TS}"
         RUN_STATUS="added"
         RUN_REASON="success"
     fi
+
+    register_host_in_manifest
 }
 
-# Function to update repos.json for a failed run
+# Issue #140: update this host's per-host file for a failed run. Failure fields
+# are written without touching last_commit_ts (or any config fields).
 update_repos_json_failure() {
     local log_relative_path="$1"
 
@@ -380,21 +417,12 @@ update_repos_json_failure() {
         exit 1
     fi
 
-    # Ensure repos.json exists with proper structure
-    if [ ! -f "$REPOS_JSON" ]; then
-        echo "{\"repos\": []}" > "$REPOS_JSON"
-    fi
+    mkdir -p "$HOSTS_DIR"
 
-    # Read current repos array
-    REPOS=$(jq -c '.repos // []' "$REPOS_JSON")
-
-    # Check if repo already exists
-    EXISTING_REPO=$(echo "$REPOS" | jq -r ".[] | select(.name == \"${REPO_NAME}\") | .name // empty")
-
-    if [ -n "$EXISTING_REPO" ]; then
-        # Update existing repo with failure fields (do NOT touch last_commit_ts)
+    if [ -f "$HOST_JSON" ]; then
+        # Update existing per-host file with failure fields (keep last_commit_ts).
         local jq_filter
-        jq_filter='.repos |= map(if .name == $name then .last_failure_ts = ($ts | tonumber) | .last_failure_log = $log'
+        jq_filter='.name = $name | .last_failure_ts = ($ts | tonumber) | .last_failure_log = $log'
 
         local jq_args=()
         jq_args+=(--arg name "$REPO_NAME")
@@ -411,12 +439,10 @@ update_repos_json_failure() {
             jq_args+=(--arg message "$FAILURE_MESSAGE")
         fi
 
-        jq_filter="$jq_filter"' else . end)'
-
-        jq "${jq_args[@]}" "$jq_filter" "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
+        jq "${jq_args[@]}" "$jq_filter" "$HOST_JSON" > "${HOST_JSON}.tmp" && mv "${HOST_JSON}.tmp" "$HOST_JSON"
         echo "Updated repo '${REPO_NAME}' with failure at timestamp ${CURRENT_TS}"
     else
-        # Add new repo entry with failure fields (no last_commit_ts since it never succeeded)
+        # New per-host file with failure fields (last_commit_ts 0 — never succeeded).
         local new_entry
         new_entry=$(jq -n --arg name "$REPO_NAME" --arg ts "$CURRENT_TS" --arg log "$log_relative_path" \
             '{name: $name, last_commit_ts: 0, last_failure_ts: ($ts | tonumber), last_failure_log: $log}')
@@ -428,10 +454,11 @@ update_repos_json_failure() {
             new_entry=$(echo "$new_entry" | jq --arg msg "$FAILURE_MESSAGE" '. + {last_failure_message: $msg}')
         fi
 
-        jq --argjson new_repo "$new_entry" '.repos += [$new_repo]' \
-            "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
+        echo "$new_entry" > "$HOST_JSON"
         echo "Added repo '${REPO_NAME}' with failure at timestamp ${CURRENT_TS}"
     fi
+
+    register_host_in_manifest
 }
 
 # Main logic: decide between success and failure modes
@@ -477,12 +504,16 @@ else
 
     # Check if we're in a merge state
     if [ -f "${PROJECT_ROOT}/.git/MERGE_HEAD" ]; then
-        # Check if repos.json is conflicted
-        if git diff --name-only --diff-filter=U 2>/dev/null | grep -q "^docs/repos.json$"; then
-            # For repos.json conflicts, take remote version (we'll update it next)
-            git checkout --theirs "${REPOS_JSON}" 2>/dev/null
-            git add "${REPOS_JSON}" 2>/dev/null
+        # Issue #140: per-host files are single-writer so they do not conflict;
+        # the only shared file is the manifest (docs/hosts/index.json). On a
+        # manifest conflict, take the remote copy then re-register this host's
+        # slug on top so no host is lost. Our own per-host file is uncommitted
+        # and re-staged in Step 2.
+        if git diff --name-only --diff-filter=U 2>/dev/null | grep -q "^docs/hosts/index.json$"; then
+            git checkout --theirs "${HOSTS_INDEX}" 2>/dev/null
+            git add "${HOSTS_INDEX}" 2>/dev/null
             git commit --no-edit --quiet 2>/dev/null || git merge --abort 2>/dev/null
+            register_host_in_manifest
         else
             # Abort merge for other conflicts
             git merge --abort 2>/dev/null
@@ -504,12 +535,13 @@ else
     fi
 
     if [ "$GIT_PULL_SUCCESS" = false ]; then
-        echo "Warning: Could not resolve git state, will attempt to update repos.json anyway"
+        echo "Warning: Could not resolve git state, will attempt to update host files anyway"
     fi
 fi
 
-# Step 2: Stage all changed files (repos.json and any log files)
-FILES_TO_ADD=("${REPOS_JSON}")
+# Step 2: Stage this host's per-host file, the manifest, and any log files
+# (Issue #140). The shared docs/repos.json is no longer written here.
+FILES_TO_ADD=("${HOST_JSON}" "${HOSTS_INDEX}")
 if [ "$FAILED_MODE" = true ]; then
     # Also stage the logs directory
     TASK_SLUG=$(sanitise_task_slug "$REPO_NAME")
@@ -527,12 +559,12 @@ for f in "${FILES_TO_ADD[@]}"; do
 done
 
 # Re-apply this host's health update onto the current working tree and commit
-# it (Issue #139 defect 2). Used by the push loop after a rebase conflict on
-# the shared docs/repos.json forces a hard reset to the remote tip: rather
-# than discarding this host's update (and silently reporting success), we
-# regenerate the entry on top of the fresh base and re-commit it so it can be
-# pushed. The update_repos_json_* helpers are idempotent and keyed on the host
-# name, so re-running them on the fresh base cannot itself conflict.
+# it (Issue #139 defect 2). Used by the push loop after a rebase conflict (now
+# only possible on the shared manifest) forces a hard reset to the remote tip:
+# rather than discarding this host's update (and silently reporting success),
+# we regenerate the per-host file on top of the fresh base and re-commit it so
+# it can be pushed. The update_repos_json_* helpers are idempotent and keyed on
+# the host slug, so re-running them on the fresh base cannot itself conflict.
 # Returns:
 #   0 — re-applied and committed a fresh local commit ready to push
 #   2 — nothing to commit (remote already carries this host's update)
@@ -544,7 +576,7 @@ reapply_health_update() {
         # stdin log ("-") cannot be reproduced, so surface a dropped update.
         if [ "$LOG_PATH" != "-" ] && [ -f "$LOG_PATH" ]; then
             LOG_RELATIVE_PATH=$(store_failure_log)
-            FILES_TO_ADD=("${REPOS_JSON}")
+            FILES_TO_ADD=("${HOST_JSON}" "${HOSTS_INDEX}")
             local reapply_slug reapply_log_dir
             reapply_slug=$(sanitise_task_slug "$REPO_NAME")
             reapply_log_dir="${PROJECT_ROOT}/docs/logs/${reapply_slug}"

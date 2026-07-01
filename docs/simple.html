@@ -57,25 +57,61 @@
                 .replace(/'/g, '&#039;');
         }
 
+        // Issue #140: merge per-host health records into a repos array,
+        // dropping nulls/invalid records and de-duplicating by name.
+        function mergeHostRecords(records) {
+            if (!Array.isArray(records)) return [];
+            const byName = new Map();
+            for (const record of records) {
+                if (!record || typeof record !== 'object') continue;
+                if (typeof record.name !== 'string' || record.name.trim() === '') continue;
+                byName.set(record.name, record);
+            }
+            return Array.from(byName.values());
+        }
+
+        // Issue #140: load repo health from the per-host manifest, falling back
+        // to the legacy shared repos.json when the manifest is unavailable.
+        async function loadPerHostRepos(timestamp) {
+            try {
+                const manifestResponse = await fetch(`./hosts/index.json?t=${timestamp}`);
+                if (manifestResponse.ok) {
+                    const manifest = await manifestResponse.json();
+                    const slugs = Array.isArray(manifest.hosts) ? manifest.hosts : [];
+                    const settled = await Promise.allSettled(slugs.map(async (slug) => {
+                        const r = await fetch(`./hosts/${encodeURIComponent(String(slug))}.json?t=${timestamp}`);
+                        return r.ok ? r.json() : null;
+                    }));
+                    const records = settled
+                        .filter((s) => s.status === 'fulfilled')
+                        .map((s) => s.value);
+                    return mergeHostRecords(records);
+                }
+            } catch (error) {
+                console.warn('Per-host manifest unavailable, falling back to repos.json', error);
+            }
+            const repoResponse = await fetch(`./repos.json?t=${timestamp}`);
+            if (!repoResponse.ok) {
+                console.warn('Repo health data unavailable', repoResponse.status);
+                return [];
+            }
+            const legacy = await repoResponse.json();
+            return mergeHostRecords(Array.isArray(legacy.repos) ? legacy.repos : []);
+        }
+
         async function checkHealth() {
             try {
                 // Add timestamp to force fresh fetch and bypass cache
                 const timestamp = new Date().getTime();
-                const [hostsResponse, repoResponse] = await Promise.all([
-                    fetch(`./index.json?t=${timestamp}`),
-                    fetch(`./repos.json?t=${timestamp}`)
-                ]);
+                const hostsResponse = await fetch(`./index.json?t=${timestamp}`);
                 if (!hostsResponse.ok) {
                     throw new Error(`HTTP error! status: ${hostsResponse.status}`);
                 }
                 const data = await hostsResponse.json();
-                let repoData = { repos: [] };
-                if (repoResponse.ok) {
-                    repoData = await repoResponse.json();
-                } else {
-                    console.warn('Repo health data unavailable', repoResponse.status);
-                }
-                
+                // Issue #140: repo health merged from per-host files (manifest),
+                // falling back to the legacy shared repos.json.
+                const repoData = { repos: await loadPerHostRepos(timestamp) };
+
                 // Convert to array of [hostname, data] pairs
                 const hosts = Object.entries(data);
                 

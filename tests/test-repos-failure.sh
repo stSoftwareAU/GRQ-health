@@ -2,6 +2,10 @@
 # Test for Issue #76: Failure reporting in repos.sh
 # Verifies that --failed --log flags work correctly, log retention is enforced,
 # and task name sanitisation prevents path traversal and shell injection.
+#
+# Issue #140: health data now lives in per-host files under docs/hosts/ rather
+# than the single shared docs/repos.json. Assertions read the host file
+# (docs/hosts/<slug>.json) directly.
 
 set -e
 
@@ -31,17 +35,13 @@ trap 'rm -rf "$TMPDIR_BASE"' EXIT
 
 setup_test_env() {
     local test_dir="$TMPDIR_BASE/test_$$_$RANDOM"
-    mkdir -p "$test_dir/docs" "$test_dir/helpers"
+    mkdir -p "$test_dir/docs/hosts" "$test_dir/helpers"
 
-    # Create a minimal repos.json
-    cat > "$test_dir/docs/repos.json" <<'ENDJSON'
+    # Issue #140: seed the per-host file for "Quality".
+    cat > "$test_dir/docs/hosts/Quality.json" <<'ENDJSON'
 {
-  "repos": [
-    {
-      "name": "Quality",
-      "last_commit_ts": 1776265324
-    }
-  ]
+  "name": "Quality",
+  "last_commit_ts": 1776265324
 }
 ENDJSON
 
@@ -50,6 +50,12 @@ ENDJSON
     chmod +x "$test_dir/helpers/repos.sh"
 
     echo "$test_dir"
+}
+
+# Issue #140: read a field from a host's per-host file (docs/hosts/<slug>.json).
+host_field() {
+    local test_dir="$1" slug="$2" expr="$3"
+    jq -r "$expr" "$test_dir/docs/hosts/${slug}.json" 2>/dev/null
 }
 
 # --------------------------------------------------------------------------
@@ -61,7 +67,7 @@ TEST_DIR=$(setup_test_env)
 # Use --dry-run to test without git operations
 bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "Quality" 2>/dev/null
 
-UPDATED_TS=$(jq '.repos[] | select(.name == "Quality") | .last_commit_ts' "$TEST_DIR/docs/repos.json")
+UPDATED_TS=$(host_field "$TEST_DIR" "Quality" '.last_commit_ts')
 if [ "$UPDATED_TS" -gt 1776265324 ] 2>/dev/null; then
     pass_test "success call updated last_commit_ts"
 else
@@ -69,7 +75,7 @@ else
 fi
 
 # Verify no failure fields exist
-FAILURE_TS=$(jq '.repos[] | select(.name == "Quality") | .last_failure_ts // empty' "$TEST_DIR/docs/repos.json")
+FAILURE_TS=$(host_field "$TEST_DIR" "Quality" '.last_failure_ts // empty')
 if [ -z "$FAILURE_TS" ]; then
     pass_test "success call does not add last_failure_ts"
 else
@@ -90,7 +96,7 @@ echo "Another line of errors" >> "$LOG_FILE"
 bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "Quality" --failed --log "$LOG_FILE" 2>/dev/null
 
 # Check last_failure_ts was set
-FAILURE_TS=$(jq '.repos[] | select(.name == "Quality") | .last_failure_ts // empty' "$TEST_DIR/docs/repos.json")
+FAILURE_TS=$(host_field "$TEST_DIR" "Quality" '.last_failure_ts // empty')
 if [ -n "$FAILURE_TS" ] && [ "$FAILURE_TS" -gt 0 ] 2>/dev/null; then
     pass_test "--failed sets last_failure_ts ($FAILURE_TS)"
 else
@@ -98,7 +104,7 @@ else
 fi
 
 # Check last_failure_log was set
-FAILURE_LOG=$(jq -r '.repos[] | select(.name == "Quality") | .last_failure_log // empty' "$TEST_DIR/docs/repos.json")
+FAILURE_LOG=$(host_field "$TEST_DIR" "Quality" '.last_failure_log // empty')
 if [[ "$FAILURE_LOG" == logs/Quality/* ]]; then
     pass_test "--failed sets last_failure_log ($FAILURE_LOG)"
 else
@@ -118,7 +124,7 @@ else
 fi
 
 # Check last_commit_ts was NOT updated
-COMMIT_TS=$(jq '.repos[] | select(.name == "Quality") | .last_commit_ts' "$TEST_DIR/docs/repos.json")
+COMMIT_TS=$(host_field "$TEST_DIR" "Quality" '.last_commit_ts')
 if [ "$COMMIT_TS" -eq 1776265324 ]; then
     pass_test "--failed does not update last_commit_ts"
 else
@@ -133,7 +139,7 @@ TEST_DIR=$(setup_test_env)
 
 echo "stdin error log content" | bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "Quality" --failed --log - 2>/dev/null
 
-FAILURE_LOG=$(jq -r '.repos[] | select(.name == "Quality") | .last_failure_log // empty' "$TEST_DIR/docs/repos.json")
+FAILURE_LOG=$(host_field "$TEST_DIR" "Quality" '.last_failure_log // empty')
 if [ -n "$FAILURE_LOG" ] && [ -f "$TEST_DIR/docs/$FAILURE_LOG" ]; then
     LOG_CONTENT=$(cat "$TEST_DIR/docs/$FAILURE_LOG")
     if [[ "$LOG_CONTENT" == *"stdin error log content"* ]]; then
@@ -154,12 +160,12 @@ LOG_FILE="$TMPDIR_BASE/run2.log"
 echo "test log" > "$LOG_FILE"
 
 # Test with colon in name (e.g., "ScoreClient:luke")
-cat > "$TEST_DIR/docs/repos.json" <<'ENDJSON'
-{"repos": [{"name": "ScoreClient:luke", "last_commit_ts": 1776265324}]}
+cat > "$TEST_DIR/docs/hosts/ScoreClient-luke.json" <<'ENDJSON'
+{"name": "ScoreClient:luke", "last_commit_ts": 1776265324}
 ENDJSON
 
 bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "ScoreClient:luke" --failed --log "$LOG_FILE" 2>/dev/null
-FAILURE_LOG=$(jq -r '.repos[] | select(.name == "ScoreClient:luke") | .last_failure_log // empty' "$TEST_DIR/docs/repos.json")
+FAILURE_LOG=$(host_field "$TEST_DIR" "ScoreClient-luke" '.last_failure_log // empty')
 if [[ "$FAILURE_LOG" == logs/ScoreClient-luke/* ]]; then
     pass_test "colon sanitised to hyphen in slug"
 else
@@ -167,12 +173,12 @@ else
 fi
 
 # Test with spaces in name (e.g., "Vibe Coder:GRQ-23")
-cat > "$TEST_DIR/docs/repos.json" <<'ENDJSON'
-{"repos": [{"name": "Vibe Coder:GRQ-23", "last_commit_ts": 1776265324}]}
+cat > "$TEST_DIR/docs/hosts/Vibe-Coder-GRQ-23.json" <<'ENDJSON'
+{"name": "Vibe Coder:GRQ-23", "last_commit_ts": 1776265324}
 ENDJSON
 
 bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "Vibe Coder:GRQ-23" --failed --log "$LOG_FILE" 2>/dev/null
-FAILURE_LOG=$(jq -r '.repos[] | select(.name == "Vibe Coder:GRQ-23") | .last_failure_log // empty' "$TEST_DIR/docs/repos.json")
+FAILURE_LOG=$(host_field "$TEST_DIR" "Vibe-Coder-GRQ-23" '.last_failure_log // empty')
 if [[ "$FAILURE_LOG" == logs/Vibe-Coder-GRQ-23/* ]]; then
     pass_test "spaces and colons sanitised in slug"
 else
@@ -249,14 +255,14 @@ echo "test" > "$LOG_FILE"
 
 bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "Quality" --failed --log "$LOG_FILE" --exit-code 42 --message "3 shellcheck errors" 2>/dev/null
 
-EXIT_CODE=$(jq '.repos[] | select(.name == "Quality") | .last_failure_exit_code // empty' "$TEST_DIR/docs/repos.json")
+EXIT_CODE=$(host_field "$TEST_DIR" "Quality" '.last_failure_exit_code // empty')
 if [ "$EXIT_CODE" = "42" ]; then
     pass_test "--exit-code recorded correctly"
 else
     fail_test "--exit-code not recorded (got: $EXIT_CODE)"
 fi
 
-MESSAGE=$(jq -r '.repos[] | select(.name == "Quality") | .last_failure_message // empty' "$TEST_DIR/docs/repos.json")
+MESSAGE=$(host_field "$TEST_DIR" "Quality" '.last_failure_message // empty')
 if [ "$MESSAGE" = "3 shellcheck errors" ]; then
     pass_test "--message recorded correctly"
 else

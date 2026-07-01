@@ -59,26 +59,53 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Health logic**: The dashboard treats the host as unhealthy if **any discovered user** is stale (uses the *oldest* user heartbeat for host health classification).
 - **Logs**: `run.sh` writes only `docs/<HOST>/node-<user>.log` (one file per user). The generic `node.log` is no longer created.
 
-#### Market Feed Repository Freshness:
-- **Manual updates**: Each background task updates `docs/repos.json` immediately after it finishes, recording its latest commit/publish timestamp.
-- **Helper script**: Use `helpers/update_repo_timestamp.sh` to update (or create) the entry for a service.
+#### Market Feed Repository Freshness (per-host files — Issue #140):
+- **Per-host artefacts**: Each background task/host writes **its own** file
+  `docs/hosts/<slug>.json` when it finishes, recording its latest commit/publish
+  timestamp. Because hosts never write to a shared file, concurrent pushes to
+  the shared `Develop` branch no longer conflict on content — a slow/mobile,
+  high-latency host is no longer starved by fast, always-on hosts winning the
+  push race (which previously dropped the slow host's update and made its tile
+  go stale). `<slug>` is the host name with unsafe characters replaced by
+  hyphens (e.g. `Vibe Coder:GRQ-23` → `Vibe-Coder-GRQ-23`); the authoritative
+  human name is stored inside the file.
+- **Manifest**: `docs/hosts/index.json` lists the known host slugs so the static
+  dashboard can discover the per-host files. It is **append-only** — written
+  only when a brand-new host first appears — so an established fleet leaves it
+  untouched and steady-state pushes carry only each host's own file.
+- **Helper script**: Use `helpers/repos.sh <name>` to record a success (or
+  `--failed --log <path>` to record a failure). Example:
   ```bash
   # Record the current run for the dividends service
-  ./helpers/update_repo_timestamp.sh --name "dividends"
-
-  # Back-fill with an explicit unix timestamp
-  ./helpers/update_repo_timestamp.sh --name "FX" --timestamp 1752806400
+  ./helpers/repos.sh "Dividends"
   ```
-- **Output**: `docs/repos.json` keeps a simple list of objects with `name` and `last_commit_ts`. Example:
+- **Per-host file shape**: a single object with `name`, `last_commit_ts`, and
+  any per-host config (`warning_days`/`error_days`/`warning_hours`/`error_hours`/
+  `business_days_only`) plus failure fields when a run fails. Example:
   ```json
-  {
-    "repos": [
-      { "name": "dividends", "last_commit_ts": 1752806400 },
-      { "name": "FX", "last_commit_ts": 1752720000 }
-    ]
-  }
+  { "name": "Vibe Coder:GRQ-23", "last_commit_ts": 1752806400, "warning_hours": 4, "error_hours": 8 }
   ```
-- **Visualisation**: `docs/dashboard.js` and `docs/simple.html` fetch `docs/repos.json` and classify warning/error states (36h/72h thresholds) entirely on the client. The helper script intentionally does no health scoring.
+- **Visualisation**: `docs/dashboard.js` and `docs/simple.html` fetch the
+  manifest, load each per-host file, and **merge them at render time** into the
+  same repos array, then classify warning/error states entirely on the client.
+  If the manifest is unavailable (older deploys) they fall back to the legacy
+  shared `docs/repos.json`.
+
+```mermaid
+flowchart LR
+    subgraph Hosts["Hosts writing concurrently to Develop"]
+        A["Fast host<br/>repos.sh Score"] -->|writes only| FA["docs/hosts/Score.json"]
+        B["Mobile host<br/>repos.sh Vibe Coder:GRQ-23"] -->|writes only| FB["docs/hosts/Vibe-Coder-GRQ-23.json"]
+    end
+    FA --> M["docs/hosts/index.json<br/>(append-only manifest)"]
+    FB --> M
+    M --> D["dashboard.js / simple.html<br/>fetch manifest + per-host files"]
+    D -->|mergeHostRecords| T["Health tiles"]
+```
+
+Because `Score.json` and `Vibe-Coder-GRQ-23.json` are different files, their
+commits rebase cleanly against each other — no host's update is dropped on a
+content conflict, so no tile goes stale from losing the push race.
 
 #### Version Management:
 - **Primary version**: Stored in `run.sh` VERSION variable
@@ -214,7 +241,13 @@ The system uses a simple structure where each hostname is a key:
 }
 ```
 
-### Repo Freshness JSON (`docs/repos.json`)
+### Repo Freshness JSON (per-host files — `docs/hosts/<slug>.json`)
+
+Since Issue #140 each host owns a single file `docs/hosts/<slug>.json` holding
+one object, and `docs/hosts/index.json` lists the slugs. The example below shows
+the union of those objects as the dashboard merges them at render time (the
+legacy shared `docs/repos.json` uses the same object shape and remains as a
+fallback for older deploys):
 
 ```json
 {
