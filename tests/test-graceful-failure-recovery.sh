@@ -325,8 +325,13 @@ SLEEPEOF
 chmod +x "${MOCK_BIN5}/sleep"
 
 set +e
+# Issue #139: repos.sh now jitters the backoff (adds 0..GRQ_PUSH_JITTER_MAX
+# seconds) to de-sync the fleet. Disable jitter here so this test can assert
+# the exact configured base sequence deterministically; the jitter behaviour
+# itself is covered by tests/test-repos-push-final-attempt.sh.
 PATH="${MOCK_BIN5}:${PATH}" \
     GRQ_PUSH_RETRY_DELAYS_OVERRIDE="2 5 11" \
+    GRQ_PUSH_JITTER_MAX=0 \
     "$WORK/helpers/repos.sh" "BackoffSvc" --skip-rate-limit --project-root "$WORK" \
     >"${T5_BASE}/out.log" 2>&1
 set -e
