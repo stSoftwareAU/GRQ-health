@@ -59,6 +59,25 @@ grq_max_push_attempts() {
     echo "${GRQ_PUSH_MAX_ATTEMPTS:-5}"
 }
 
+# Add a small random jitter (0..GRQ_PUSH_JITTER_MAX secs, default 2) to a
+# backoff delay so a fleet of workers that all collided on the same shared
+# branch at the same instant do not retry in lock-step (Issue #139). A base
+# delay of 0 (used by tests via GIT_PUSH_RETRY_DELAY_OVERRIDE) is returned
+# unchanged so retries stay instant; set GRQ_PUSH_JITTER_MAX=0 to disable
+# jitter entirely.
+# Usage: grq_apply_jitter <base_seconds>  -> echoes base (+ jitter)
+grq_apply_jitter() {
+    local base="${1:-0}"
+    local max="${GRQ_PUSH_JITTER_MAX:-2}"
+    # Guard against non-numeric input and the disable/zero cases.
+    if ! [[ "$base" =~ ^[0-9]+$ ]] || [ "$base" -le 0 ] || \
+       ! [[ "$max" =~ ^[0-9]+$ ]] || [ "$max" -le 0 ]; then
+        echo "$base"
+        return 0
+    fi
+    echo $(( base + (RANDOM % (max + 1)) ))
+}
+
 # Run a git command wrapped with the timeout helper (when available).
 # Usage: grq_run_git <git args...>
 # Caller is responsible for stdout/stderr redirection.

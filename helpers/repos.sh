@@ -46,7 +46,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # pushed / skipped / failed outcomes without parsing localised messages.
 # Format:
 #   repos.sh status=<status> reason=<reason> name='<repo_name>'
-# Statuses: skipped | updated | added | failed-recorded | failed | unknown
+# Statuses: skipped | updated | added | failed-recorded | failed |
+#           update-dropped | unknown
+# update-dropped (Issue #139): non-fatal — the health update could not be
+# re-applied after a persistent rebase conflict on the shared docs/repos.json,
+# so it was dropped. Surfaced distinctly instead of masked as success.
 RUN_STATUS="unknown"
 RUN_REASON="unknown"
 REPO_NAME=""
@@ -522,21 +526,75 @@ for f in "${FILES_TO_ADD[@]}"; do
     fi
 done
 
+# Re-apply this host's health update onto the current working tree and commit
+# it (Issue #139 defect 2). Used by the push loop after a rebase conflict on
+# the shared docs/repos.json forces a hard reset to the remote tip: rather
+# than discarding this host's update (and silently reporting success), we
+# regenerate the entry on top of the fresh base and re-commit it so it can be
+# pushed. The update_repos_json_* helpers are idempotent and keyed on the host
+# name, so re-running them on the fresh base cannot itself conflict.
+# Returns:
+#   0 — re-applied and committed a fresh local commit ready to push
+#   2 — nothing to commit (remote already carries this host's update)
+#   1 — could not re-apply (e.g. failure-mode log no longer on disk)
+reapply_health_update() {
+    if [ "$FAILED_MODE" = true ]; then
+        # The failure log written earlier was removed by the hard reset. Only
+        # re-create it when the source log is still a readable file; a consumed
+        # stdin log ("-") cannot be reproduced, so surface a dropped update.
+        if [ "$LOG_PATH" != "-" ] && [ -f "$LOG_PATH" ]; then
+            LOG_RELATIVE_PATH=$(store_failure_log)
+            FILES_TO_ADD=("${REPOS_JSON}")
+            local reapply_slug reapply_log_dir
+            reapply_slug=$(sanitise_task_slug "$REPO_NAME")
+            reapply_log_dir="${PROJECT_ROOT}/docs/logs/${reapply_slug}"
+            if [ -d "$reapply_log_dir" ]; then
+                FILES_TO_ADD+=("$reapply_log_dir")
+            fi
+            update_repos_json_failure "$LOG_RELATIVE_PATH"
+        else
+            return 1
+        fi
+    else
+        update_repos_json_success
+    fi
+
+    local reapply_staged=false reapply_file
+    for reapply_file in "${FILES_TO_ADD[@]}"; do
+        if git add "$reapply_file" 2>/dev/null; then
+            reapply_staged=true
+        fi
+    done
+
+    if [ "$reapply_staged" = true ] && ! git diff --cached --quiet 2>/dev/null; then
+        if git commit -m "$COMMIT_MSG" --quiet 2>/dev/null; then
+            return 0
+        fi
+        return 1
+    fi
+    return 2
+}
+
 # Step 3: Commit and push
-# Issue #117 + #1862: Push retries use exponential backoff (default 1s, 4s,
-# 16s) and wrap each git call in a 120s timeout to handle slow networks.
-# A non-fast-forward failure is recovered by fetch + rebase --autostash so
-# the next push can fast-forward. If the rebase conflicts on repos.json we
-# abort and reset to the remote — repos.json is a regenerated artefact, so
-# discarding the stale local commit is safe. A GitHub rate-limit response
-# (HTTP 429 / abuse detection / "rate limit" in stderr) triggers a sleep
-# until the reset window (probed via `gh api rate_limit` when available)
-# before the next attempt. When all retries are exhausted we reset the
-# local clone to origin/<branch> + clean -fd so the next service update
-# does not commit on top of a stale unpushed commit (which would falsely
-# mark the previous service as alive), surface the actual stderr, and exit
-# non-zero so the failure itself is observable.
+# Issue #117 + #1862 + #139: Push retries use exponential backoff (default
+# 1s, 4s, 16s, 30s, 60s, jittered) and wrap each git call in a 120s timeout to
+# handle slow networks. We push optimistically on the first attempt (the base
+# was just freshened by the Step 1 pull); every subsequent retry fetches and
+# rebases BEFORE pushing so even the final attempt lands on the latest remote
+# tip instead of re-sending a now-stale commit (#139 defect 1). If a rebase
+# conflicts on repos.json we reset to the remote and re-apply this host's
+# update on top, then keep retrying — the update is preserved rather than
+# silently dropped (#139 defect 2). A GitHub rate-limit response (HTTP 429 /
+# abuse detection / "rate limit" in stderr) triggers a sleep until the reset
+# window (probed via `gh api rate_limit` when available) before the next
+# attempt. When all retries are exhausted we reset the local clone to
+# origin/<branch> + clean -fd so the next service update does not commit on top
+# of a stale unpushed commit (which would falsely mark the previous service as
+# alive), surface the actual stderr, and exit non-zero so the failure itself is
+# observable. If an update genuinely cannot be re-applied it is surfaced as a
+# non-fatal status=update-dropped rather than masked as success.
 PUSH_FINAL_STATUS=0
+UPDATE_DROPPED=false
 if [ "$STAGED_SOMETHING" = true ]; then
     if ! git diff --cached --quiet 2>/dev/null; then
         # Commit the changes
@@ -559,15 +617,70 @@ if [ "$STAGED_SOMETHING" = true ]; then
             CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
             for attempt in $(seq 1 "$GIT_PUSH_MAX_ATTEMPTS"); do
+                # Issue #139 defect 1: rebase BEFORE pushing on every retry
+                # (rebase-before-push, not push-then-rebase) so even the final
+                # attempt lands on the freshest remote tip. The first attempt
+                # pushes optimistically — the Step 1 pull already freshened the
+                # base, so the common uncontended path stays a single push.
+                # Skip when not on a named branch (nothing to rebase onto in a
+                # detached HEAD).
+                if [ "$attempt" -gt 1 ] && [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
+                    if grq_run_git fetch --quiet origin "$CURRENT_BRANCH" 2>/dev/null; then
+                        if grq_run_git rebase --autostash "origin/${CURRENT_BRANCH}" 2>/dev/null; then
+                            echo "Info: rebased onto origin/${CURRENT_BRANCH} before push (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS})"
+                        else
+                            # Rebase conflict — almost always on the shared
+                            # repos.json. Issue #139 defect 2: instead of
+                            # discarding this host's update and (silently)
+                            # reporting success, reset to the fresh remote tip
+                            # and RE-APPLY the update on top, then keep retrying
+                            # the push so the update is preserved.
+                            echo "Warning: rebase onto origin/${CURRENT_BRANCH} conflicted; resetting to remote and re-applying this host's update"
+                            git rebase --abort 2>/dev/null || true
+                            rm -rf .git/rebase-merge .git/rebase-apply 2>/dev/null || true
+                            git reset --hard "origin/${CURRENT_BRANCH}" 2>/dev/null || true
+
+                            reapply_health_update
+                            REAPPLY_RC=$?
+                            if [ "$REAPPLY_RC" -eq 0 ]; then
+                                echo "Info: re-applied this host's update onto origin/${CURRENT_BRANCH} after conflict"
+                            elif [ "$REAPPLY_RC" -eq 2 ]; then
+                                # Remote already carries this host's update —
+                                # nothing left to push. Treat as success.
+                                echo "Info: origin/${CURRENT_BRANCH} already carries this host's update; nothing to push"
+                                GIT_PUSH_SUCCESS=true
+                                break
+                            else
+                                # Could not re-apply (e.g. failure-mode log no
+                                # longer on disk). Surface a distinct non-fatal
+                                # status so the dropped update is observable
+                                # instead of masked as success.
+                                echo "Warning: could not re-apply this host's update after conflict; update dropped"
+                                UPDATE_DROPPED=true
+                                break
+                            fi
+                        fi
+                    else
+                        echo "Warning: git fetch origin ${CURRENT_BRANCH} failed; pushing without a fresh base (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS})"
+                    fi
+                fi
+
                 : > "$PUSH_STDERR_FILE"
                 if grq_run_git push --quiet 2>"$PUSH_STDERR_FILE"; then
                     GIT_PUSH_SUCCESS=true
                     break
                 fi
                 LAST_PUSH_STDERR=$(cat "$PUSH_STDERR_FILE" 2>/dev/null || echo "")
+                echo "Warning: git push failed (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}): ${LAST_PUSH_STDERR}"
 
-                # Decide the inter-attempt sleep up-front so rate-limit
-                # responses can override the standard backoff.
+                # No further attempts remain — stop. The freshest rebase+push
+                # already happened on this final attempt (defect 1 fix).
+                if [ "$attempt" -ge "$GIT_PUSH_MAX_ATTEMPTS" ]; then
+                    break
+                fi
+
+                # Decide the inter-attempt sleep. A rate-limit response
+                # overrides the standard (jittered) backoff.
                 IDX=$((attempt - 1))
                 # bash 3.2 (macOS default) errors on ${arr[-1]} with `set -u`,
                 # so compute the last index explicitly. The fallback covers
@@ -578,50 +691,19 @@ if [ "$STAGED_SOMETHING" = true ]; then
                 if [ -n "$LEGACY_DELAY" ]; then
                     BACKOFF_SECS="$LEGACY_DELAY"
                 fi
-                SLEEP_SECS="$BACKOFF_SECS"
+                # Issue #139: jitter the backoff so a fleet that collided at the
+                # same instant does not retry in lock-step.
+                SLEEP_SECS=$(grq_apply_jitter "$BACKOFF_SECS")
 
                 if echo "$LAST_PUSH_STDERR" | grq_is_rate_limit_error; then
                     SLEEP_SECS=$(grq_rate_limit_sleep_secs "$BACKOFF_SECS")
                     echo "Warning: GitHub rate limit detected (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}); sleeping ${SLEEP_SECS}s before retry"
                 fi
 
-                if [ "$attempt" -lt "$GIT_PUSH_MAX_ATTEMPTS" ]; then
-                    echo "Warning: git push failed (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}): ${LAST_PUSH_STDERR}"
-
-                    # Try to recover from non-fast-forward via fetch + rebase
-                    # before the next attempt. Skip if we are not on a named
-                    # branch — there is nothing to rebase onto in detached HEAD.
-                    if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
-                        if grq_run_git fetch --quiet origin "$CURRENT_BRANCH" 2>/dev/null; then
-                            if grq_run_git rebase --autostash "origin/${CURRENT_BRANCH}" 2>/dev/null; then
-                                echo "Info: rebased onto origin/${CURRENT_BRANCH}, retrying push"
-                            else
-                                # Rebase failed — almost always a conflict on
-                                # repos.json. The repo is a regenerated
-                                # artefact, so the safe move is to abort and
-                                # reset to remote, discarding our stale local
-                                # commit. The next scheduled run will record
-                                # the latest timestamp again.
-                                echo "Warning: rebase onto origin/${CURRENT_BRANCH} failed; discarding stale local commit and resetting to remote"
-                                git rebase --abort 2>/dev/null || true
-                                rm -rf .git/rebase-merge .git/rebase-apply 2>/dev/null || true
-                                git reset --hard "origin/${CURRENT_BRANCH}" 2>/dev/null || true
-                                # Nothing left to push — exit the retry loop
-                                # cleanly. A subsequent run will re-record the
-                                # timestamp.
-                                GIT_PUSH_SUCCESS=true
-                                break
-                            fi
-                        else
-                            echo "Warning: git fetch origin ${CURRENT_BRANCH} failed; cannot rebase before retry"
-                        fi
-                    fi
-
-                    sleep "$SLEEP_SECS"
-                fi
+                sleep "$SLEEP_SECS"
             done
 
-            if [ "$GIT_PUSH_SUCCESS" = false ]; then
+            if [ "$GIT_PUSH_SUCCESS" = false ] && [ "$UPDATE_DROPPED" = false ]; then
                 echo "ERROR: git push failed after ${GIT_PUSH_MAX_ATTEMPTS} attempts"
                 if [ -n "$LAST_PUSH_STDERR" ]; then
                     echo "Last git push stderr:"
@@ -639,6 +721,18 @@ if [ "$STAGED_SOMETHING" = true ]; then
                     echo "Warning: failed to reset local clone to origin/${CURRENT_BRANCH}"
                 fi
                 PUSH_FINAL_STATUS=1
+            elif [ "$UPDATE_DROPPED" = true ]; then
+                # Issue #139 defect 2: the update could not be re-applied after
+                # a persistent rebase conflict. This is non-fatal (core work
+                # continues) but must be observable, not masked as success.
+                # Reset to remote so the next run starts clean; the distinct
+                # status=update-dropped is emitted at exit.
+                echo "Warning: this host's health update was dropped after a rebase conflict on docs/repos.json"
+                if grq_recover_to_remote 2>/dev/null; then
+                    echo "Info: reset local clone to origin/${CURRENT_BRANCH} and cleaned working tree"
+                else
+                    echo "Warning: failed to reset local clone to origin/${CURRENT_BRANCH}"
+                fi
             fi
 
             rm -f "$PUSH_STDERR_FILE" 2>/dev/null || true
@@ -657,4 +751,11 @@ if [ "$PUSH_FINAL_STATUS" -ne 0 ]; then
     RUN_STATUS="failed"
     RUN_REASON="push-failed"
     exit "$PUSH_FINAL_STATUS"
+fi
+
+# Issue #139 defect 2: a dropped update is non-fatal (exit 0) but must be
+# observable rather than masquerading as a normal update.
+if [ "${UPDATE_DROPPED:-false}" = true ]; then
+    RUN_STATUS="update-dropped"
+    RUN_REASON="update-dropped"
 fi
