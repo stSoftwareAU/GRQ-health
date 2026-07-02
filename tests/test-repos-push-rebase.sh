@@ -131,13 +131,13 @@ else
     fail_test "Expected local and remote HEADs to match. local=$WORK_HEAD_AFTER remote=$REMOTE_HEAD_AFTER. Output: $OUTPUT"
 fi
 
-# Issue #140: the per-host file on the remote should contain the TestRepo
-# entry (the local commit survived the rebase and was pushed).
-REMOTE_HOST_JSON=$(cd "${TEST1_BASE}/remote.git" && git show "main:docs/hosts/TestRepo.json" 2>/dev/null || echo "")
-if echo "$REMOTE_HOST_JSON" | grep -q '"TestRepo"'; then
+# repos.json on the remote should contain TestRepo entry (the local commit
+# survived the rebase and was pushed).
+REMOTE_REPOS_JSON=$(cd "${TEST1_BASE}/remote.git" && git show "main:docs/repos.json" 2>/dev/null || echo "")
+if echo "$REMOTE_REPOS_JSON" | grep -q '"TestRepo"'; then
     pass_test "TestRepo entry is present on remote (push succeeded after rebase)"
 else
-    fail_test "TestRepo not found on remote. host file contents: $REMOTE_HOST_JSON"
+    fail_test "TestRepo not found on remote. repos.json contents: $REMOTE_REPOS_JSON"
 fi
 
 # remote_only.txt from the divergent commit must still exist (rebase didn't
