@@ -1,0 +1,38 @@
+Testing Issue #143: protected-branch (GH006) push is non-retryable
+=================================================================
+
+Part A: grq_is_protected_branch_error classification...
+  PASS: Detects the GH006 protected-branch rejection
+  PASS: Detects 'protected branch hook declined'
+  PASS: Detects 'required status checks are expected'
+  PASS: Non-fast-forward rejection is NOT classified as protected-branch
+  PASS: Empty stderr is not classified as protected-branch
+  PASS: Rate-limit message is not classified as protected-branch
+
+Part B: repos.sh fails fast with reason=protected-branch...
+  PASS: Protected-branch rejection stopped after a single push attempt (no retry)
+  PASS: Status line reports reason=protected-branch
+  PASS: Did not report the generic reason=push-failed
+  PASS: repos.sh exits non-zero on a protected-branch rejection
+
+Results: 10 passed, 0 failed
+===== Live demonstration: repos.sh against a GH006-rejecting remote =====
+Added repo 'Vibe Coder:GRQ-23' with timestamp 1782986915
+Warning: git push failed (attempt 1/5): remote: error: GH006: Protected branch update failed for refs/heads/main.
+remote: - 4 of 4 required status checks are expected.
+ ! [remote rejected]     main -> main (protected branch hook declined)
+Error: push rejected by protected branch (GH006); this account cannot bypass the required status checks. Not retrying.
+ERROR: git push rejected by protected branch (GH006) after 1 attempt(s); required status checks cannot be bypassed by this account
+Last git push stderr:
+  remote: error: GH006: Protected branch update failed for refs/heads/main.
+  remote: - 4 of 4 required status checks are expected.
+   ! [remote rejected]     main -> main (protected branch hook declined)
+Branch status (git status --porcelain=v2 --branch):
+  # branch.oid 2b90dcbef7b8d813177d39d99ffa21c203a7bbfe
+  # branch.head main
+  # branch.upstream origin/main
+  # branch.ab +1 -0
+HEAD is now at f2c3a00 init
+Info: reset local clone to origin/main and cleaned working tree
+repos.sh status=failed reason=protected-branch name='Vibe Coder:GRQ-23'
+Total git push attempts made: 1 (fail-fast = 1, not 5)

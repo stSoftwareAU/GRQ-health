@@ -40,15 +40,29 @@ Closes #143.
 
 ## Evidence
 
-Backend/CLI change — no web UI to screenshot. Verified via the new automated
-test plus a confirmation that the test genuinely fails against the unfixed code
-(6 assertions fail: `reason=push-failed` and 5 push attempts) and passes after
-the fix (1 push attempt, `reason=protected-branch`).
+**Backend/CLI change — no web UI to screenshot.** The issue is labelled
+`needs-screenshot`, but the fix is entirely in the push path
+(`helpers/repos.sh` / `helpers/git-retry.sh`); the dashboard is unchanged apart
+from the routine version cache-buster, and a host rejected on the protected
+branch still classifies as *in error* on its tile — the mitigation changes *how
+fast the push gives up and how the failure is labelled*, not any pixel. Playwright
+MCP browser tools and a headless browser binary were both unavailable in this
+run, so — per the Error Recovery "Screenshot failures" guidance — evidence is
+the automated test suite plus a live CLI demonstration rather than a screenshot.
+The static dashboard was served locally (`helpers/server.ts`) and confirmed to
+still render (`<title>GRQ Health Status</title>`, version `1.1.19`).
 
-New status line on a protected-branch rejection:
+Captured test + live-run output:
+[`docs/evidence/issue-143-protected-branch-test-output.txt`](../../evidence/issue-143-protected-branch-test-output.txt)
+
+Live run of `repos.sh` against a `git` shim that declines every push with the
+GH006 signature — one attempt, distinct reason, non-zero exit:
 
 ```text
+Warning: git push failed (attempt 1/5): remote: error: GH006: Protected branch update failed ...
+ERROR: git push rejected by protected branch (GH006) after 1 attempt(s); required status checks cannot be bypassed by this account
 repos.sh status=failed reason=protected-branch name='Vibe Coder:GRQ-23'
+Total git push attempts made: 1 (fail-fast = 1, not 5)
 ```
 
 Retry behaviour before vs after:
