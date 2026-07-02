@@ -28,7 +28,11 @@ set -euo pipefail
 #     repos.sh status=<status> reason=<reason> name='<repo_name>'
 #   Statuses: skipped | updated | added | failed-recorded | failed | unknown
 #   Reasons : rate-limited | success | failure-recorded | push-failed |
-#             validation-failed | unknown
+#             protected-branch | validation-failed | unknown
+#   The protected-branch reason (Issue #143) marks a non-retryable GH006
+#   rejection: the host's account cannot bypass the required status checks on
+#   the protected branch, so the push is abandoned after the first attempt
+#   instead of exhausting the retry budget.
 #   Callers that suppress stdout (e.g. runWithTimeout(..., { quiet: true }))
 #   can capture stderr to distinguish pushed/skipped/failed outcomes
 #   without parsing localised user-facing messages.
@@ -626,6 +630,9 @@ reapply_health_update() {
 # observable. If an update genuinely cannot be re-applied it is surfaced as a
 # non-fatal status=update-dropped rather than masked as success.
 PUSH_FINAL_STATUS=0
+# Issue #143: the reason reported when the push ultimately fails. Defaults to
+# push-failed; a protected-branch (GH006) rejection overrides it below.
+PUSH_FINAL_REASON="push-failed"
 UPDATE_DROPPED=false
 if [ "$STAGED_SOMETHING" = true ]; then
     if ! git diff --cached --quiet 2>/dev/null; then
@@ -643,6 +650,10 @@ if [ "$STAGED_SOMETHING" = true ]; then
             GIT_PUSH_MAX_ATTEMPTS=$(grq_max_push_attempts 2>/dev/null || echo 5)
             LEGACY_DELAY="${GIT_PUSH_RETRY_DELAY_OVERRIDE:-}"
             GIT_PUSH_SUCCESS=false
+            # Issue #143: set true when the push is rejected by a protected
+            # branch (GH006). This is non-retryable, so we stop immediately
+            # and report a distinct reason=protected-branch.
+            PROTECTED_BRANCH_REJECTED=false
             LAST_PUSH_STDERR=""
             PUSH_STDERR_FILE=$(mktemp 2>/dev/null || echo "/tmp/repos_push_stderr.$$")
 
@@ -705,6 +716,17 @@ if [ "$STAGED_SOMETHING" = true ]; then
                 LAST_PUSH_STDERR=$(cat "$PUSH_STDERR_FILE" 2>/dev/null || echo "")
                 echo "Warning: git push failed (attempt ${attempt}/${GIT_PUSH_MAX_ATTEMPTS}): ${LAST_PUSH_STDERR}"
 
+                # Issue #143: a protected-branch rejection (GH006) is NOT
+                # recoverable by rebase+retry — a write-only fleet account will
+                # be declined identically on every attempt. Stop immediately and
+                # flag it so the failure is reported as reason=protected-branch
+                # instead of burning the full 5-attempt / ~80s retry budget.
+                if echo "$LAST_PUSH_STDERR" | grq_is_protected_branch_error; then
+                    echo "Error: push rejected by protected branch (GH006); this account cannot bypass the required status checks. Not retrying."
+                    PROTECTED_BRANCH_REJECTED=true
+                    break
+                fi
+
                 # No further attempts remain — stop. The freshest rebase+push
                 # already happened on this final attempt (defect 1 fix).
                 if [ "$attempt" -ge "$GIT_PUSH_MAX_ATTEMPTS" ]; then
@@ -736,7 +758,13 @@ if [ "$STAGED_SOMETHING" = true ]; then
             done
 
             if [ "$GIT_PUSH_SUCCESS" = false ] && [ "$UPDATE_DROPPED" = false ]; then
-                echo "ERROR: git push failed after ${GIT_PUSH_MAX_ATTEMPTS} attempts"
+                if [ "$PROTECTED_BRANCH_REJECTED" = true ]; then
+                    # Issue #143: non-retryable protected-branch rejection.
+                    PUSH_FINAL_REASON="protected-branch"
+                    echo "ERROR: git push rejected by protected branch (GH006) after ${attempt} attempt(s); required status checks cannot be bypassed by this account"
+                else
+                    echo "ERROR: git push failed after ${GIT_PUSH_MAX_ATTEMPTS} attempts"
+                fi
                 if [ -n "$LAST_PUSH_STDERR" ]; then
                     echo "Last git push stderr:"
                     echo "$LAST_PUSH_STDERR" | sed 's/^/  /'
@@ -781,7 +809,9 @@ set -euo pipefail
 # Surface push failure as a non-zero exit so the worker can observe it.
 if [ "$PUSH_FINAL_STATUS" -ne 0 ]; then
     RUN_STATUS="failed"
-    RUN_REASON="push-failed"
+    # Issue #143: distinguish a non-retryable protected-branch (GH006)
+    # rejection from a generic exhausted-retries push failure.
+    RUN_REASON="${PUSH_FINAL_REASON:-push-failed}"
     exit "$PUSH_FINAL_STATUS"
 fi
 

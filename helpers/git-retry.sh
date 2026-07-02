@@ -22,6 +22,15 @@
 #                              the text matches a non-fast-forward / "fetch
 #                              first" push rejection (the expected outcome of a
 #                              concurrent push to the shared branch; #2754).
+#   grq_is_protected_branch_error — given stderr text on stdin, returns 0 if
+#                              the text matches a protected-branch rejection
+#                              (GH006 / "protected branch hook declined" /
+#                              "required status checks are expected"; #143).
+#                              This is NON-retryable: a write-only fleet account
+#                              cannot bypass required status checks, so every
+#                              retry fails identically. Callers fail fast with a
+#                              distinct reason=protected-branch instead of
+#                              burning the full retry budget every cycle.
 #   grq_rate_limit_sleep_secs — when called after a detected rate limit,
 #                              echoes how many seconds to sleep before the
 #                              next attempt. Honours
@@ -108,6 +117,19 @@ grq_is_rate_limit_error() {
 # (true) when the text looks like a non-fast-forward rejection, 1 otherwise.
 grq_is_non_fast_forward_error() {
     grep -Eiq "\[rejected\]|fetch first|non-fast-forward|updates were rejected|tip of your current branch is behind"
+}
+
+# Detect a protected-branch push rejection in arbitrary stderr text on stdin.
+# GitHub declines the push at the server hook with GH006 when the account
+# lacks permission to bypass the branch's required status checks / pull-request
+# rules. Unlike a non-fast-forward rejection, this is NOT recoverable by
+# fetch+rebase+retry — a write-only fleet account (Issue #143) will be rejected
+# identically on every one of the 5 attempts, burning ~80s of retry budget each
+# cycle. Callers treat a match as a terminal, non-retryable outcome and fail
+# fast with reason=protected-branch. Returns 0 (true) on a protected-branch
+# rejection, 1 otherwise.
+grq_is_protected_branch_error() {
+    grep -Eiq "GH006|protected branch (update failed|hook declined)|required status check|cannot force-update the branch|changes must be made through a pull request"
 }
 
 # Compute how long to sleep when a rate-limit response was detected.

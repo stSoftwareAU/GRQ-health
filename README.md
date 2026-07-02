@@ -107,6 +107,25 @@ Because `Score.json` and `Vibe-Coder-GRQ-23.json` are different files, their
 commits rebase cleanly against each other — no host's update is dropped on a
 content conflict, so no tile goes stale from losing the push race.
 
+#### Protected-branch rejection is non-retryable (Issue #143):
+When the health heartbeat pushes to a **protected** branch and the host's
+GitHub account cannot bypass the required status checks, GitHub declines the
+push at the server hook with `GH006` (`protected branch hook declined` /
+`required status checks are expected`). This is **not** a transient conflict:
+every retry is rejected identically, so `helpers/repos.sh` detects the GH006
+signature via `grq_is_protected_branch_error` (`helpers/git-retry.sh`), stops
+after the **first** attempt instead of burning the full 5-attempt / ~80s retry
+budget, and emits a distinct status line:
+
+```text
+repos.sh status=failed reason=protected-branch name='Vibe Coder:GRQ-23'
+```
+
+The distinct `reason=protected-branch` lets the fleet tell a policy problem
+(the account needs bypass permission, or the health-data path needs exemption
+from the required checks — an admin decision) apart from an ordinary
+`reason=push-failed` contention/network failure.
+
 #### Version Management:
 - **Primary version**: Stored in `run.sh` VERSION variable
 - **Auto-sync**: `./update_version.sh` updates all HTML/JS files
