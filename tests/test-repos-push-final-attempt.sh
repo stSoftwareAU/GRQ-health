@@ -128,11 +128,11 @@ OUTPUT1=$(cd "$WORK1" && \
 # The host's health update must have reached the remote despite the remote
 # moving during the final backoff. On the unfixed code the final attempt
 # re-pushes a stale commit and fails, so the entry never lands.
-REMOTE1_HOST=$(cd "$REMOTE1" && git show "main:docs/hosts/FinalAttemptRepo.json" 2>/dev/null || echo "")
-if echo "$REMOTE1_HOST" | grep -q '"FinalAttemptRepo"'; then
+REMOTE1_JSON=$(cd "$REMOTE1" && git show "main:docs/repos.json" 2>/dev/null || echo "")
+if echo "$REMOTE1_JSON" | grep -q '"FinalAttemptRepo"'; then
     pass_test "Host update reached remote after remote moved during final backoff"
 else
-    fail_test "FinalAttemptRepo missing on remote. host file='$REMOTE1_HOST' output: $OUTPUT1"
+    fail_test "FinalAttemptRepo missing on remote. json='$REMOTE1_JSON' output: $OUTPUT1"
 fi
 
 # The concurrent commit that landed during the backoff must be preserved
@@ -213,18 +213,15 @@ OUTPUT2=$(cd "$WORK2" && GIT_PUSH_RETRY_DELAY_OVERRIDE=0 \
 
 (cd "$WORK2" && git fetch --quiet 2>/dev/null || true)
 
-# Issue #140: the host's update lands in its own per-host file — it must NOT
-# be silently dropped after the rebase conflict.
-REMOTE2_HOST=$(cd "$REMOTE2" && git show "main:docs/hosts/ReappliedHost.json" 2>/dev/null || echo "")
-if echo "$REMOTE2_HOST" | grep -q '"ReappliedHost"'; then
+# The host's update must reach the remote — it must NOT be silently dropped.
+REMOTE2_JSON=$(cd "$REMOTE2" && git show "main:docs/repos.json" 2>/dev/null || echo "")
+if echo "$REMOTE2_JSON" | grep -q '"ReappliedHost"'; then
     pass_test "Host update re-applied and pushed after rebase conflict (not dropped)"
 else
-    fail_test "ReappliedHost missing on remote — update was dropped. host file='$REMOTE2_HOST' output: $OUTPUT2"
+    fail_test "ReappliedHost missing on remote — update was dropped. json='$REMOTE2_JSON' output: $OUTPUT2"
 fi
 
-# The remote's competing repos.json commit must be preserved (we reset onto it,
-# not over it) — repos.sh no longer touches repos.json, so it stays intact.
-REMOTE2_JSON=$(cd "$REMOTE2" && git show "main:docs/repos.json" 2>/dev/null || echo "")
+# The remote's competing commit must be preserved (we reset onto it, not over it).
 REMOTE2_HAS_OTHER=$(echo "$REMOTE2_JSON" | grep -c '"Other"' || true)
 if [ "$REMOTE2_HAS_OTHER" -ge 1 ]; then
     pass_test "Remote competing repos.json entry preserved through recovery"

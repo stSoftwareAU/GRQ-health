@@ -36,13 +36,16 @@ trap 'rm -rf "$TMPDIR_BASE"' EXIT
 
 setup_test_env() {
     local test_dir="$TMPDIR_BASE/test_$$_$RANDOM"
-    mkdir -p "$test_dir/docs/hosts" "$test_dir/helpers"
+    mkdir -p "$test_dir/docs" "$test_dir/helpers"
 
-    # Issue #140: per-host file replaces the shared repos.json entry.
-    cat > "$test_dir/docs/hosts/Quality.json" <<'ENDJSON'
+    cat > "$test_dir/docs/repos.json" <<'ENDJSON'
 {
-  "name": "Quality",
-  "last_commit_ts": 1776265324
+  "repos": [
+    {
+      "name": "Quality",
+      "last_commit_ts": 1776265324
+    }
+  ]
 }
 ENDJSON
 
@@ -63,8 +66,8 @@ TEST_DIR=$(setup_test_env)
 
 # Set last_commit_ts to now (so it falls inside the 1-hour window)
 NOW=$(date +%s)
-cat > "$TEST_DIR/docs/hosts/Quality.json" <<ENDJSON
-{"name": "Quality", "last_commit_ts": ${NOW}}
+cat > "$TEST_DIR/docs/repos.json" <<ENDJSON
+{"repos": [{"name": "Quality", "last_commit_ts": ${NOW}}]}
 ENDJSON
 
 STDERR_FILE="$TMPDIR_BASE/skip_stderr_$$"
@@ -84,8 +87,8 @@ echo "Test 2: existing-repo update -> status=updated reason=success..."
 TEST_DIR=$(setup_test_env)
 
 # last_commit_ts well in the past so rate-limit does not trigger
-cat > "$TEST_DIR/docs/hosts/Quality.json" <<'ENDJSON'
-{"name": "Quality", "last_commit_ts": 1}
+cat > "$TEST_DIR/docs/repos.json" <<'ENDJSON'
+{"repos": [{"name": "Quality", "last_commit_ts": 1}]}
 ENDJSON
 
 STDERR_FILE="$TMPDIR_BASE/upd_stderr_$$"
@@ -173,8 +176,8 @@ fi
 # --------------------------------------------------------------------------
 echo "Test 7: existing stdout messages preserved (back-compat)..."
 TEST_DIR=$(setup_test_env)
-cat > "$TEST_DIR/docs/hosts/Quality.json" <<'ENDJSON'
-{"name": "Quality", "last_commit_ts": 1}
+cat > "$TEST_DIR/docs/repos.json" <<'ENDJSON'
+{"repos": [{"name": "Quality", "last_commit_ts": 1}]}
 ENDJSON
 
 STDOUT_FILE="$TMPDIR_BASE/back_stdout_$$"
@@ -190,8 +193,8 @@ fi
 
 # Rate-limit skip stdout message is also preserved
 NOW=$(date +%s)
-cat > "$TEST_DIR/docs/hosts/Quality.json" <<ENDJSON
-{"name": "Quality", "last_commit_ts": ${NOW}}
+cat > "$TEST_DIR/docs/repos.json" <<ENDJSON
+{"repos": [{"name": "Quality", "last_commit_ts": ${NOW}}]}
 ENDJSON
 STDOUT_FILE="$TMPDIR_BASE/back2_stdout_$$"
 bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "Quality" \
@@ -209,8 +212,8 @@ fi
 # --------------------------------------------------------------------------
 echo "Test 8: status line quotes repo name with spaces/colons..."
 TEST_DIR=$(setup_test_env)
-cat > "$TEST_DIR/docs/hosts/Vibe-Coder-GRQ-23.json" <<'ENDJSON'
-{"name": "Vibe Coder:GRQ-23", "last_commit_ts": 1}
+cat > "$TEST_DIR/docs/repos.json" <<'ENDJSON'
+{"repos": [{"name": "Vibe Coder:GRQ-23", "last_commit_ts": 1}]}
 ENDJSON
 
 STDERR_FILE="$TMPDIR_BASE/spaces_stderr_$$"
