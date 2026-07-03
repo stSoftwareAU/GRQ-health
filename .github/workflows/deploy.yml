@@ -25,6 +25,20 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Suppress the Node punycode DEP0040 deprecation warning emitted from
+    # within the GitHub-provided actions (issue #146). We are already on the
+    # latest actions/deploy-pages (v5.0.0); the warning originates in that
+    # external action's bundled dependencies, so we silence it at the Node
+    # runtime via --no-deprecation rather than patching an external action.
+    env:
+      NODE_OPTIONS: --no-deprecation
+    # Declare the canonical github-pages deployment environment recommended by
+    # GitHub for actions/deploy-pages. This makes the deployment observable
+    # (surfaces the published page URL) and is the supported configuration for
+    # Pages deployments.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
