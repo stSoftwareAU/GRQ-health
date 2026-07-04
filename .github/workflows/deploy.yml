@@ -18,9 +18,17 @@ permissions:
   pages: write
   id-token: write
 
+# The health monitor pushes docs/** updates to Develop very frequently (many
+# hosts, every few minutes), so deploy runs overlap. With cancel-in-progress
+# false these queued deployments race on the Pages backend and a superseded
+# deployment reports "Deployment failed, try again later." (issue #148).
+# Setting cancel-in-progress true lets a newer run cancel an older in-flight
+# deployment in the shared "pages" group, so only the latest — and freshest —
+# health data deploys. The dashboard always wants the most recent data, so
+# cancelling a superseded deploy is the desired behaviour.
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
