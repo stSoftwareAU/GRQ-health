@@ -46,7 +46,12 @@ jobs:
     # Pages deployments.
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      # The deploy step is retried in-run (issue #151), so page_url can come
+      # from whichever attempt succeeded. Prefer the final attempt's id
+      # ('deployment', preserved from before) and fall back to the earlier
+      # attempts, so the published URL stays observable regardless of which
+      # attempt won.
+      url: ${{ steps.deployment.outputs.page_url || steps.deploy2.outputs.page_url || steps.deploy1.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -59,6 +64,38 @@ jobs:
         with:
           path: './docs'
 
-      - name: Deploy to GitHub Pages
+      # In-run retry with backoff (issue #151). Frequent overlapping health
+      # pushes make deploys contend on the Pages backend, which transiently
+      # reports "Deployment failed, try again later." Retrying the deploy step
+      # in-run absorbs that contention so only a genuine, persistent error
+      # surfaces as a failed run (and an email). cancel-in-progress from
+      # issue #148 still applies: a newer push cancels these attempts and a
+      # `cancelled` conclusion is not treated as a failure.
+      #
+      # Attempts 1 and 2 use continue-on-error so a transient failure falls
+      # through to the next attempt rather than failing the run. The final
+      # attempt keeps id 'deployment' and does NOT swallow errors, so an
+      # exhausted retry budget fails the run and notifies, as before.
+      - name: Deploy to GitHub Pages (attempt 1 of 3)
+        id: deploy1
+        continue-on-error: true
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+      - name: Backoff before attempt 2 (30s)
+        if: steps.deploy1.outcome == 'failure'
+        run: sleep 30
+
+      - name: Deploy to GitHub Pages (attempt 2 of 3)
+        id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+      - name: Backoff before attempt 3 (60s)
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (attempt 3 of 3)
         id: deployment
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
