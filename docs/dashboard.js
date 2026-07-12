@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.17";
+const VERSION = "1.1.18";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -276,8 +276,44 @@ function buildIdleWorkerWarning(data) {
     return idleStatus.reason;
 }
 
+// Issue #155: Market-holiday calendar (US NYSE + AU ASX). A public holiday that
+// extends a weekend (e.g. a Monday public holiday) should not burn into a repo's
+// staleness budget, so business-days counting skips these dates as well as
+// weekends. This makes mid-week silence — every day of which is a trading day —
+// more suspicious than a holiday-extended weekend of the same wall-clock length.
+// Dates are UTC ISO (YYYY-MM-DD), observed (in-lieu) where the actual date falls
+// on a weekend. This is the union of both exchanges; overlaps (New Year, Good
+// Friday, Christmas) are naturally de-duplicated by the Set. Maintain annually.
+const MARKET_HOLIDAYS = new Set([
+    // 2025 — US NYSE
+    '2025-01-01', '2025-01-20', '2025-02-17', '2025-04-18', '2025-05-26',
+    '2025-06-19', '2025-07-04', '2025-09-01', '2025-11-27', '2025-12-25',
+    // 2025 — AU ASX
+    '2025-01-27', '2025-04-21', '2025-04-25', '2025-06-09', '2025-12-26',
+    // 2026 — US NYSE
+    '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25',
+    '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+    // 2026 — AU ASX
+    '2026-01-26', '2026-04-06', '2026-04-25', '2026-06-08', '2026-12-28',
+    // 2027 — US NYSE
+    '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31',
+    '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24',
+    // 2027 — AU ASX
+    '2027-01-26', '2027-03-29', '2027-04-26', '2027-06-14', '2027-12-27',
+    '2027-12-28'
+]);
+
+// True when a Date (interpreted in UTC) falls on a US or AU market holiday.
+function isMarketHoliday(date) {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return MARKET_HOLIDAYS.has(`${year}-${month}-${day}`);
+}
+
 // Count business days (weekdays only) between two unix timestamps (Issue #47)
-// Weekends (Saturday=6, Sunday=0) are skipped so they don't count toward staleness
+// Weekends (Saturday=6, Sunday=0) and market holidays (Issue #155) are skipped
+// so they don't count toward staleness.
 function countBusinessDays(fromTs, toTs) {
     if (toTs <= fromTs) return 0;
 
@@ -293,7 +329,9 @@ function countBusinessDays(fromTs, toTs) {
     let cursor = new Date(fromMidnight.getTime() + msPerDay); // start the day after fromTs
     while (cursor <= toMidnight) {
         const day = cursor.getUTCDay(); // 0=Sun, 6=Sat
-        if (day !== 0 && day !== 6) {
+        // Skip weekends and market holidays (Issue #155) — a holiday that
+        // extends a weekend must not accrue staleness.
+        if (day !== 0 && day !== 6 && !isMarketHoliday(cursor)) {
             count++;
         }
         cursor = new Date(cursor.getTime() + msPerDay);
