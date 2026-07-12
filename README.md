@@ -263,6 +263,17 @@ The dashboard calculates status from `last_commit_ts`:
 
 **Weekend-aware repos (Issue #67)**: Repos that only receive data on weekdays (e.g., FX market feeds that run Monday–Friday) can set `"business_days_only": true` to skip weekends when calculating staleness, even with explicit thresholds. Without this flag, explicit thresholds count calendar days/hours. With it, only business days are counted, preventing false alarms on Monday mornings.
 
+**Holiday-aware staleness (Issue #155)**: Business-days counting also skips US (NYSE) and AU (ASX) market holidays, so a public holiday that extends a weekend — e.g. a Monday public holiday — does not burn into a repo's staleness budget. The consequence is asymmetric by design: mid-week silence, where every elapsed day is a trading day, accrues staleness faster and alerts sooner than a holiday-extended weekend gap of the same wall-clock length. The holiday calendar is the `MARKET_HOLIDAYS` set in `docs/dashboard.js` (UTC ISO dates, observed in-lieu where the actual date lands on a weekend) and needs annual maintenance as new years' schedules are published. No config change is required — any `business_days_only` repo inherits holiday skipping automatically.
+
+```mermaid
+flowchart LR
+    A[Day since last commit] --> B{Weekend?}
+    B -- Yes --> S[Skip: no staleness]
+    B -- No --> C{Market holiday?}
+    C -- Yes --> S
+    C -- No --> D[Count as 1 business day]
+```
+
 **Hour-grain thresholds (Issue #105)**: Repos that report frequently — for example Vibe Coders that should check in every hour — can specify `warning_hours` and/or `error_hours` instead of (or in addition to) the day-based thresholds. When either hour field is set it takes precedence over `warning_days`/`error_days`, and the elapsed time is compared in calendar hours so dead workers are flagged within hours rather than waiting ~24h for the day-grain check.
 
 ```json
