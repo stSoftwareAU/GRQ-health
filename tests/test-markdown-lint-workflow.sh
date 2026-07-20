@@ -1,8 +1,9 @@
 #!/bin/bash
 # Test for Issue #109: Markdown Lint workflow
 # Verifies that .github/workflows/markdown-lint.yml exists, is valid YAML,
-# and is wired up correctly (PR + push triggers, read-only permissions,
-# markdownlint-cli2 install + run steps, SHA-pinned actions).
+# and is wired up correctly (pull_request-only trigger — no push trigger per
+# Issue #159, read-only permissions, markdownlint-cli2 install + run steps,
+# SHA-pinned actions).
 
 set -euo pipefail
 
@@ -63,6 +64,14 @@ if [ "$HAS_PR" = "yes" ]; then
     pass_test "Workflow triggers on pull_request"
 else
     fail_test "Workflow is missing pull_request trigger"
+fi
+
+# Test 4b: push trigger is absent — workflow runs on pull_request only (Issue #159)
+HAS_PUSH=$(run_yaml "print('yes' if isinstance(on, dict) and 'push' in on else 'no')")
+if [ "$HAS_PUSH" = "no" ]; then
+    pass_test "Workflow has no push trigger (pull_request only)"
+else
+    fail_test "Workflow still has a push trigger; expected pull_request only"
 fi
 
 # Test 5: top-level permissions are read-only (contents: read)
