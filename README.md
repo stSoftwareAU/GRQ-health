@@ -347,6 +347,42 @@ The enhanced web dashboard (`docs/index.html`) provides:
 - **Responsive design**: Works on desktop and mobile devices
 - **Visual indicators**: Color-coded status indicators and borders
 - **Dynamic title**: Changes between "GRQ Healthy" and "GRQ Unhealthy"
+- **Theme selector**: Light / dark / auto colour theme, remembered per browser
+
+### Colour Theme (Issue #161)
+
+Every dashboard page (`docs/index.html`, `docs/simple.html`, `docs/log-viewer.html`)
+carries a light/dark/auto theme selector in the top-right corner. The chosen
+mode is stored in `localStorage` (`grq-theme`) and restored on every visit, so
+the choice is remembered per browser with no server sync.
+
+- **Light** — the original purple-gradient design.
+- **Dark** — a deep navy palette with WCAG-AA readable text.
+- **Auto** (default for first-time visitors) — follows the operating system's
+  `prefers-color-scheme` setting and reacts live when the OS setting changes.
+
+The shared controller lives in `docs/theme.js` (pure `resolveTheme` /
+`sanitiseThemeMode` helpers plus the DOM wiring); the selector styling is in
+`docs/theme.css`; the dashboard's dark palette and theme-aware offline (brown)
+colours live in `docs/styles.css` as CSS variables. It is vanilla JS + CSS with
+no new dependencies. A small inline `<script data-theme-init>` in each page's
+`<head>` applies the remembered theme before first paint to avoid a flash.
+
+```mermaid
+flowchart LR
+    A[Page load] --> B{localStorage<br/>grq-theme?}
+    B -- stored --> C[Use stored mode]
+    B -- none --> D[Default: auto]
+    C --> E{Mode?}
+    D --> E
+    E -- light --> F[data-theme=light]
+    E -- dark --> G[data-theme=dark]
+    E -- auto --> H{OS prefers dark?}
+    H -- yes --> G
+    H -- no --> F
+    I[Click Light/Dark/Auto] --> J[Save to localStorage] --> E
+    K[OS theme changes] -->|only when mode=auto| H
+```
 
 ### Emoji Legend
 

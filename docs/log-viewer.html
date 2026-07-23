@@ -4,11 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log Viewer - GRQ Health Dashboard</title>
+
+    <!-- Issue #161: apply the remembered theme before first paint to avoid a flash -->
+    <script data-theme-init>
+        (function () {
+            try {
+                var m = localStorage.getItem('grq-theme') || 'auto';
+                if (['light', 'dark', 'auto'].indexOf(m) === -1) { m = 'auto'; }
+                var dark = m === 'dark' || (m === 'auto' && window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme-mode', m);
+            } catch (e) { /* storage unavailable — fall back to light */ }
+        })();
+    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="./theme.css?v=1.1.19" rel="stylesheet">
     <style>
+        /* Issue #161: theme-aware page background; the log panels stay dark in
+           both themes because a terminal log reads best on a dark surface. */
+        :root {
+            --logpage-bg: #f8f9fa;
+            --logpage-text: #212529;
+        }
+        [data-theme="dark"] {
+            --logpage-bg: #16213e;
+            --logpage-text: #e8e8f2;
+        }
         body {
-            background-color: #f8f9fa;
+            background: var(--logpage-bg);
+            color: var(--logpage-text);
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         }
         .log-container {
@@ -113,6 +139,7 @@
     </style>
 </head>
 <body>
+    <div id="theme-toggle" class="theme-toggle theme-toggle--floating"></div>
     <div class="container-fluid">
         <div class="back-button">
             <a href="index.html" class="btn btn-primary">
@@ -259,5 +286,6 @@
             // No issues found - stay at the top
         }
     </script>
+    <script src="./theme.js?v=1.1.19"></script>
 </body>
 </html>
