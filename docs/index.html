@@ -4,7 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GRQ Health Dashboard</title>
-    
+
+    <!-- Issue #161: apply the remembered theme before first paint to avoid a flash -->
+    <script data-theme-init>
+        (function () {
+            try {
+                var m = localStorage.getItem('grq-theme') || 'auto';
+                if (['light', 'dark', 'auto'].indexOf(m) === -1) { m = 'auto'; }
+                var dark = m === 'dark' || (m === 'auto' && window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme-mode', m);
+            } catch (e) { /* storage unavailable — fall back to light */ }
+        })();
+    </script>
+
     <!-- PWA Meta Tags -->
     <meta name="description" content="Monitor system health status across all hosts">
     <meta name="theme-color" content="#667eea">
@@ -23,11 +37,13 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="./styles.css?v=1.1.18" rel="stylesheet">
+    <link href="./styles.css?v=1.1.19" rel="stylesheet">
+    <link href="./theme.css?v=1.1.19" rel="stylesheet">
 </head>
 <body>
     <div class="container-fluid py-4">
         <div class="header">
+            <div id="theme-toggle" class="theme-toggle"></div>
             <div class="text-center mb-2">
                 <h1><i class="bi bi-display"></i> GRQ Health Dashboard</h1>
                 <p>System health status across all hosts</p>
@@ -107,14 +123,15 @@
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="./dashboard.js?v=1.1.18"></script>
+    <script src="./theme.js?v=1.1.19"></script>
+    <script src="./dashboard.js?v=1.1.19"></script>
     
     <!-- PWA Service Worker Registration -->
     <script>
         // Register service worker only if supported
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=1.1.18')
+                navigator.serviceWorker.register('./sw.js?v=1.1.19')
                     .then((registration) => {
                         console.log('Service Worker registered successfully:', registration.scope);
                         

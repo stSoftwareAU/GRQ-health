@@ -4,13 +4,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GRQ Health Status</title>
+
+    <!-- Issue #161: apply the remembered theme before first paint to avoid a flash -->
+    <script data-theme-init>
+        (function () {
+            try {
+                var m = localStorage.getItem('grq-theme') || 'auto';
+                if (['light', 'dark', 'auto'].indexOf(m) === -1) { m = 'auto'; }
+                var dark = m === 'dark' || (m === 'auto' && window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme-mode', m);
+            } catch (e) { /* storage unavailable — fall back to light */ }
+        })();
+    </script>
+    <link href="./theme.css?v=1.1.19" rel="stylesheet">
     <style>
+        /* Issue #161: theme-aware colours via CSS variables. Light keeps the
+           original plain look; the dark overrides sit under [data-theme]. */
+        :root {
+            --simple-bg: #f8f9fa;
+            --simple-text: #212529;
+            --simple-muted: #6c757d;
+            --simple-summary: #343a40;
+        }
+        [data-theme="dark"] {
+            --simple-bg: #16213e;
+            --simple-text: #e8e8f2;
+            --simple-muted: #9aa0b8;
+            --simple-summary: #c8ccdf;
+        }
         body {
             font-family: Arial, sans-serif;
             text-align: center;
             padding: 50px;
             margin: 0;
-            background-color: #f8f9fa;
+            background: var(--simple-bg);
+            color: var(--simple-text);
         }
         .status {
             font-size: 48px;
@@ -20,26 +50,27 @@
         .ok { color: #28a745; }
         .warning { color: #ffc107; }
         .error { color: #dc3545; }
-        .loading { color: #6c757d; }
+        .loading { color: var(--simple-muted); }
         .timestamp {
             font-size: 14px;
-            color: #6c757d;
+            color: var(--simple-muted);
             margin-top: 20px;
         }
         .repo-summary {
             margin-top: 30px;
             font-size: 16px;
-            color: #343a40;
+            color: var(--simple-summary);
         }
         .repo-summary small {
             display: block;
-            color: #6c757d;
+            color: var(--simple-muted);
             margin-top: 4px;
             font-size: 13px;
         }
     </style>
 </head>
 <body>
+    <div id="theme-toggle" class="theme-toggle theme-toggle--floating"></div>
     <h1>GRQ Health Status</h1>
     <div id="status" class="status loading">Loading...</div>
     <div class="timestamp" id="timestamp"></div>
@@ -394,5 +425,6 @@
         // Refresh every 30 seconds
         setInterval(checkHealth, 30000);
     </script>
+    <script src="./theme.js?v=1.1.19"></script>
 </body>
 </html>
