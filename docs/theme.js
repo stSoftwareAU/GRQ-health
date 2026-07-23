@@ -1,11 +1,16 @@
-// GRQ Health Dashboard — light/dark/auto theme controller (Issue #161)
+// GRQ Health Dashboard — light/dark/auto theme controller (Issues #161, #163)
 //
 // Shared across index.html, simple.html and log-viewer.html. Persists the
 // chosen mode in localStorage and restores it on every visit. "auto" follows
 // the OS `prefers-color-scheme` setting and reacts live when it changes.
 //
-// The pure helpers (sanitiseThemeMode, resolveTheme) are exposed on
-// globalThis.GRQTheme so they can be unit-tested under Deno where there is no
+// The control is a single compact icon-only button that cycles
+// Light -> Dark -> Auto -> Light on each tap (Issue #163), showing the icon of
+// the currently active mode. This keeps it narrow enough to avoid overlapping
+// the header title on mobile widths.
+//
+// The pure helpers (sanitiseThemeMode, resolveTheme, nextThemeMode) are exposed
+// on globalThis.GRQTheme so they can be unit-tested under Deno where there is no
 // DOM. All DOM-dependent code is skipped when `document` is undefined.
 (function () {
   'use strict';
@@ -34,7 +39,16 @@
     return safe;
   }
 
-  const api = { sanitiseThemeMode, resolveTheme, MODES, STORAGE_KEY };
+  // Pure: advance to the next mode in the cycle Light -> Dark -> Auto -> Light
+  // (Issue #163). Unknown values sanitise to "auto" first, so they advance to
+  // "light".
+  function nextThemeMode(mode) {
+    const safe = sanitiseThemeMode(mode);
+    const index = MODES.indexOf(safe);
+    return MODES[(index + 1) % MODES.length];
+  }
+
+  const api = { sanitiseThemeMode, resolveTheme, nextThemeMode, MODES, STORAGE_KEY };
   if (typeof globalThis !== 'undefined') {
     globalThis.GRQTheme = api;
   }
@@ -73,6 +87,9 @@
     }
   }
 
+  // The mode currently applied to the page — the tap handler advances from it.
+  let currentMode = 'auto';
+
   function applyMode(mode) {
     const systemPrefersDark = media ? media.matches : false;
     const effective = resolveTheme(mode, systemPrefersDark);
@@ -80,7 +97,8 @@
     root.setAttribute('data-theme', effective);
     root.setAttribute('data-theme-mode', mode);
     updateThemeColorMeta(effective);
-    refreshButtons(mode);
+    currentMode = mode;
+    refreshButton(mode);
   }
 
   function setMode(mode) {
@@ -89,14 +107,24 @@
     applyMode(safe);
   }
 
-  let buttons = [];
+  let toggleButton = null;
 
-  function refreshButtons(activeMode) {
-    buttons.forEach((btn) => {
-      const isActive = btn.dataset.mode === activeMode;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
+  // Update the single cycling button to show the active mode's icon and an
+  // accessible label describing the current mode and the next tap's effect.
+  function refreshButton(activeMode) {
+    if (!toggleButton) {
+      return;
+    }
+    const meta = MODE_META[activeMode];
+    const next = MODE_META[nextThemeMode(activeMode)];
+    const label = meta.label + ' theme active — tap to switch to ' +
+      next.label + '.';
+    toggleButton.dataset.mode = activeMode;
+    toggleButton.title = label;
+    toggleButton.setAttribute('aria-label', label);
+    toggleButton.innerHTML =
+      '<span class="theme-toggle-icon" aria-hidden="true">' + meta.icon +
+      '</span>';
   }
 
   function buildToggle() {
@@ -110,24 +138,16 @@
       document.body.appendChild(container);
     }
     container.classList.add('theme-toggle');
-    container.setAttribute('role', 'group');
-    container.setAttribute('aria-label', 'Colour theme');
 
-    buttons = MODES.map((mode) => {
-      const meta = MODE_META[mode];
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'theme-toggle-btn';
-      btn.dataset.mode = mode;
-      btn.title = meta.label + ' theme';
-      btn.setAttribute('aria-label', meta.label + ' theme');
-      btn.innerHTML =
-        '<span class="theme-toggle-icon" aria-hidden="true">' + meta.icon +
-        '</span><span class="theme-toggle-label">' + meta.label + '</span>';
-      btn.addEventListener('click', () => setMode(mode));
-      container.appendChild(btn);
-      return btn;
+    // A single icon-only button that cycles through the modes on each tap.
+    container.innerHTML = '';
+    toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.className = 'theme-toggle-btn';
+    toggleButton.addEventListener('click', () => {
+      setMode(nextThemeMode(currentMode));
     });
+    container.appendChild(toggleButton);
   }
 
   function onSystemChange() {

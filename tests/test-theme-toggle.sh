@@ -31,7 +31,7 @@ fail_test() {
 # theme.js guards its DOM code behind `typeof document === 'undefined'`, so it
 # loads cleanly under Deno and exposes the pure helpers on globalThis.GRQTheme.
 OUTPUT=$(printf '%s\n%s\n' "$(cat "$THEME_JS")" '
-const { sanitiseThemeMode, resolveTheme } = globalThis.GRQTheme;
+const { sanitiseThemeMode, resolveTheme, nextThemeMode } = globalThis.GRQTheme;
 
 // sanitiseThemeMode: valid modes pass through unchanged.
 {
@@ -69,6 +69,28 @@ const { sanitiseThemeMode, resolveTheme } = globalThis.GRQTheme;
     const ok = resolveTheme("nope", true) === "dark" &&
                resolveTheme("nope", false) === "light";
     console.log("TEST_RESULT:resolve-invalid:" + (ok ? "PASS" : "FAIL") + ":invalid mode treated as auto");
+}
+
+// nextThemeMode: single-button tap cycles Light -> Dark -> Auto -> Light (#163).
+{
+    const ok = nextThemeMode("light") === "dark" &&
+               nextThemeMode("dark") === "auto" &&
+               nextThemeMode("auto") === "light";
+    console.log("TEST_RESULT:next-cycle:" + (ok ? "PASS" : "FAIL") + ":tap cycles light->dark->auto->light");
+}
+
+// nextThemeMode: a full cycle of taps returns to the starting mode.
+{
+    const ok = nextThemeMode(nextThemeMode(nextThemeMode("light"))) === "light";
+    console.log("TEST_RESULT:next-wraps:" + (ok ? "PASS" : "FAIL") + ":three taps return to start");
+}
+
+// nextThemeMode: unknown current value sanitises to auto, so it advances to light.
+{
+    const ok = nextThemeMode("bogus") === "light" &&
+               nextThemeMode(null) === "light" &&
+               nextThemeMode(undefined) === "light";
+    console.log("TEST_RESULT:next-invalid:" + (ok ? "PASS" : "FAIL") + ":invalid current mode advances to light");
 }
 ' | "$DENO" run -)
 
