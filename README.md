@@ -384,6 +384,22 @@ flowchart LR
     K[OS theme changes] -->|only when mode=auto| H
 ```
 
+#### Bootstrap components in dark mode (Issue #165)
+
+The dashboard themes itself with its own `data-theme` attribute, **not**
+Bootstrap's `data-bs-theme`. Bootstrap therefore stays in its light theme and
+any component that resolves a colour from `--bs-body-bg` / `--bs-emphasis-color`
+keeps its light default — which is how the per-host Users table came to render
+as a white block on the dark page.
+
+When adding a Bootstrap component to a dashboard page, give it a matching
+`[data-theme="dark"]` block in `docs/styles.css` that re-points the component's
+own `--bs-*` variables at the dark palette variables (`--card-bg`,
+`--card-text`, `--card-bg-active`, `--border-subtle`). `.table` and
+`.btn-outline-secondary` are covered; `tests/test-dark-mode-table.sh` measures
+the resulting luminance and WCAG contrast so a regression to light surfaces
+fails the quality gate.
+
 ### Emoji Legend
 
 - 💀 Dead machines (in Silicon Heaven)
