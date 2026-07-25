@@ -6,7 +6,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKFLOW_FILE="$SCRIPT_DIR/../.github/workflows/gitleaks.yml"
+# GITLEAKS_WORKFLOW_FILE lets tests/test-gitleaks-scan-assertion.sh point these
+# assertions at fixture workflows; defaults to the committed workflow.
+WORKFLOW_FILE="${GITLEAKS_WORKFLOW_FILE:-$SCRIPT_DIR/../.github/workflows/gitleaks.yml}"
 
 echo "Testing Issue #89: Gitleaks workflow"
 echo "===================================="
@@ -96,22 +98,26 @@ else
     fail_test "checkout step fetch-depth is '$FETCH_DEPTH', expected 0"
 fi
 
-# Test 8: gitleaks-action step is present and passes GITHUB_TOKEN
+# Test 8: the job actually runs a secret scan.
+# Asserts the outcome, not the mechanism — either the gitleaks-action or the
+# Gitleaks CLI (`gitleaks detect`) satisfies this, so swapping implementations
+# does not re-break the gate. Test 9 covers SHA-pinning of any action used.
 HAS_GITLEAKS_STEP=$(run_yaml "
 steps=((wf.get('jobs') or {}).get('gitleaks') or {}).get('steps') or []
 ok=False
 for s in steps:
     uses=str(s.get('uses',''))
-    env=s.get('env') or {}
-    if 'gitleaks/gitleaks-action' in uses and 'GITHUB_TOKEN' in env:
+    # Collapse whitespace so multi-line/continued run: blocks still match.
+    run=' '.join(str(s.get('run','')).split())
+    if 'gitleaks/gitleaks-action' in uses or 'gitleaks detect' in run:
         ok=True
         break
 print('yes' if ok else 'no')
 ")
 if [ "$HAS_GITLEAKS_STEP" = "yes" ]; then
-    pass_test "gitleaks-action step present with GITHUB_TOKEN env"
+    pass_test "gitleaks job runs a secret scan (action or gitleaks detect CLI)"
 else
-    fail_test "Missing gitleaks-action step or GITHUB_TOKEN env"
+    fail_test "gitleaks job runs no secret scan: no gitleaks-action step and no 'gitleaks detect' command"
 fi
 
 # Test 9: every `uses:` reference is pinned to a 40-char commit SHA, not a tag
