@@ -12,6 +12,10 @@
 # and asserts on their *behaviour*: measured relative luminance and WCAG 2.1
 # contrast ratios, not any particular colour literal. Retuning the palette keeps
 # these tests passing; regressing to a light table does not.
+#
+# Issue #170 extends the same harness to the "Off the Grid" (MIA) host card,
+# whose base rule hardcodes a near-white mint gradient. Without a dark surface
+# of its own it renders the dark palette's light text on a light background.
 
 set -e
 
@@ -21,7 +25,7 @@ STYLES_CSS="$ROOT_DIR/docs/styles.css"
 CHECKER="$SCRIPT_DIR/dark-mode-table-check.js"
 DENO="$HOME/.deno/bin/deno"
 
-echo "Testing Issue #165: dark mode table colours"
+echo "Testing Issues #165/#170: dark mode surface colours"
 echo "==========================================="
 echo ""
 

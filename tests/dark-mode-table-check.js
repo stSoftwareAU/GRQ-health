@@ -1,5 +1,7 @@
-// Issue #165 helper — resolves the colours the dark theme applies to Bootstrap
-// tables in docs/styles.css and reports WCAG luminance/contrast results.
+// Dark-mode contrast helper — resolves the colours the dark theme actually
+// applies to surfaces in docs/styles.css and reports WCAG luminance/contrast
+// results. Covers Bootstrap tables (Issue #165) and the "Off the Grid" MIA
+// host card (Issue #170).
 // Usage: deno run --allow-read=<css> dark-mode-table-check.js <path-to-css>
 // Prints TEST_RESULT:<name>:<PASS|FAIL>:<detail> lines for the shell harness.
 
@@ -100,7 +102,115 @@ function report(name, ok, detail) {
     console.log(`TEST_RESULT:${name}:${ok ? "PASS" : "FAIL"}:${detail}`);
 }
 
+// Pull every colour token out of a `background` shorthand — including the stops
+// of a linear-gradient and any layered translucent washes — so a surface built
+// from a gradient can be measured at its worst (lightest) point.
+function backgroundColours(value) {
+    if (!value) return [];
+    const tokens = value.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|var\(\s*--[\w-]+\s*\)/g) ?? [];
+    return tokens.map((t) => parseColour(resolveValue(t))).filter((c) => c !== null);
+}
+
+// The lightest layer of a surface, composited over `backdrop` — the worst case
+// for light text sitting on top of it.
+function lightestLayer(colours, backdrop) {
+    let worst = null;
+    for (const colour of colours) {
+        const flat = flatten(colour, backdrop);
+        if (worst === null || luminance(flat) > luminance(worst)) worst = flat;
+    }
+    return worst;
+}
+
 // --- Tests -----------------------------------------------------------------
+
+// The dark page surface everything else is composited over.
+const pageSurface = parseColour(resolveValue(darkPalette["--card-bg"])) ??
+    { r: 35, g: 38, b: 58, a: 1 };
+
+// --- Issue #170: the "Off the Grid" (MIA) host card ------------------------
+// The base .host-card.mia rule paints a near-white mint gradient. The dark
+// palette flips the card text light, so without a dark surface of its own the
+// card renders light-on-light and is unreadable.
+{
+    const darkMiaBody = ruleBody('[data-theme="dark"] .host-card.mia');
+    report(
+        "dark-mia-card-rule-exists",
+        darkMiaBody !== null,
+        darkMiaBody !== null
+            ? 'found a [data-theme="dark"] .host-card.mia rule'
+            : 'no [data-theme="dark"] .host-card.mia rule — the light mint gradient wins',
+    );
+
+    // Fall back to the base rule so the contrast checks below measure whatever
+    // the dark theme *actually* resolves to, not merely whether a rule exists.
+    const effective = declarations(darkMiaBody ?? ruleBody(".host-card.mia") ?? "");
+    const surface = lightestLayer(
+        backgroundColours(effective["background"] ?? effective["background-color"]),
+        pageSurface,
+    );
+    const cardText = parseColour(resolveValue(darkPalette["--card-text"]));
+    const mutedText = parseColour(resolveValue(darkPalette["--muted-color"]));
+
+    // 1. Hostname / values (--card-text) must meet WCAG AA on that surface.
+    {
+        const ratio = surface && cardText ? contrast(flatten(cardText, surface), surface) : 0;
+        report(
+            "mia-card-text-contrast-meets-aa",
+            ratio >= 4.5,
+            surface === null
+                ? "the MIA card background is missing or unparseable"
+                : `--card-text on the MIA card ${ratio.toFixed(2)}:1 (needs >= 4.5)`,
+        );
+    }
+
+    // 2. The .text-muted labels ("OS", "Last Seen", the location line) too.
+    {
+        const ratio = surface && mutedText ? contrast(flatten(mutedText, surface), surface) : 0;
+        report(
+            "mia-card-muted-contrast-meets-aa",
+            ratio >= 4.5,
+            surface === null
+                ? "the MIA card background is missing or unparseable"
+                : `--muted-color on the MIA card ${ratio.toFixed(2)}:1 (needs >= 4.5)`,
+        );
+    }
+
+    // 3. It must still read as a special card, not blend into a plain host card.
+    {
+        const delta = surface
+            ? Math.max(
+                Math.abs(surface.r - pageSurface.r),
+                Math.abs(surface.g - pageSurface.g),
+                Math.abs(surface.b - pageSurface.b),
+            )
+            : 0;
+        report(
+            "mia-card-stays-distinct",
+            delta >= 8,
+            `MIA surface differs from a plain card by ${delta.toFixed(1)}/255 (needs >= 8)`,
+        );
+    }
+
+    // 4. Light mode keeps its light mint gradient — the fix supplements the
+    //    base rule, it must not darken it.
+    {
+        const light = lightestLayer(
+            backgroundColours(declarations(ruleBody(".host-card.mia") ?? "")["background"]),
+            { r: 255, g: 255, b: 255, a: 1 },
+        );
+        const lum = light ? luminance(light) : null;
+        report(
+            "light-mia-card-stays-light",
+            lum !== null && lum > 0.7,
+            lum === null
+                ? "the light .host-card.mia background is missing or unparseable"
+                : `light MIA surface luminance ${lum.toFixed(4)} (needs > 0.7)`,
+        );
+    }
+}
+
+// --- Issue #165: Bootstrap tables ------------------------------------------
 
 const tableBody = ruleBody('[data-theme="dark"] .table');
 
@@ -116,8 +226,6 @@ report(
 if (tableBody === null) Deno.exit(0);
 
 const table = declarations(tableBody);
-const pageSurface = parseColour(resolveValue(darkPalette["--card-bg"])) ??
-    { r: 35, g: 38, b: 58, a: 1 };
 
 const cellBg = parseColour(resolveValue(table["--bs-table-bg"]));
 const cellText = parseColour(resolveValue(table["--bs-table-color"]));

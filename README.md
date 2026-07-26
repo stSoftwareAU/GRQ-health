@@ -400,6 +400,19 @@ own `--bs-*` variables at the dark palette variables (`--card-bg`,
 the resulting luminance and WCAG contrast so a regression to light surfaces
 fails the quality gate.
 
+#### Host-card surfaces in dark mode (Issue #170)
+
+The same trap applies to the dashboard's own host cards. Any `.host-card.*`
+variant that paints a colour literal instead of `var(--card-bg)` keeps that
+light surface in dark mode while the card text flips to the light dark-palette
+colours — which is how the "Off the Grid" (MIA) card came to render near-white
+text on a near-white mint gradient. Each such variant needs a matching
+`[data-theme="dark"] .host-card.<variant>` rule that washes its accent colour
+over `var(--card-bg)` rather than over a light literal, so the accent identity
+survives and the text stays readable. `tests/test-dark-mode-table.sh` asserts
+≥4.5:1 contrast between the resolved MIA surface and both `--card-text` and
+`--muted-color`.
+
 ### Emoji Legend
 
 - 💀 Dead machines (in Silicon Heaven)
