@@ -441,6 +441,35 @@ stylesheet rename cannot turn the guard green by vacuity. The fixtures in
 `tests/fixtures/dark-mode-cards/` are the checker's own self-test: known-good
 and known-bad variants it must keep telling apart.
 
+#### Host-card decorations must stay behind the content (Issue #173)
+
+The `.mia`, `.mobile` and `.outdated-macos` cards carry decorative emoji as
+absolutely-positioned `::before`/`::after` pseudo-elements anchored to the same
+top-right corner the `.health-status` badge occupies. They used to sit at
+`z-index: 1`, so they painted over the badge and clipped "OFF THE GRID".
+
+A decoration must therefore be `z-index: -1` and `pointer-events: none`, and the
+card must be its own stacking context (`isolation: isolate` on `.host-card`) so
+a negative z-index paints above the card background rather than escaping behind
+it. `z-index: 0` is **not** enough — a positioned box still paints above in-flow
+content — and nudging the emoji's `right` offset only moves the collision to a
+different status string.
+
+```mermaid
+flowchart TB
+    A[".host-card — isolation: isolate<br/>(its own stacking context)"] --> B["z-index: -1 — decorative emoji"]
+    A --> C["in-flow content — .health-status badge, hostname, stats"]
+    B -.->|painted first| C
+```
+
+`tests/test-decoration-stacking.sh` runs `tests/decoration-stacking-check.js`,
+which **enumerates** every `.host-card.<variant>::before/::after` rule in
+`docs/styles.css` and resolves its painting order against the badge, so a newly
+decorated variant is covered without a test edit. The fixtures in
+`tests/fixtures/decoration-stacking/` are the checker's self-test, and
+`tests/status-overflow.test.html` carries the matching browser cases, which
+hit-test the rendered badge with `document.elementFromPoint()`.
+
 ### Emoji Legend
 
 - 💀 Dead machines (in Silicon Heaven)
