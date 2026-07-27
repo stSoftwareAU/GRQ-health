@@ -413,6 +413,34 @@ survives and the text stays readable. `tests/test-dark-mode-table.sh` asserts
 ≥4.5:1 contrast between the resolved MIA surface and both `--card-text` and
 `--muted-color`.
 
+#### The host-card contrast sweep (Issue #172)
+
+That same fault shipped three times (#165, #169, #171) before a human spotted it
+on a phone screenshot, so the check no longer names variants.
+`tests/test-dark-mode-host-cards.sh` runs `tests/dark-mode-card-check.js`, which
+**enumerates** every `.host-card.<variant>` rule in `docs/styles.css` and
+measures each one — no test edit is needed when a variant is added.
+
+```mermaid
+flowchart LR
+    A[docs/styles.css] --> B[enumerate .host-card variants]
+    B --> C{dark override?}
+    C -->|yes| D["[data-theme=dark] rule background"]
+    C -->|no| E[base rule background]
+    D --> F[composite layers + gradient stops<br/>over the dark --card-bg]
+    E --> F
+    F --> G{">= 4.5:1 vs --card-text<br/>and --muted-color?"}
+    G -->|no| H[TEST_RESULT ... FAIL]
+    G -->|yes| I[TEST_RESULT ... PASS]
+```
+
+A translucent `rgba()` wash is composited before the ratio is computed, and
+every stop of a multi-stop gradient is measured, so a gradient that starts dark
+and ends light still fails. Enumerating zero variants is itself a failure, so a
+stylesheet rename cannot turn the guard green by vacuity. The fixtures in
+`tests/fixtures/dark-mode-cards/` are the checker's own self-test: known-good
+and known-bad variants it must keep telling apart.
+
 ### Emoji Legend
 
 - 💀 Dead machines (in Silicon Heaven)

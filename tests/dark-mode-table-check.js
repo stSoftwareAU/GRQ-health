@@ -5,102 +5,34 @@
 // Usage: deno run --allow-read=<css> dark-mode-table-check.js <path-to-css>
 // Prints TEST_RESULT:<name>:<PASS|FAIL>:<detail> lines for the shell harness.
 
+// The CSS parsing and colour maths live in tests/css-colour-lib.js so the
+// generalised host-card sweep (Issue #172) shares them rather than copying them.
+import {
+    channelDelta,
+    contrast,
+    declarations,
+    flatten,
+    luminance,
+    makeResolver,
+    parseColour,
+    report,
+    ruleBody as ruleBodyIn,
+    stripComments,
+} from "./css-colour-lib.js";
+
 const cssPath = Deno.args[0];
 if (!cssPath) {
     console.error("usage: dark-mode-table-check.js <path-to-styles.css>");
     Deno.exit(2);
 }
-// Strip comments first — otherwise they get swept into the selector capture.
-const css = (await Deno.readTextFile(cssPath)).replace(/\/\*[\s\S]*?\*\//g, "");
+const css = stripComments(await Deno.readTextFile(cssPath));
 
-// --- Minimal CSS helpers ---------------------------------------------------
-
-// Return the declaration block for an exact selector, or null when absent.
-function ruleBody(selector) {
-    // Selectors are matched literally against the text preceding each `{`.
-    for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const selectors = match[1].split(",").map((s) => s.trim().replace(/\s+/g, " "));
-        if (selectors.includes(selector)) return match[2];
-    }
-    return null;
-}
-
-function declarations(body) {
-    const out = {};
-    for (const decl of body.split(";")) {
-        const idx = decl.indexOf(":");
-        if (idx === -1) continue;
-        out[decl.slice(0, idx).trim()] = decl.slice(idx + 1).trim();
-    }
-    return out;
-}
+const ruleBody = (selector) => ruleBodyIn(css, selector);
 
 // Resolve `var(--x)` references against the dark palette block, one hop at a
 // time, so the table rules may reuse the existing dark custom properties.
 const darkPalette = declarations(ruleBody('[data-theme="dark"]') ?? "");
-function resolveValue(value, depth = 0) {
-    if (!value || depth > 5) return value;
-    const varMatch = value.match(/^var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)$/);
-    if (!varMatch) return value;
-    const referenced = darkPalette[varMatch[1]] ?? varMatch[2];
-    return resolveValue(referenced?.trim(), depth + 1);
-}
-
-// --- Colour maths (WCAG 2.1 relative luminance and contrast) ---------------
-
-function parseColour(value) {
-    if (!value) return null;
-    const v = value.trim().toLowerCase();
-    let m = v.match(/^#([0-9a-f]{3})$/);
-    if (m) {
-        const [r, g, b] = m[1].split("").map((c) => parseInt(c + c, 16));
-        return { r, g, b, a: 1 };
-    }
-    m = v.match(/^#([0-9a-f]{6})$/);
-    if (m) {
-        return {
-            r: parseInt(m[1].slice(0, 2), 16),
-            g: parseInt(m[1].slice(2, 4), 16),
-            b: parseInt(m[1].slice(4, 6), 16),
-            a: 1,
-        };
-    }
-    m = v.match(/^rgba?\(([^)]+)\)$/);
-    if (m) {
-        const parts = m[1].split(/[,/]/).map((p) => parseFloat(p.trim()));
-        if (parts.length < 3 || parts.some(Number.isNaN)) return null;
-        return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
-    }
-    return null;
-}
-
-// Composite a possibly translucent colour over an opaque backdrop.
-function flatten(colour, backdrop) {
-    if (colour.a >= 1) return colour;
-    return {
-        r: colour.r * colour.a + backdrop.r * (1 - colour.a),
-        g: colour.g * colour.a + backdrop.g * (1 - colour.a),
-        b: colour.b * colour.a + backdrop.b * (1 - colour.a),
-        a: 1,
-    };
-}
-
-function luminance(colour) {
-    const channel = (c) => {
-        const s = c / 255;
-        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-    };
-    return 0.2126 * channel(colour.r) + 0.7152 * channel(colour.g) + 0.0722 * channel(colour.b);
-}
-
-function contrast(a, b) {
-    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-    return (hi + 0.05) / (lo + 0.05);
-}
-
-function report(name, ok, detail) {
-    console.log(`TEST_RESULT:${name}:${ok ? "PASS" : "FAIL"}:${detail}`);
-}
+const resolveValue = makeResolver(darkPalette);
 
 // Pull every colour token out of a `background` shorthand — including the stops
 // of a linear-gradient and any layered translucent washes — so a surface built
@@ -209,11 +141,6 @@ function checkHostCardVariant(key, selector, label) {
     }
 
     return surface;
-}
-
-// Largest per-channel difference between two opaque colours.
-function channelDelta(a, b) {
-    return Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b));
 }
 
 const miaSurface = checkHostCardVariant("mia", ".host-card.mia", "MIA card");

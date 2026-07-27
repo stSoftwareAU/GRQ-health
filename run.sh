@@ -680,7 +680,7 @@ get_system_info() {
         local script_version="$VERSION"
         if [ -f /etc/os-release ]; then
             # Modern Linux systems - source the file and get proper version info
-            source /etc/os-release
+            source /etc/os-release  # skip: Linux-only file, guarded by the [ -f ] test above
             os_info="${NAME:-}"
             # Use VERSION_ID for version number, fallback to VERSION for descriptive version
             # Note: VERSION from /etc/os-release might overwrite script's VERSION, so we restore it after
@@ -695,7 +695,7 @@ get_system_info() {
             VERSION="$script_version"
         elif [ -f /etc/lsb-release ]; then
             # Ubuntu/Debian
-            source /etc/lsb-release
+            source /etc/lsb-release  # skip: Linux-only file, guarded by the [ -f ] test above
             os_info="${DISTRIB_ID:-}"
             os_version="${DISTRIB_RELEASE:-}"
             # Restore script's VERSION variable (in case it was somehow affected)
