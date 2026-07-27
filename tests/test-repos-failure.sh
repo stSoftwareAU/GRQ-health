@@ -153,14 +153,14 @@ TEST_DIR=$(setup_test_env)
 LOG_FILE="$TMPDIR_BASE/run2.log"
 echo "test log" > "$LOG_FILE"
 
-# Test with colon in name (e.g., "ScoreClient:luke")
+# Test with colon in name (e.g., "Scorer:client:luke")
 cat > "$TEST_DIR/docs/repos.json" <<'ENDJSON'
-{"repos": [{"name": "ScoreClient:luke", "last_commit_ts": 1776265324}]}
+{"repos": [{"name": "Scorer:client:luke", "last_commit_ts": 1776265324}]}
 ENDJSON
 
-bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "ScoreClient:luke" --failed --log "$LOG_FILE" 2>/dev/null
-FAILURE_LOG=$(jq -r '.repos[] | select(.name == "ScoreClient:luke") | .last_failure_log // empty' "$TEST_DIR/docs/repos.json")
-if [[ "$FAILURE_LOG" == logs/ScoreClient-luke/* ]]; then
+bash "$TEST_DIR/helpers/repos.sh" --dry-run --project-root "$TEST_DIR" "Scorer:client:luke" --failed --log "$LOG_FILE" 2>/dev/null
+FAILURE_LOG=$(jq -r '.repos[] | select(.name == "Scorer:client:luke") | .last_failure_log // empty' "$TEST_DIR/docs/repos.json")
+if [[ "$FAILURE_LOG" == logs/Scorer-client-luke/* ]]; then
     pass_test "colon sanitised to hyphen in slug"
 else
     fail_test "colon not sanitised in slug (got: $FAILURE_LOG)"
