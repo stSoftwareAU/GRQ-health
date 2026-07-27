@@ -113,6 +113,12 @@
     <div id="decoration-results"></div>
     <div id="decoration-summary" class="summary"></div>
 
+    <h1>Hostname Truncation Tests - Issue #174</h1>
+    <p style="color: white;">Testing that a long hostname truncates with an ellipsis on <em>one</em> line instead of wrapping onto a second one, while the machine-type and "Worker silent" badges stay visible.</p>
+
+    <div id="truncation-results"></div>
+    <div id="truncation-summary" class="summary"></div>
+
     <script>
         // Test function to check if an element overflows its container
         function checkOverflow(container, element) {
@@ -500,6 +506,196 @@
                 `;
             }, 50);
         }, 150);
+    </script>
+
+    <script>
+        // Issue #174: `.host-card h5` carried `overflow: hidden` and
+        // `text-overflow: ellipsis` with no `white-space: nowrap`. The ellipsis
+        // only fires on text that overflows a *single* line, so the hostname
+        // wrapped instead — `Tinas-MacBook-Air` dropped "Air" onto a second
+        // line and the taller header pushed into the "OFF THE GRID" badge.
+        //
+        // These cases render both header shapes dashboard.js emits against the
+        // real docs/styles.css and measure the rendered boxes.
+        const truncationCases = [
+            {
+                name: 'MIA header — long hostname truncates on one line',
+                hostname: 'Tinas-MacBook-Air',
+                emoji: '🏖️',
+                variant: 'mia',
+                status: 'Off the Grid',
+                flexHeader: false,
+                badges: [],
+                width: 320,
+                expectTruncated: true
+            },
+            {
+                name: 'Active header — long hostname with machine-type and Worker silent badges',
+                hostname: 'Tinas-MacBook-Air',
+                emoji: '🍭',
+                variant: 'healthy',
+                status: 'healthy',
+                flexHeader: true,
+                badges: [
+                    { className: 'badge bg-secondary ms-2', label: 'MacBook Air' },
+                    { className: 'badge bg-warning text-dark ms-2 worker-silent-badge', label: 'Worker silent' }
+                ],
+                width: 360,
+                expectTruncated: true
+            },
+            {
+                name: 'Active header — very long hostname in a phone-width card',
+                hostname: 'Tinas-MacBook-Air-In-The-Back-Room',
+                emoji: '',
+                variant: 'warning',
+                status: 'warning',
+                flexHeader: true,
+                badges: [{ className: 'badge bg-secondary ms-2', label: 'Mac mini' }],
+                width: 280,
+                expectTruncated: true
+            },
+            {
+                name: 'Active header — a short hostname is left alone',
+                hostname: 'GRQ-23',
+                emoji: '',
+                variant: 'healthy',
+                status: 'healthy',
+                flexHeader: true,
+                badges: [{ className: 'badge bg-secondary ms-2', label: 'Mac mini' }],
+                width: 420,
+                expectTruncated: false
+            }
+        ];
+
+        // Mirrors the header markup docs/dashboard.js emits: the hostname text
+        // run lives in its own truncating span, badges are its siblings.
+        function truncationCardHtml(testCase) {
+            const badges = testCase.badges
+                .map((badge) => `<span class="${badge.className}" style="font-size: 0.7rem;">${badge.label}</span>`)
+                .join('');
+            const headerClass = testCase.flexHeader ? 'mb-0 d-flex align-items-center' : 'mb-0';
+            const prefix = testCase.emoji ? `${testCase.emoji} ` : '';
+            return `
+                <div class="card-preview" style="width: ${testCase.width}px; overflow: visible;">
+                    <div class="host-card ${testCase.variant}">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="${headerClass}">
+                                <span class="hostname-text" title="${testCase.hostname}">${prefix}${testCase.hostname}</span>
+                                ${badges}
+                            </h5>
+                            <span class="health-status ${testCase.variant}">${testCase.status}</span>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">OS</small>
+                                <div class="fw-bold">macOS 15.0</div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Uptime</small>
+                                <div class="fw-bold">5d</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Two boxes share a line when their vertical extents overlap.
+        function sharesLine(a, b) {
+            return a.top < b.bottom && b.top < a.bottom;
+        }
+
+        setTimeout(() => {
+            const resultsDiv = document.getElementById('truncation-results');
+            resultsDiv.innerHTML = truncationCases.map((testCase, index) => `
+                <div class="test-case">
+                    <h3>Truncation ${index + 1}: ${testCase.name}</h3>
+                    <p>Hostname: <code>${testCase.hostname}</code>, Container: ${testCase.width}px</p>
+                    <div id="trunc-container-${index}">${truncationCardHtml(testCase)}</div>
+                    <div id="trunc-result-${index}"></div>
+                </div>
+            `).join('');
+
+            let passCount = 0;
+            let failCount = 0;
+            let checkCount = 0;
+
+            const record = (lines, ok, message) => {
+                checkCount++;
+                if (ok) {
+                    passCount++;
+                    lines.push(`<p class="pass">PASS: ${message}</p>`);
+                } else {
+                    failCount++;
+                    lines.push(`<p class="fail">FAIL: ${message}</p>`);
+                }
+            };
+
+            setTimeout(() => {
+                truncationCases.forEach((testCase, index) => {
+                    const root = document.querySelector(`#trunc-container-${index}`);
+                    const card = root.querySelector('.host-card');
+                    const header = root.querySelector('h5');
+                    const hostname = root.querySelector('.hostname-text');
+                    const statusBadge = root.querySelector('.health-status');
+                    const lines = [];
+
+                    if (!card || !header || !hostname || !statusBadge) {
+                        record(lines, false, 'Could not find the card, header, hostname and badge elements');
+                        document.getElementById(`trunc-result-${index}`).innerHTML = lines.join('');
+                        return;
+                    }
+
+                    const style = getComputedStyle(hostname);
+                    record(lines, style.whiteSpace === 'nowrap' || style.whiteSpace === 'pre',
+                        `the hostname text run cannot wrap (white-space: ${style.whiteSpace})`);
+
+                    // One text line, measured rather than assumed: a wrapped
+                    // hostname renders two client rects for the same text run.
+                    const range = document.createRange();
+                    range.selectNodeContents(hostname);
+                    const lineCount = range.getClientRects().length;
+                    record(lines, lineCount === 1,
+                        `the hostname renders on a single line (${lineCount} line box(es))`);
+
+                    const truncated = hostname.scrollWidth > hostname.clientWidth;
+                    record(lines, truncated === testCase.expectTruncated,
+                        testCase.expectTruncated
+                            ? `the long hostname is clipped with an ellipsis (content ${hostname.scrollWidth}px in a ${hostname.clientWidth}px box)`
+                            : `the short hostname is shown in full (content ${hostname.scrollWidth}px in a ${hostname.clientWidth}px box)`);
+
+                    record(lines, hostname.title === testCase.hostname,
+                        `the full hostname stays discoverable via title="${hostname.title}"`);
+
+                    const headerRect = header.getBoundingClientRect();
+                    const statusRect = statusBadge.getBoundingClientRect();
+                    const cardRect = card.getBoundingClientRect();
+
+                    record(lines, sharesLine(headerRect, statusRect),
+                        'the status badge stays on the hostname line');
+                    record(lines, statusRect.right <= cardRect.right + 0.5,
+                        `the status badge stays inside the card (${(cardRect.right - statusRect.right).toFixed(1)}px to spare)`);
+
+                    root.querySelectorAll('.badge').forEach((badge) => {
+                        const rect = badge.getBoundingClientRect();
+                        const label = badge.textContent.trim();
+                        record(lines, rect.width > 0 && rect.height > 0 && rect.right <= cardRect.right + 0.5,
+                            `the "${label}" badge stays visible and unclipped (${rect.width.toFixed(1)}×${rect.height.toFixed(1)}px)`);
+                    });
+
+                    document.getElementById(`trunc-result-${index}`).innerHTML = lines.join('');
+                });
+
+                const summaryDiv = document.getElementById('truncation-summary');
+                summaryDiv.className = `summary ${failCount === 0 ? 'all-pass' : 'has-failures'}`;
+                summaryDiv.innerHTML = `
+                    <h2>Hostname Truncation Summary (Issue #174)</h2>
+                    <p>Passed: ${passCount} / ${checkCount}</p>
+                    <p>Failed: ${failCount} / ${checkCount}</p>
+                    ${failCount === 0 ? '<p>All checks passed! Long hostnames truncate on one line and the badges survive.</p>' : '<p>Some checks failed. The hostname is wrapping or a badge is being clipped.</p>'}
+                `;
+            }, 50);
+        }, 200);
     </script>
 </body>
 </html>

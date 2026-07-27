@@ -470,6 +470,39 @@ decorated variant is covered without a test edit. The fixtures in
 `tests/status-overflow.test.html` carries the matching browser cases, which
 hit-test the rendered badge with `document.elementFromPoint()`.
 
+#### The hostname truncates, it never wraps (Issue #174)
+
+`.host-card h5` carried `overflow: hidden; text-overflow: ellipsis` with no
+`white-space: nowrap`. `text-overflow` only fires on text that overflows a
+**single** line, so a long hostname such as `Tinas-MacBook-Air` wrapped instead
+— "Air" dropped onto a second line, the header grew taller and pushed into the
+"OFF THE GRID" badge.
+
+The header is a flex row, and a flex container cannot truncate its own children,
+so the ellipsis is applied to the hostname **text run** rather than the header:
+each card template wraps the hostname in `<span class="hostname-text">`, which
+carries `min-width: 0`, `overflow: hidden`, `text-overflow: ellipsis` and
+`white-space: nowrap`. The machine-type and "Worker silent" badges are its
+siblings with `flex-shrink: 0`, so they stay beside the ellipsis rather than
+being clipped away, and the span carries a `title` attribute so the full
+hostname is still readable on a phone.
+
+```mermaid
+flowchart LR
+    A[".host-card h5 — display: flex, overflow: hidden"] --> B["span.hostname-text<br/>min-width: 0, nowrap, ellipsis"]
+    A --> C["span.badge — flex-shrink: 0<br/>Mac mini / Worker silent"]
+    B -->|"title attribute"| D["full hostname on hover/long-press"]
+```
+
+`tests/test-status-overflow.sh` runs `tests/hostname-truncation-check.js`, which
+locates the element holding the hostname text run in **every** `<h5>` card
+template in `docs/dashboard.js`, resolves the CSS applying to it and asks whether
+that box can truncate — so the header may be restructured freely as long as the
+hostname still lands in a truncating box with its badges intact. The fixtures in
+`tests/fixtures/hostname-truncation/` are the checker's self-test, and
+`tests/status-overflow.test.html` carries the matching browser cases, which
+measure the rendered line boxes of a `Tinas-MacBook-Air` card.
+
 ### Emoji Legend
 
 - 💀 Dead machines (in Silicon Heaven)

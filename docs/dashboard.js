@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.24";
+const VERSION = "1.1.25";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -1094,7 +1094,7 @@ function createHostCard(hostname, data) {
             <div class="col-lg-6 col-xl-4">
                 <div class="host-card dead" data-status="dead">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${emoji} ${safeHostname}</h5>
+                        <h5 class="mb-0"><span class="hostname-text" title="${safeHostname}">${emoji} ${safeHostname}</span></h5>
                         <span class="health-status dead">Dead</span>
                     </div>
                     ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
@@ -1120,7 +1120,7 @@ function createHostCard(hostname, data) {
             <div class="col-lg-6 col-xl-4">
                 <div class="host-card historical" data-status="historical">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${emoji} ${safeHostname}</h5>
+                        <h5 class="mb-0"><span class="hostname-text" title="${safeHostname}">${emoji} ${safeHostname}</span></h5>
                         <span class="health-status historical">Historical</span>
                     </div>
                     ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
@@ -1151,7 +1151,7 @@ function createHostCard(hostname, data) {
             <div class="col-lg-6 col-xl-4">
                 <div class="host-card mia" data-status="mia">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${miaEmoji} ${safeHostname}</h5>
+                        <h5 class="mb-0"><span class="hostname-text" title="${safeHostname}">${miaEmoji} ${safeHostname}</span></h5>
                         <span class="health-status mia">Off the Grid</span>
                     </div>
                     ${location ? `<div class="location mb-2"><small class="text-muted">📍 ${location}</small></div>` : ''}
@@ -1252,7 +1252,7 @@ function createHostCard(hostname, data) {
             <div class="host-card ${statusClass}${mobileClass}${outdatedMacClass}" data-status="${healthStatus}" data-hostname="${escapeHtml(hostname)}">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0 d-flex align-items-center">
-                        ${emoji} ${safeHostname}
+                        <span class="hostname-text" title="${safeHostname}">${emoji} ${safeHostname}</span>
                         ${data.machine_type && data.machine_type !== 'unknown' && data.machine_type !== '' ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${escapeHtml(data.machine_type)}</span>` : ''}
                         ${workerSilentBadge}
                     </h5>
