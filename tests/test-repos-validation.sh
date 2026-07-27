@@ -30,7 +30,7 @@ echo "Test 1: Valid repo names..."
 for name in "Dividends" "FX" "share-prices" "my_repo" "repo.2025" \
             "org/repo" "host:path" "repo+extra" "A" "a1b2c3" \
             "Training Data" "S3 Sync" "Company Reports" "Discovery Snapshot" \
-            "ScoreClient:luke"; do
+            "Scorer:client:luke"; do
     if bash "$REPOS_SCRIPT" --validate "$name" 2>/dev/null; then
         pass_test "accepted valid name: $name"
     else
