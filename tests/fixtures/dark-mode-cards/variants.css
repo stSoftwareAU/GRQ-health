@@ -1,0 +1,62 @@
+/* Fixture for Issue #172: a synthetic stylesheet whose expected verdicts are
+   known, used to prove tests/dark-mode-card-check.js actually detects the
+   defect class rather than passing by vacuity. Not shipped to the dashboard. */
+
+[data-theme="dark"] {
+    --card-bg: #23263a;
+    --card-text: #e8e8f2;
+    --muted-color: #9aa0b8;
+}
+
+.host-card {
+    background: var(--card-bg);
+    color: var(--card-text);
+}
+
+/* PASS — a light base gradient with a dark wash override, the shape the
+   #170/#171 fixes use. */
+.host-card.fixture-good {
+    background: linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(240,255,250,0.98) 100%);
+}
+
+[data-theme="dark"] .host-card.fixture-good {
+    background:
+        linear-gradient(135deg, rgba(32, 201, 151, 0.04) 0%, rgba(32, 201, 151, 0.10) 100%),
+        var(--card-bg);
+}
+
+/* Decoration rules paint no card surface — enumeration must ignore them. */
+.host-card.fixture-good::before {
+    content: "🌐";
+    background: #ffffff;
+}
+
+/* FAIL — the unfixed defect: a light literal with no dark override. */
+.host-card.fixture-light {
+    background: linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(255,248,220,0.98) 100%);
+}
+
+/* FAIL — starts dark and ends near-white, so only a checker that evaluates
+   every gradient stop catches it. */
+.host-card.fixture-tail-light {
+    background: #ffffff;
+}
+
+[data-theme="dark"] .host-card.fixture-tail-light {
+    background: linear-gradient(135deg, rgba(32,201,151,0.05) 0%, rgba(240,255,250,0.98) 100%);
+}
+
+/* PASS — a barely-there white wash. Only correct alpha compositing keeps this
+   dark; treating rgba() as opaque would call it white and fail it. */
+[data-theme="dark"] .host-card.fixture-alpha-wash {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.host-card.fixture-alpha-wash {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* FAIL — translucent but at 0.98, so compositing barely darkens it. */
+.host-card.fixture-alpha-solid {
+    background: rgba(255, 255, 255, 0.98);
+}

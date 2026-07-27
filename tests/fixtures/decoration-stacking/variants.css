@@ -1,0 +1,110 @@
+/* Issue #173 self-test fixture for tests/decoration-stacking-check.js.
+   Known-good and known-bad decorations, so a checker that stopped detecting the
+   defect (painting order mismodelled, pointer-events ignored, negative z-index
+   escaping the card missed) fails against this file. The badge is left in
+   normal flow exactly as docs/dashboard.js renders it. */
+
+.host-card {
+    background: #ffffff;
+    padding: 20px;
+}
+
+.health-status {
+    padding: 5px 12px;
+    white-space: nowrap;
+}
+
+/* Fixed: behind the badge, inert, still animating. */
+.host-card.good {
+    position: relative;
+    isolation: isolate;
+}
+
+.host-card.good::before {
+    content: "🌐";
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    animation: float 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* The unfixed defect: lifted above the header row. */
+.host-card.overlay {
+    position: relative;
+    isolation: isolate;
+}
+
+.host-card.overlay::before {
+    content: "🏝️";
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    animation: float 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* z-index: 0 looks harmless but a positioned box still paints above in-flow
+   content, so the badge is obscured just the same. */
+.host-card.flat {
+    position: relative;
+    isolation: isolate;
+}
+
+.host-card.flat::before {
+    content: "🔧";
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    animation: float 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Negative z-index on a card that is not a stacking context: the decoration
+   escapes to the ancestor context and paints behind the card background. */
+.host-card.escapes {
+    position: relative;
+}
+
+.host-card.escapes::before {
+    content: "📡";
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    animation: float 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Correct painting order, but still swallows taps. */
+.host-card.taps {
+    position: relative;
+    isolation: isolate;
+}
+
+.host-card.taps::before {
+    content: "🦋";
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    animation: float 3s ease-in-out infinite;
+    z-index: -1;
+}
+
+/* Correct painting order, but the float animation was dropped. */
+.host-card.frozen {
+    position: relative;
+    isolation: isolate;
+}
+
+.host-card.frozen::before {
+    content: "🌐";
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    pointer-events: none;
+    z-index: -1;
+}

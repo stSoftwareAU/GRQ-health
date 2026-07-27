@@ -317,13 +317,39 @@ body.offline-mode .alert-warning {
     border: none;
     margin-bottom: 20px;
     overflow: hidden;
+    /* Issue #173: the decorative ::before/::after emoji on .mia/.mobile/
+       .outdated-macos sit at z-index: -1 so they paint behind the card's
+       content instead of over the status badge. A negative z-index only stays
+       inside the card if the card is its own stacking context — isolate it
+       explicitly rather than leaning on backdrop-filter for that side effect,
+       otherwise the decorations would drop behind the card background and
+       vanish. */
+    isolation: isolate;
 }
 
-/* Ensure hostname truncates properly without pushing status badge out */
+/* Ensure hostname truncates properly without pushing status badge out.
+   Issue #174: text-overflow: ellipsis only fires on text that overflows a
+   *single* line, so the hostname text run needs white-space: nowrap — without
+   it the text simply wrapped and the ellipsis never triggered. The rules are
+   split because the header is a flex row: a flex container cannot truncate its
+   children, so the ellipsis is applied to .hostname-text (the text run itself)
+   and the machine-type / worker-silent badges stay beside it, unclipped. */
 .host-card h5 {
     min-width: 0;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+.host-card h5 .hostname-text {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.host-card h5 .badge {
+    flex-shrink: 0;
 }
 
 .host-card:hover {
@@ -372,7 +398,8 @@ body.offline-mode .alert-warning {
     font-size: 2rem;
     opacity: 0.6;
     animation: float 3s ease-in-out infinite;
-    z-index: 1;
+    z-index: -1;
+    pointer-events: none;
 }
 
 .host-card.mia::after {
@@ -383,7 +410,8 @@ body.offline-mode .alert-warning {
     font-size: 1.5rem;
     opacity: 0.4;
     animation: float 2s ease-in-out infinite reverse;
-    z-index: 1;
+    z-index: -1;
+    pointer-events: none;
 }
 
 .host-card.mobile {
@@ -403,7 +431,8 @@ body.offline-mode .alert-warning {
     font-size: 2rem;
     opacity: 0.6;
     animation: float 3s ease-in-out infinite;
-    z-index: 1;
+    z-index: -1;
+    pointer-events: none;
 }
 
 .host-card.mobile::after {
@@ -414,7 +443,8 @@ body.offline-mode .alert-warning {
     font-size: 1.5rem;
     opacity: 0.4;
     animation: float 2s ease-in-out infinite reverse;
-    z-index: 1;
+    z-index: -1;
+    pointer-events: none;
 }
 
 .host-card.outdated-macos {
@@ -434,7 +464,8 @@ body.offline-mode .alert-warning {
     font-size: 1.8rem;
     opacity: 0.7;
     animation: gentle-pulse 2s ease-in-out infinite;
-    z-index: 1;
+    z-index: -1;
+    pointer-events: none;
 }
 
 .host-card.outdated-macos::after {
@@ -445,7 +476,8 @@ body.offline-mode .alert-warning {
     font-size: 1.4rem;
     opacity: 0.5;
     animation: gentle-bounce 1.8s ease-in-out infinite;
-    z-index: 1;
+    z-index: -1;
+    pointer-events: none;
 }
 
 @keyframes pulse {
@@ -714,6 +746,47 @@ body.offline-mode .alert-warning {
 
 [data-theme="dark"] .host-card.historical {
     background: rgba(13, 202, 240, 0.08);
+}
+
+/* Issue #170: .host-card.mia paints a near-white mint gradient, so in dark mode
+   the light --card-text/--muted-color rendered light-on-light and the "Off the
+   Grid" card was unreadable. Wash the same #20c997 teal over the dark card
+   surface instead of a light literal — the accent identity (left border, glow,
+   border tint) is inherited from the base rule and left untouched. */
+[data-theme="dark"] .host-card.mia {
+    background:
+        linear-gradient(135deg,
+            rgba(32, 201, 151, 0.04) 0%,
+            rgba(32, 201, 151, 0.07) 50%,
+            rgba(32, 201, 151, 0.10) 100%),
+        var(--card-bg);
+}
+
+/* Issue #171: .host-card.mobile and .host-card.outdated-macos hardcode
+   near-white gradients for the same reason .mia did, and both land on *active*
+   cards — an online MacBook, or any Mac with a pending OS update. Same
+   treatment as the .mia fix: wash the variant's own #fd7e14 orange accent over
+   the dark card surface rather than a light literal, so the accent identity
+   (left border, glow, border tint) still comes from the base rule.
+   The two washes are pitched at different strengths so an "island" host and a
+   pending-update Mac stay tellable apart — .mobile also has to stay distinct
+   from .mia, since a mobile host can be off the grid at the same time. */
+[data-theme="dark"] .host-card.mobile {
+    background:
+        linear-gradient(135deg,
+            rgba(253, 126, 20, 0.05) 0%,
+            rgba(253, 126, 20, 0.09) 50%,
+            rgba(253, 126, 20, 0.12) 100%),
+        var(--card-bg);
+}
+
+[data-theme="dark"] .host-card.outdated-macos {
+    background:
+        linear-gradient(135deg,
+            rgba(253, 126, 20, 0.02) 0%,
+            rgba(253, 126, 20, 0.04) 50%,
+            rgba(253, 126, 20, 0.06) 100%),
+        var(--card-bg);
 }
 
 /* The theme control uses a lighter scrim on the dark page for contrast. */

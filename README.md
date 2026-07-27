@@ -400,6 +400,109 @@ own `--bs-*` variables at the dark palette variables (`--card-bg`,
 the resulting luminance and WCAG contrast so a regression to light surfaces
 fails the quality gate.
 
+#### Host-card surfaces in dark mode (Issue #170)
+
+The same trap applies to the dashboard's own host cards. Any `.host-card.*`
+variant that paints a colour literal instead of `var(--card-bg)` keeps that
+light surface in dark mode while the card text flips to the light dark-palette
+colours — which is how the "Off the Grid" (MIA) card came to render near-white
+text on a near-white mint gradient. Each such variant needs a matching
+`[data-theme="dark"] .host-card.<variant>` rule that washes its accent colour
+over `var(--card-bg)` rather than over a light literal, so the accent identity
+survives and the text stays readable. `tests/test-dark-mode-table.sh` asserts
+≥4.5:1 contrast between the resolved MIA surface and both `--card-text` and
+`--muted-color`.
+
+#### The host-card contrast sweep (Issue #172)
+
+That same fault shipped three times (#165, #169, #171) before a human spotted it
+on a phone screenshot, so the check no longer names variants.
+`tests/test-dark-mode-host-cards.sh` runs `tests/dark-mode-card-check.js`, which
+**enumerates** every `.host-card.<variant>` rule in `docs/styles.css` and
+measures each one — no test edit is needed when a variant is added.
+
+```mermaid
+flowchart LR
+    A[docs/styles.css] --> B[enumerate .host-card variants]
+    B --> C{dark override?}
+    C -->|yes| D["[data-theme=dark] rule background"]
+    C -->|no| E[base rule background]
+    D --> F[composite layers + gradient stops<br/>over the dark --card-bg]
+    E --> F
+    F --> G{">= 4.5:1 vs --card-text<br/>and --muted-color?"}
+    G -->|no| H[TEST_RESULT ... FAIL]
+    G -->|yes| I[TEST_RESULT ... PASS]
+```
+
+A translucent `rgba()` wash is composited before the ratio is computed, and
+every stop of a multi-stop gradient is measured, so a gradient that starts dark
+and ends light still fails. Enumerating zero variants is itself a failure, so a
+stylesheet rename cannot turn the guard green by vacuity. The fixtures in
+`tests/fixtures/dark-mode-cards/` are the checker's own self-test: known-good
+and known-bad variants it must keep telling apart.
+
+#### Host-card decorations must stay behind the content (Issue #173)
+
+The `.mia`, `.mobile` and `.outdated-macos` cards carry decorative emoji as
+absolutely-positioned `::before`/`::after` pseudo-elements anchored to the same
+top-right corner the `.health-status` badge occupies. They used to sit at
+`z-index: 1`, so they painted over the badge and clipped "OFF THE GRID".
+
+A decoration must therefore be `z-index: -1` and `pointer-events: none`, and the
+card must be its own stacking context (`isolation: isolate` on `.host-card`) so
+a negative z-index paints above the card background rather than escaping behind
+it. `z-index: 0` is **not** enough — a positioned box still paints above in-flow
+content — and nudging the emoji's `right` offset only moves the collision to a
+different status string.
+
+```mermaid
+flowchart TB
+    A[".host-card — isolation: isolate<br/>(its own stacking context)"] --> B["z-index: -1 — decorative emoji"]
+    A --> C["in-flow content — .health-status badge, hostname, stats"]
+    B -.->|painted first| C
+```
+
+`tests/test-decoration-stacking.sh` runs `tests/decoration-stacking-check.js`,
+which **enumerates** every `.host-card.<variant>::before/::after` rule in
+`docs/styles.css` and resolves its painting order against the badge, so a newly
+decorated variant is covered without a test edit. The fixtures in
+`tests/fixtures/decoration-stacking/` are the checker's self-test, and
+`tests/status-overflow.test.html` carries the matching browser cases, which
+hit-test the rendered badge with `document.elementFromPoint()`.
+
+#### The hostname truncates, it never wraps (Issue #174)
+
+`.host-card h5` carried `overflow: hidden; text-overflow: ellipsis` with no
+`white-space: nowrap`. `text-overflow` only fires on text that overflows a
+**single** line, so a long hostname such as `Tinas-MacBook-Air` wrapped instead
+— "Air" dropped onto a second line, the header grew taller and pushed into the
+"OFF THE GRID" badge.
+
+The header is a flex row, and a flex container cannot truncate its own children,
+so the ellipsis is applied to the hostname **text run** rather than the header:
+each card template wraps the hostname in `<span class="hostname-text">`, which
+carries `min-width: 0`, `overflow: hidden`, `text-overflow: ellipsis` and
+`white-space: nowrap`. The machine-type and "Worker silent" badges are its
+siblings with `flex-shrink: 0`, so they stay beside the ellipsis rather than
+being clipped away, and the span carries a `title` attribute so the full
+hostname is still readable on a phone.
+
+```mermaid
+flowchart LR
+    A[".host-card h5 — display: flex, overflow: hidden"] --> B["span.hostname-text<br/>min-width: 0, nowrap, ellipsis"]
+    A --> C["span.badge — flex-shrink: 0<br/>Mac mini / Worker silent"]
+    B -->|"title attribute"| D["full hostname on hover/long-press"]
+```
+
+`tests/test-status-overflow.sh` runs `tests/hostname-truncation-check.js`, which
+locates the element holding the hostname text run in **every** `<h5>` card
+template in `docs/dashboard.js`, resolves the CSS applying to it and asks whether
+that box can truncate — so the header may be restructured freely as long as the
+hostname still lands in a truncating box with its badges intact. The fixtures in
+`tests/fixtures/hostname-truncation/` are the checker's self-test, and
+`tests/status-overflow.test.html` carries the matching browser cases, which
+measure the rendered line boxes of a `Tinas-MacBook-Air` card.
+
 ### Emoji Legend
 
 - 💀 Dead machines (in Silicon Heaven)
