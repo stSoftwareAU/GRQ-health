@@ -97,11 +97,11 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
 repo-health-snippet.sh is a sourceable library, not a runnable script.
 
 Usage:
-    source /path/to/GRQ-health/helpers/repo-health-snippet.sh
+    $ source /path/to/GRQ-health/helpers/repo-health-snippet.sh
 
-    LOG_FILE="$HOME/logs/quality.log"
-    ./quality.sh >"$LOG_FILE" 2>&1
-    report_repo_health "Quality" "$LOG_FILE" || exit $?
+    $ LOG_FILE="$HOME/logs/quality.log"
+    $ ./quality.sh >"$LOG_FILE" 2>&1
+    $ report_repo_health "Quality" "$LOG_FILE" || exit $?
 
 See helpers/REPO_HEALTH_SNIPPET.md for copy-paste patterns.
 USAGE
