@@ -327,11 +327,29 @@ body.offline-mode .alert-warning {
     isolation: isolate;
 }
 
-/* Ensure hostname truncates properly without pushing status badge out */
+/* Ensure hostname truncates properly without pushing status badge out.
+   Issue #174: text-overflow: ellipsis only fires on text that overflows a
+   *single* line, so the hostname text run needs white-space: nowrap — without
+   it the text simply wrapped and the ellipsis never triggered. The rules are
+   split because the header is a flex row: a flex container cannot truncate its
+   children, so the ellipsis is applied to .hostname-text (the text run itself)
+   and the machine-type / worker-silent badges stay beside it, unclipped. */
 .host-card h5 {
     min-width: 0;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+.host-card h5 .hostname-text {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.host-card h5 .badge {
+    flex-shrink: 0;
 }
 
 .host-card:hover {
