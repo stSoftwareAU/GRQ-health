@@ -107,6 +107,12 @@
     <div id="test-results"></div>
     <div id="summary" class="summary"></div>
 
+    <h1>Decoration Stacking Tests - Issue #173</h1>
+    <p style="color: white;">Testing that the decorative emoji pseudo-elements paint <em>behind</em> the status badge and never intercept pointer events.</p>
+
+    <div id="decoration-results"></div>
+    <div id="decoration-summary" class="summary"></div>
+
     <script>
         // Test function to check if an element overflows its container
         function checkOverflow(container, element) {
@@ -331,6 +337,169 @@
                 ${failCount === 0 ? '<p>All tests passed! The status badge stays within the host panel.</p>' : '<p>Some tests failed. The status badge is leaking out of the host panel.</p>'}
             `;
         }, 100);
+    </script>
+
+    <script>
+        // Issue #173: the decorative emoji on .mia / .mobile / .outdated-macos
+        // are absolutely-positioned pseudo-elements anchored to the same
+        // top-right corner the status badge occupies. They used to carry
+        // z-index: 1, so they painted over the badge and clipped the status
+        // text. These cases render the real cards against docs/styles.css and
+        // check the rendered result, not the stylesheet source.
+        const decorationCases = [
+            // "Off the Grid" is the longest status string dashboard.js emits.
+            { name: 'MIA card at dashboard column width', hostname: 'Tinas-MacBook-Air', variant: 'mia', status: 'Off the Grid', machineType: 'MacBook Air', width: 540 },
+            { name: 'Mobile card at dashboard column width', hostname: 'GRQ-Mobile', variant: 'mobile', status: 'Off the Grid', machineType: 'MacBook Pro', width: 540 },
+            { name: 'Outdated macOS card at dashboard column width', hostname: 'GRQ-23', variant: 'outdated-macos', status: 'Historical', machineType: 'Mac Studio', width: 540 },
+            { name: 'MIA card in a narrow column', hostname: 'GRQ-Narrow', variant: 'mia', status: 'Off the Grid', machineType: '', width: 320 }
+        ];
+
+        function decorationCardHtml(testCase) {
+            const badge = testCase.machineType
+                ? `<span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">${testCase.machineType}</span>`
+                : '';
+            return `
+                <div class="card-preview" style="width: ${testCase.width}px; overflow: visible;">
+                    <div class="host-card ${testCase.variant}">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0 d-flex align-items-center">${testCase.hostname}${badge}</h5>
+                            <span class="health-status ${testCase.variant}">${testCase.status}</span>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">OS</small>
+                                <div class="fw-bold">macOS 15.0</div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Uptime</small>
+                                <div class="fw-bold">5d</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Sample a grid of points inside the badge. document.elementFromPoint()
+        // never returns a pseudo-element — a hit on the decoration surfaces as
+        // its originating .host-card, which is exactly the obscured state.
+        function badgeIsTopmost(card, badge) {
+            // elementFromPoint() only hit-tests the visible viewport, so the
+            // card is pinned to the top-left corner while it is sampled and
+            // restored immediately afterwards. Pinning the wrapper does not
+            // change the ordering of the card's own children.
+            const holder = card.parentElement;
+            const savedStyle = holder.getAttribute('style') || '';
+            holder.style.position = 'fixed';
+            holder.style.top = '0';
+            holder.style.left = '0';
+            holder.style.zIndex = '9999';
+
+            const rect = badge.getBoundingClientRect();
+            const misses = [];
+            for (const fx of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+                for (const fy of [0.25, 0.5, 0.75]) {
+                    const x = rect.left + rect.width * fx;
+                    const y = rect.top + rect.height * fy;
+                    const hit = document.elementFromPoint(x, y);
+                    if (hit !== badge && !badge.contains(hit)) {
+                        misses.push(`(${x.toFixed(0)}, ${y.toFixed(0)}) hit <${(hit || {}).tagName || 'null'} class="${(hit || {}).className || ''}">`);
+                    }
+                }
+            }
+            holder.setAttribute('style', savedStyle);
+            return misses;
+        }
+
+        // Where a box lands in the card's painting order. A positioned box with
+        // z-index >= 0 (or auto) paints above in-flow content, which is why
+        // dropping the decorations to z-index: 0 would not have been enough.
+        function paintRank(style) {
+            if (style.position === 'static') return 0;
+            const z = parseInt(style.zIndex, 10);
+            if (Number.isNaN(z)) return 0.5;
+            return z < 0 ? z : (z === 0 ? 0.5 : z);
+        }
+
+        setTimeout(() => {
+            const resultsDiv = document.getElementById('decoration-results');
+            resultsDiv.innerHTML = decorationCases.map((testCase, index) => `
+                <div class="test-case">
+                    <h3>Decoration ${index + 1}: ${testCase.name}</h3>
+                    <p>Variant: <code>.host-card.${testCase.variant}</code>, Status: ${testCase.status}, Container: ${testCase.width}px</p>
+                    <div id="deco-container-${index}">${decorationCardHtml(testCase)}</div>
+                    <div id="deco-result-${index}"></div>
+                </div>
+            `).join('');
+
+            let passCount = 0;
+            let failCount = 0;
+            let checkCount = 0;
+
+            const record = (lines, ok, message) => {
+                checkCount++;
+                if (ok) {
+                    passCount++;
+                    lines.push(`<p class="pass">PASS: ${message}</p>`);
+                } else {
+                    failCount++;
+                    lines.push(`<p class="fail">FAIL: ${message}</p>`);
+                }
+            };
+
+            setTimeout(() => {
+                decorationCases.forEach((testCase, index) => {
+                    const card = document.querySelector(`#deco-container-${index} .host-card`);
+                    const badge = document.querySelector(`#deco-container-${index} .health-status`);
+                    const resultDiv = document.getElementById(`deco-result-${index}`);
+                    const lines = [];
+
+                    if (!card || !badge) {
+                        record(lines, false, 'Could not find the card and badge elements');
+                        resultDiv.innerHTML = lines.join('');
+                        return;
+                    }
+
+                    const misses = badgeIsTopmost(card, badge);
+                    record(lines, misses.length === 0,
+                        misses.length === 0
+                            ? 'The status badge is the top-most element across its whole box'
+                            : `The badge is obscured at ${misses.length} sampled point(s): ${misses.join('; ')}`);
+
+                    const badgeRank = paintRank(getComputedStyle(badge));
+                    for (const pseudo of ['::before', '::after']) {
+                        const style = getComputedStyle(card, pseudo);
+                        if (style.content === 'none') continue;
+
+                        record(lines, paintRank(style) < badgeRank,
+                            `${pseudo} paints behind the badge (${pseudo} z-index: ${style.zIndex}, position: ${style.position}; badge z-index: ${getComputedStyle(badge).zIndex}, position: ${getComputedStyle(badge).position})`);
+
+                        record(lines, style.pointerEvents === 'none',
+                            `${pseudo} does not intercept pointer events (pointer-events: ${style.pointerEvents})`);
+
+                        record(lines, style.animationName !== 'none' && style.animationName !== '',
+                            `${pseudo} still animates (animation-name: ${style.animationName})`);
+                    }
+
+                    // A decoration behind the card's own background would be
+                    // invisible, so the card must be its own stacking context.
+                    const cardStyle = getComputedStyle(card);
+                    record(lines, cardStyle.isolation === 'isolate' || cardStyle.backdropFilter !== 'none',
+                        `The card is its own stacking context, so negative z-index decorations stay visible (isolation: ${cardStyle.isolation}, backdrop-filter: ${cardStyle.backdropFilter})`);
+
+                    resultDiv.innerHTML = lines.join('');
+                });
+
+                const summaryDiv = document.getElementById('decoration-summary');
+                summaryDiv.className = `summary ${failCount === 0 ? 'all-pass' : 'has-failures'}`;
+                summaryDiv.innerHTML = `
+                    <h2>Decoration Stacking Summary (Issue #173)</h2>
+                    <p>Passed: ${passCount} / ${checkCount}</p>
+                    <p>Failed: ${failCount} / ${checkCount}</p>
+                    ${failCount === 0 ? '<p>All checks passed! The decorations paint behind the badge and are inert to pointer events.</p>' : '<p>Some checks failed. A decoration is painting over the badge or swallowing taps.</p>'}
+                `;
+            }, 50);
+        }, 150);
     </script>
 </body>
 </html>
