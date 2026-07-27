@@ -16,6 +16,11 @@
 # Issue #170 extends the same harness to the "Off the Grid" (MIA) host card,
 # whose base rule hardcodes a near-white mint gradient. Without a dark surface
 # of its own it renders the dark palette's light text on a light background.
+#
+# Issue #171 extends it again to .host-card.mobile and .host-card.outdated-macos
+# — the same defect on cards that are applied to *active* hosts — and adds the
+# checks that the variants stay tellable apart from each other and that the
+# "Update" badge still stands out against the new surface.
 
 set -e
 
@@ -25,7 +30,7 @@ STYLES_CSS="$ROOT_DIR/docs/styles.css"
 CHECKER="$SCRIPT_DIR/dark-mode-table-check.js"
 DENO="$HOME/.deno/bin/deno"
 
-echo "Testing Issues #165/#170: dark mode surface colours"
+echo "Testing Issues #165/#170/#171: dark mode surface colours"
 echo "==========================================="
 echo ""
 

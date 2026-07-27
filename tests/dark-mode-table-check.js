@@ -1,7 +1,7 @@
 // Dark-mode contrast helper — resolves the colours the dark theme actually
 // applies to surfaces in docs/styles.css and reports WCAG luminance/contrast
-// results. Covers Bootstrap tables (Issue #165) and the "Off the Grid" MIA
-// host card (Issue #170).
+// results. Covers Bootstrap tables (Issue #165), the "Off the Grid" MIA host
+// card (Issue #170) and the .mobile / .outdated-macos host cards (Issue #171).
 // Usage: deno run --allow-read=<css> dark-mode-table-check.js <path-to-css>
 // Prints TEST_RESULT:<name>:<PASS|FAIL>:<detail> lines for the shell harness.
 
@@ -128,39 +128,44 @@ function lightestLayer(colours, backdrop) {
 const pageSurface = parseColour(resolveValue(darkPalette["--card-bg"])) ??
     { r: 35, g: 38, b: 58, a: 1 };
 
-// --- Issue #170: the "Off the Grid" (MIA) host card ------------------------
-// The base .host-card.mia rule paints a near-white mint gradient. The dark
-// palette flips the card text light, so without a dark surface of its own the
-// card renders light-on-light and is unreadable.
-{
-    const darkMiaBody = ruleBody('[data-theme="dark"] .host-card.mia');
+// --- Host-card variants with light-literal base backgrounds ----------------
+// Several .host-card variants hardcode a near-white gradient in their base
+// rule. The dark palette flips the card text light, so without a dark surface
+// of its own such a card renders light-on-light and is unreadable.
+// Issue #170 covers .mia; Issue #171 covers .mobile and .outdated-macos.
+
+const cardText = parseColour(resolveValue(darkPalette["--card-text"]));
+const mutedText = parseColour(resolveValue(darkPalette["--muted-color"]));
+
+// Measure one variant and report its four invariants. Returns the resolved
+// dark surface so callers can compare variants against each other.
+function checkHostCardVariant(key, selector, label) {
+    const darkBody = ruleBody(`[data-theme="dark"] ${selector}`);
     report(
-        "dark-mia-card-rule-exists",
-        darkMiaBody !== null,
-        darkMiaBody !== null
-            ? 'found a [data-theme="dark"] .host-card.mia rule'
-            : 'no [data-theme="dark"] .host-card.mia rule — the light mint gradient wins',
+        `dark-${key}-card-rule-exists`,
+        darkBody !== null,
+        darkBody !== null
+            ? `found a [data-theme="dark"] ${selector} rule`
+            : `no [data-theme="dark"] ${selector} rule — the light gradient wins`,
     );
 
     // Fall back to the base rule so the contrast checks below measure whatever
     // the dark theme *actually* resolves to, not merely whether a rule exists.
-    const effective = declarations(darkMiaBody ?? ruleBody(".host-card.mia") ?? "");
+    const effective = declarations(darkBody ?? ruleBody(selector) ?? "");
     const surface = lightestLayer(
         backgroundColours(effective["background"] ?? effective["background-color"]),
         pageSurface,
     );
-    const cardText = parseColour(resolveValue(darkPalette["--card-text"]));
-    const mutedText = parseColour(resolveValue(darkPalette["--muted-color"]));
 
     // 1. Hostname / values (--card-text) must meet WCAG AA on that surface.
     {
         const ratio = surface && cardText ? contrast(flatten(cardText, surface), surface) : 0;
         report(
-            "mia-card-text-contrast-meets-aa",
+            `${key}-card-text-contrast-meets-aa`,
             ratio >= 4.5,
             surface === null
-                ? "the MIA card background is missing or unparseable"
-                : `--card-text on the MIA card ${ratio.toFixed(2)}:1 (needs >= 4.5)`,
+                ? `the ${label} background is missing or unparseable`
+                : `--card-text on the ${label} ${ratio.toFixed(2)}:1 (needs >= 4.5)`,
         );
     }
 
@@ -168,46 +173,96 @@ const pageSurface = parseColour(resolveValue(darkPalette["--card-bg"])) ??
     {
         const ratio = surface && mutedText ? contrast(flatten(mutedText, surface), surface) : 0;
         report(
-            "mia-card-muted-contrast-meets-aa",
+            `${key}-card-muted-contrast-meets-aa`,
             ratio >= 4.5,
             surface === null
-                ? "the MIA card background is missing or unparseable"
-                : `--muted-color on the MIA card ${ratio.toFixed(2)}:1 (needs >= 4.5)`,
+                ? `the ${label} background is missing or unparseable`
+                : `--muted-color on the ${label} ${ratio.toFixed(2)}:1 (needs >= 4.5)`,
         );
     }
 
     // 3. It must still read as a special card, not blend into a plain host card.
     {
-        const delta = surface
-            ? Math.max(
-                Math.abs(surface.r - pageSurface.r),
-                Math.abs(surface.g - pageSurface.g),
-                Math.abs(surface.b - pageSurface.b),
-            )
-            : 0;
+        const delta = surface ? channelDelta(surface, pageSurface) : 0;
         report(
-            "mia-card-stays-distinct",
+            `${key}-card-stays-distinct`,
             delta >= 8,
-            `MIA surface differs from a plain card by ${delta.toFixed(1)}/255 (needs >= 8)`,
+            `${label} surface differs from a plain card by ${delta.toFixed(1)}/255 (needs >= 8)`,
         );
     }
 
-    // 4. Light mode keeps its light mint gradient — the fix supplements the
-    //    base rule, it must not darken it.
+    // 4. Light mode keeps its light gradient — the fix supplements the base
+    //    rule, it must not darken it.
     {
         const light = lightestLayer(
-            backgroundColours(declarations(ruleBody(".host-card.mia") ?? "")["background"]),
+            backgroundColours(declarations(ruleBody(selector) ?? "")["background"]),
             { r: 255, g: 255, b: 255, a: 1 },
         );
         const lum = light ? luminance(light) : null;
         report(
-            "light-mia-card-stays-light",
+            `light-${key}-card-stays-light`,
             lum !== null && lum > 0.7,
             lum === null
-                ? "the light .host-card.mia background is missing or unparseable"
-                : `light MIA surface luminance ${lum.toFixed(4)} (needs > 0.7)`,
+                ? `the light ${selector} background is missing or unparseable`
+                : `light ${label} luminance ${lum.toFixed(4)} (needs > 0.7)`,
         );
     }
+
+    return surface;
+}
+
+// Largest per-channel difference between two opaque colours.
+function channelDelta(a, b) {
+    return Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b));
+}
+
+const miaSurface = checkHostCardVariant("mia", ".host-card.mia", "MIA card");
+const mobileSurface = checkHostCardVariant("mobile", ".host-card.mobile", "mobile card");
+const outdatedSurface = checkHostCardVariant(
+    "outdated-macos",
+    ".host-card.outdated-macos",
+    "outdated-macOS card",
+);
+
+// --- Issue #171: the variants must not collapse into each other ------------
+// .mobile and .outdated-macos share the same #fd7e14 accent, so a single
+// shared dark surface would make an "island" host indistinguishable from a
+// Mac with a pending update. .mia can co-occur with .mobile on one element, so
+// those two must differ as well.
+for (
+    const [name, a, b] of [
+        ["mobile-vs-outdated-macos", mobileSurface, outdatedSurface],
+        ["mobile-vs-mia", mobileSurface, miaSurface],
+    ]
+) {
+    const delta = a && b ? channelDelta(a, b) : 0;
+    report(
+        `dark-${name}-stay-distinguishable`,
+        delta >= 8,
+        a && b
+            ? `${name} surfaces differ by ${delta.toFixed(1)}/255 (needs >= 8)`
+            : `${name}: a dark surface is missing or unparseable`,
+    );
+}
+
+// The "Update" badge is rendered inside .outdated-macos cards. It paints its
+// own opaque background, so it stays legible only while that background is
+// clearly separated from the card surface behind it (WCAG 1.4.11, 3:1 for a
+// non-text UI component).
+{
+    const badge = declarations(ruleBody(".badge.bg-warning") ?? "");
+    const badgeBg = parseColour(
+        (badge["background-color"] ?? "").replace(/\s*!important\s*$/, ""),
+    );
+    const backdrop = outdatedSurface ?? pageSurface;
+    const ratio = badgeBg ? contrast(flatten(badgeBg, backdrop), backdrop) : 0;
+    report(
+        "update-badge-stands-out-on-outdated-card",
+        ratio >= 3,
+        badgeBg === null
+            ? "the .badge.bg-warning background colour is missing or unparseable"
+            : `Update badge/card contrast ${ratio.toFixed(2)}:1 (needs >= 3)`,
+    );
 }
 
 // --- Issue #165: Bootstrap tables ------------------------------------------
