@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.26";
+const VERSION = "1.1.27";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -483,16 +483,9 @@ function buildWorkerSilentWarning(hostname, repos, nowTs) {
 // contain unsafe characters (e.g. spaces in names such as "Vibe Coder-GRQ-23").
 function getRepoFailureLogUrl(repo) {
     if (!repo) return '';
-    const raw = String(repo.last_failure_log || '').trim();
-    if (!raw) return '';
-    // Encode each path segment but leave "/" as a separator. Strip any leading
-    // "./" or "/" to produce a clean relative URL.
-    const trimmed = raw.replace(/^\.\/+/, '').replace(/^\/+/, '');
-    const encoded = trimmed
-        .split('/')
-        .map((segment) => encodeURIComponent(segment))
-        .join('/');
-    return `./log-viewer.html?file=./${encoded}`;
+    // Shared with the feed-completion panel (GRQ#4174) — one log-viewer URL
+    // builder, not a parallel implementation.
+    return buildLogViewerUrl(repo.last_failure_log);
 }
 
 function getRepoStats(reposOverride) {
@@ -517,6 +510,142 @@ function getRepoStats(reposOverride) {
         else acc.healthy += 1;
         return acc;
     }, { total: 0, healthy: 0, warning: 0, error: 0, failed: 0 });
+}
+
+// ---------------------------------------------------------------------------
+// Per-day feed completion (GRQ#4174, parent GRQ#4168).
+//
+// The fetchers publish one file per NY trading date to docs/feeds/<yyyymmdd>.json
+// (written by GRQ's worker/shared/feed_completion.sh, schema in
+// GRQ/docs/Feed_Completion_Signal.md). The scorer gate's own reaction to an
+// incomplete signal is deliberately quiet — it waits and the 2pm Sydney
+// fallback runs regardless — so this panel is where a feed that has been
+// failing for days becomes loud to a human (fail loud, GRQ#3234).
+// ---------------------------------------------------------------------------
+
+// Mirrors GRQ/feeds.json (the registry lives in the GRQ repo — keep in sync
+// when a feed is added there). Keys are the STABLE feed names, never repos.
+const FEED_REGISTRY = [
+    { name: 'shareprices', label: 'Share prices' },
+    { name: 'commodities', label: 'Commodities' },
+    { name: 'insiders', label: 'Insiders' },
+    { name: 'sentiment-tickers', label: 'Sentiment tickers' },
+    { name: 'sentiment-topics', label: 'Sentiment topics' },
+];
+
+// New York local date parts for an instant — the same NY-local reasoning the
+// scorer uses (GRQ src/scorer/NyseSchedule.ts), via the browser's Intl data.
+function nyDateParts(date) {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    const map = {};
+    for (const part of fmt.formatToParts(date)) {
+        map[part.type] = part.value;
+    }
+    return map;
+}
+
+// yyyymmdd NY date key — the filename of the day's feed file.
+function nyDateKeyFor(date) {
+    const p = nyDateParts(date);
+    return `${p.year}${p.month}${p.day}`;
+}
+
+// Hours into the NY day, for ageing "not run" rows.
+function nyHoursIntoDay(date) {
+    const p = nyDateParts(date);
+    // Intl reports midnight as "24" in some engines with hour12:false.
+    const hour = Number(p.hour) % 24;
+    return hour + Number(p.minute) / 60;
+}
+
+// Weekdays only — NyseSchedule intentionally ignores US market holidays, and
+// this mirrors that documented contract on the already-NY-local date key.
+function isNyTradingDayKey(key) {
+    if (!/^\d{8}$/.test(String(key))) return false;
+    const dow = new Date(Date.UTC(
+        Number(key.slice(0, 4)), Number(key.slice(4, 6)) - 1, Number(key.slice(6, 8)),
+    )).getUTCDay();
+    return dow !== 0 && dow !== 6;
+}
+
+// Validate a fetched day-file against the requested key. A file whose ny_date
+// disagrees (stale/corrupt artefact) is treated as absent — absence must
+// never read as healthy.
+function parseFeedDayDoc(doc, key) {
+    if (!doc || doc.ny_date !== key || typeof doc.feeds !== 'object' || !doc.feeds) {
+        return null;
+    }
+    return doc;
+}
+
+// One display row per registry feed. `complete` and `no-change` are BOTH
+// healthy — a quiet feed is not a fault — but the row text distinguishes them.
+// An absent key is "not run": never healthy.
+function buildFeedRow(feed, entry, hoursIntoDay) {
+    const status = entry && typeof entry === 'object' ? entry.status : undefined;
+    if (status === 'complete') {
+        return {
+            name: feed.name, label: feed.label, state: 'complete',
+            text: 'committed new data', ts: entry.ts, host: entry.host,
+            detail: entry.detail || '',
+        };
+    }
+    if (status === 'no-change') {
+        return {
+            name: feed.name, label: feed.label, state: 'no-change',
+            text: 'no new data', ts: entry.ts, host: entry.host,
+            detail: entry.detail || '',
+        };
+    }
+    if (status === 'failed') {
+        return {
+            name: feed.name, label: feed.label, state: 'failed',
+            text: 'failed', ts: entry.ts, host: entry.host,
+            exitCode: entry.exit_code, message: entry.message || '',
+            log: entry.log || '',
+        };
+    }
+    const aged = Number.isFinite(hoursIntoDay) && hoursIntoDay >= 1
+        ? `not run — ${Math.floor(hoursIntoDay)}h into the NY day`
+        : 'not run';
+    return { name: feed.name, label: feed.label, state: 'missing', text: aged };
+}
+
+function buildFeedRows(dayDoc, hoursIntoDay) {
+    const feeds = dayDoc && dayDoc.feeds ? dayDoc.feeds : {};
+    return FEED_REGISTRY.map((feed) =>
+        buildFeedRow(feed, feeds[feed.name], hoursIntoDay));
+}
+
+// The single rolled-up state that must be legible at a glance on mobile.
+// failed outranks missing: a red banner is the whole point (GRQ#3234).
+function getFeedRollup(rows, isTradingDay) {
+    if (!isTradingDay) {
+        return { state: 'no-trading-day', label: 'No trading day' };
+    }
+    if (rows.some((r) => r.state === 'failed')) {
+        return { state: 'failed', label: 'Feed failures' };
+    }
+    if (rows.some((r) => r.state === 'missing')) {
+        return { state: 'pending', label: 'Feeds pending' };
+    }
+    return { state: 'complete', label: 'Feeds complete' };
+}
+
+// Log-viewer URL for a repo-relative path under docs/ — shared by the repo
+// failure links (getRepoFailureLogUrl) and the feed failure links.
+function buildLogViewerUrl(raw) {
+    const trimmed = String(raw || '').trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
+    if (!trimmed) return '';
+    const encoded = trimmed
+        .split('/')
+        .map((segment) => encodeURIComponent(segment))
+        .join('/');
+    return `./log-viewer.html?file=./${encoded}`;
 }
 
 async function fetchRepoHealth(timestamp = Date.now(), force = false) {
@@ -667,6 +796,128 @@ function renderRepoHealth(errorMessage = null) {
     if (typeof initializeTooltips === 'function') {
         try { initializeTooltips(); } catch (_e) { /* tooltips are best-effort */ }
     }
+}
+
+// --- Feed-completion panel (GRQ#4174) ---------------------------------------
+let feedCompletionDoc = null;
+let feedCompletionKey = '';
+let lastFeedRefresh = 0;
+
+async function fetchFeedCompletion(timestamp = Date.now(), force = false) {
+    const now = Date.now();
+    if (!force && now - lastFeedRefresh < 5 * 60 * 1000) {
+        return;
+    }
+    lastFeedRefresh = now;
+    feedCompletionKey = nyDateKeyFor(new Date());
+
+    // Non-trading day: the file legitimately does not exist — skip the fetch
+    // and let the renderer show "No trading day" rather than an all-red panel.
+    if (!isNyTradingDayKey(feedCompletionKey)) {
+        feedCompletionDoc = null;
+        renderFeedCompletion();
+        return;
+    }
+
+    try {
+        const response = await fetch(`./feeds/${feedCompletionKey}.json?t=${timestamp}`);
+        if (!response.ok) {
+            // Absent file = nothing published yet today; rows render "not run".
+            feedCompletionDoc = null;
+        } else {
+            feedCompletionDoc = parseFeedDayDoc(await response.json(), feedCompletionKey);
+        }
+    } catch (error) {
+        console.warn('Unable to load feed completion data:', error);
+        feedCompletionDoc = null;
+    }
+    renderFeedCompletion();
+}
+
+function renderFeedCompletion() {
+    const section = document.getElementById('feedCompletionSection');
+    if (!section) {
+        return;
+    }
+    const listElement = document.getElementById('feedCompletionList');
+    const rollupElement = document.getElementById('feedRollupBadge');
+    const dateElement = document.getElementById('feedPanelDate');
+
+    section.style.display = 'block';
+    const isTradingDay = isNyTradingDayKey(feedCompletionKey);
+    const rows = buildFeedRows(feedCompletionDoc, nyHoursIntoDay(new Date()));
+    const rollup = getFeedRollup(rows, isTradingDay);
+
+    if (dateElement) {
+        dateElement.textContent = `NY date ${feedCompletionKey}`;
+    }
+    if (rollupElement) {
+        const rollupClass = {
+            'complete': 'badge bg-success',
+            'pending': 'badge bg-warning text-dark',
+            'failed': 'badge bg-danger',
+            'no-trading-day': 'badge bg-secondary',
+        }[rollup.state] || 'badge bg-secondary';
+        rollupElement.className = `${rollupClass} feed-rollup-badge`;
+        rollupElement.textContent = rollup.label;
+    }
+
+    if (!isTradingDay) {
+        listElement.innerHTML = '<p class="text-muted mb-0">No trading day — the feeds do not publish on NYSE weekends.</p>';
+        return;
+    }
+
+    const feedBadge = (state) => {
+        if (state === 'failed') return 'badge bg-danger';
+        if (state === 'missing') return 'badge bg-warning text-dark';
+        return 'badge bg-success';
+    };
+    const feedBadgeLabel = {
+        'complete': 'Complete',
+        'no-change': 'No change',
+        'failed': 'Failed',
+        'missing': 'Not run',
+    };
+    // Reuse the repo-health row classes so the panel inherits the existing
+    // (light + dark) styling rather than adding a parallel implementation.
+    const rowClass = { 'failed': 'repo-failed', 'missing': 'repo-warning' };
+
+    const rowsHtml = rows.map((row) => {
+        let detailHtml = '';
+        if (row.state === 'failed') {
+            const logUrl = buildLogViewerUrl(row.log);
+            const exitText = row.exitCode !== undefined && row.exitCode !== null && row.exitCode !== ''
+                ? `exit code ${row.exitCode}` : '';
+            const failText = [exitText, row.message].filter(Boolean).join(' — ');
+            const linkHtml = logUrl
+                ? `<a href="${escapeHtml(logUrl)}" target="_blank" rel="noopener" class="repo-view-log btn btn-sm btn-outline-danger">
+                      <i class="bi bi-file-earmark-text"></i> View log
+                   </a>`
+                : '';
+            detailHtml = `
+                <div class="repo-failure-info">
+                    ${failText ? `<div class="repo-time text-danger">${escapeHtml(failText)}</div>` : ''}
+                    ${linkHtml}
+                </div>`;
+        }
+        const whenHtml = row.ts
+            ? `<div class="repo-time">${escapeHtml(`${row.text} ${formatTimestamp(row.ts)}${row.host ? ` on ${row.host}` : ''}`)}</div>`
+            : `<div class="repo-time">${escapeHtml(row.text)}</div>`;
+        return `
+        <div class="repo-health-item ${rowClass[row.state] || 'repo-healthy'}">
+            <div class="repo-meta">
+                <div class="repo-name">${escapeHtml(row.label)}</div>
+                <div class="repo-slug">${escapeHtml(row.name)}</div>
+            </div>
+            <div class="text-end">
+                <span class="${feedBadge(row.state)} repo-status-badge">${feedBadgeLabel[row.state] || row.state}</span>
+                ${whenHtml}
+                ${detailHtml}
+            </div>
+        </div>`;
+    }).join('');
+
+    listElement.innerHTML = rowsHtml;
 }
 
 // Offline indicator functionality
@@ -1632,7 +1883,8 @@ async function loadData() {
         }
         const data = await response.json();
         await fetchRepoHealth(timestamp, true);
-        
+        await fetchFeedCompletion(timestamp, true);
+
         // Convert to array of [hostname, data] pairs
         allHosts = Object.entries(data);
         
@@ -1679,7 +1931,8 @@ async function loadDataIncremental() {
         }
         const data = await response.json();
         await fetchRepoHealth(timestamp);
-        
+        await fetchFeedCompletion(timestamp);
+
         // Convert to array of [hostname, data] pairs
         const newHosts = Object.entries(data);
         
