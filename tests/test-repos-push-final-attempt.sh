@@ -83,15 +83,32 @@ git clone --quiet "$REMOTE1" "$WORK1" >/dev/null 2>&1
     git commit -m "local-only commit" --quiet >/dev/null 2>&1
 )
 
-# Diverge #1: a remote-only commit exists before repos.sh runs (non-FF push).
-(
-    cd "$UPSTREAM1"
-    git pull --quiet >/dev/null 2>&1 || true
-    echo "remote-change" > docs/remote_only.txt
-    git add docs/remote_only.txt >/dev/null 2>&1
-    git commit -m "remote-only commit" --quiet >/dev/null 2>&1
-    git push --quiet origin HEAD:main >/dev/null 2>&1
-)
+# Diverge #1: a pre-push hook lands a remote-only commit at the moment of the
+# FIRST push, so that push is rejected non-fast-forward.
+#
+# GRQ#4237 changed the injection point: this used to be a plain commit pushed
+# before repos.sh ran, but the Step 1 pre-commit pull now rebases (--rebase
+# --autostash) and would integrate it before the first push, so the race this
+# test needs never happened. Racing the push itself reproduces the real fleet
+# behaviour — a peer landing a commit between our pull and our push — and the
+# assertions below are unchanged.
+cat > "${WORK1}/.git/hooks/pre-push" <<HOOK
+#!/bin/bash
+# GRQ#4237 test injector — land a peer commit once, at first-push time.
+if [ ! -f "${T1}/prepush.marker" ]; then
+    touch "${T1}/prepush.marker"
+    (
+        cd "$UPSTREAM1" || exit 0
+        git pull --quiet >/dev/null 2>&1 || true
+        echo "remote-change" > docs/remote_only.txt
+        git add docs/remote_only.txt >/dev/null 2>&1
+        git commit -m "remote-only commit" --quiet >/dev/null 2>&1
+        git push --quiet origin HEAD:main >/dev/null 2>&1
+    )
+fi
+exit 0
+HOOK
+chmod +x "${WORK1}/.git/hooks/pre-push"
 
 # Build the sleep shim: on its first invocation, land diverge #2 on the
 # remote, then behave as an instant no-op sleep.
