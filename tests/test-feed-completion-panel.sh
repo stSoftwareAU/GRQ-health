@@ -134,11 +134,87 @@ fi
 # interpolates a row field is only safe when that line routes it through
 # escapeHtml.
 if grep -A40 'const rowsHtml = rows.map' "$DASHBOARD" \
-    | grep -E '\$\{row\.(label|name|text|message|detail|log)\}' \
+    | grep -E '\$\{row\.(label|name|text|message|detail|log|host|user)\}' \
     | grep -qv 'escapeHtml'; then
     fail_test "a feed row field is interpolated without escapeHtml"
 else
     pass_test "feed row fields are escaped"
+fi
+# The time line carries host and user, so the renderer must route the whole
+# formatted line through escapeHtml (GRQ#4223).
+if grep -q 'escapeHtml(formatFeedRowWhen(row))' "$DASHBOARD"; then
+    pass_test "the feed row time line is escaped before it reaches the DOM"
+else
+    fail_test "the feed row time line is not routed through escapeHtml"
+fi
+echo ""
+
+echo "Test 3: the publishing user account is named on every feed row (GRQ#4223)..."
+OUTPUT=$(run_js_test '
+function t(name, ok, detail) {
+    console.log(`TEST_RESULT:${name}:${ok ? "PASS" : "FAIL"}:${detail}`);
+}
+
+// One host, several accounts — the case the panel exists to make legible.
+// sentiment-tickers has no `user` (a day file written before the field
+// existed) and sentiment-topics has an empty one; both must read as they did
+// before GRQ#4223.
+const day = { ny_date: "20260820", feeds: {
+    "shareprices": { status: "complete", ts: 100, host: "Mac-Ultra-M2", user: "alice" },
+    "commodities": { status: "no-change", ts: 101, host: "Mac-Ultra-M2", user: "bob" },
+    "insiders": { status: "failed", ts: 102, host: "Mac-Ultra-M2", user: "carol",
+                  exit_code: 3, message: "Push failed", log: "logs/Insiders/20260820-1.log" },
+    "sentiment-tickers": { status: "complete", ts: 103, host: "GRQ-11" },
+    "sentiment-topics": { status: "no-change", ts: 104, host: "GRQ-11", user: "" },
+}};
+const byName = Object.fromEntries(buildFeedRows(day, 5).map(r => [r.name, r]));
+
+// 1. The row builder carries the user of that entry through, for all three states.
+t("row-user-complete", byName["shareprices"].user === "alice", "complete row exposes the entry user");
+t("row-user-no-change", byName["commodities"].user === "bob", "no-change row exposes the entry user");
+t("row-user-failed", byName["insiders"].user === "carol", "failed row exposes the entry user");
+
+// 2. The rendered time line names host and user together.
+const completeText = formatFeedRowWhen(byName["shareprices"]);
+const noChangeText = formatFeedRowWhen(byName["commodities"]);
+const failedText = formatFeedRowWhen(byName["insiders"]);
+t("text-complete", completeText.includes("on Mac-Ultra-M2") && completeText.includes("(alice)"), `complete row reads ${completeText}`);
+t("text-no-change", noChangeText.includes("on Mac-Ultra-M2") && noChangeText.includes("(bob)"), `no-change row reads ${noChangeText}`);
+t("text-failed", failedText.includes("on Mac-Ultra-M2") && failedText.includes("(carol)"), `failed row reads ${failedText}`);
+
+// 3. Two accounts on one host are told apart — a wrong attribution (both rows
+//    showing the same user) is worse than none.
+t("text-per-row-user", completeText.includes("(alice)") && !completeText.includes("(bob)")
+    && noChangeText.includes("(bob)") && !noChangeText.includes("(alice)"),
+    "each row shows its own account, not a shared one");
+
+// 4. Day files without the field degrade gracefully: no "()", no "undefined".
+const legacyText = formatFeedRowWhen(byName["sentiment-tickers"]);
+const emptyUserText = formatFeedRowWhen(byName["sentiment-topics"]);
+t("text-no-user", legacyText.includes("on GRQ-11") && !legacyText.includes("(") && !legacyText.includes("undefined"),
+    `missing user renders unchanged: ${legacyText}`);
+t("text-empty-user", emptyUserText.includes("on GRQ-11") && !emptyUserText.includes("(") && !emptyUserText.includes("undefined"),
+    `empty user renders unchanged: ${emptyUserText}`);
+
+// 5. The failed row keeps its exit code, message and log link.
+t("failed-affordances", byName["insiders"].exitCode === 3 && byName["insiders"].message === "Push failed"
+    && buildLogViewerUrl(byName["insiders"].log).length > 0,
+    "failed row still carries exit code, message and log link");
+
+// 6. A hostile user value is escaped, never injected.
+const hostile = buildFeedRow({ name: "shareprices", label: "Share prices" },
+    { status: "complete", ts: 105, host: "GRQ-11", user: `<img src=x onerror="alert(1)">` }, 5);
+const hostileHtml = escapeHtml(formatFeedRowWhen(hostile));
+t("user-escaped", !hostileHtml.includes("<img") && hostileHtml.includes("&lt;img"), `hostile user escaped: ${hostileHtml}`);
+
+// 7. A row with no timestamp (never run) is unchanged — text only.
+t("missing-row-text", formatFeedRowWhen({ state: "missing", text: "not run — 5h into the NY day" }) === "not run — 5h into the NY day",
+    "a not-run row still renders its text alone");
+')
+if check_output "$OUTPUT"; then
+    pass_test "feed rows name the publishing user account per the GRQ#4223 contract"
+else
+    fail_test "feed row user attribution regressions (see TEST_RESULT lines above)"
 fi
 echo ""
 

@@ -8,7 +8,13 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
+# Prefer the per-user install, fall back to whatever is on PATH (CI containers
+# install deno system-wide). A missing deno must fail loud: an unrunnable
+# harness that returns no output would otherwise read as every test passing.
 DENO="$HOME/.deno/bin/deno"
+if [ ! -x "$DENO" ]; then
+    DENO="$(command -v deno || true)"
+fi
 
 # Extract pure functions from dashboard.js (everything from the THRESHOLDS
 # constant up to — but not including — the first DOM-aware helper).
@@ -33,6 +39,10 @@ extract_pure_functions() {
 run_js_test() {
     local test_code="$1"
     local functions
+    if [ -z "$DENO" ] || [ ! -x "$DENO" ]; then
+        echo "ERROR: deno not found (looked in \$HOME/.deno/bin and on PATH)" >&2
+        return 1
+    fi
     functions="$(extract_pure_functions)"
 
     echo "${functions}

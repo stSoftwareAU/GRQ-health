@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.27";
+const VERSION = "1.1.28";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -591,28 +591,46 @@ function buildFeedRow(feed, entry, hoursIntoDay) {
         return {
             name: feed.name, label: feed.label, state: 'complete',
             text: 'committed new data', ts: entry.ts, host: entry.host,
-            detail: entry.detail || '',
+            user: entry.user, detail: entry.detail || '',
         };
     }
     if (status === 'no-change') {
         return {
             name: feed.name, label: feed.label, state: 'no-change',
             text: 'no new data', ts: entry.ts, host: entry.host,
-            detail: entry.detail || '',
+            user: entry.user, detail: entry.detail || '',
         };
     }
     if (status === 'failed') {
         return {
             name: feed.name, label: feed.label, state: 'failed',
             text: 'failed', ts: entry.ts, host: entry.host,
-            exitCode: entry.exit_code, message: entry.message || '',
-            log: entry.log || '',
+            user: entry.user, exitCode: entry.exit_code,
+            message: entry.message || '', log: entry.log || '',
         };
     }
     const aged = Number.isFinite(hoursIntoDay) && hoursIntoDay >= 1
         ? `not run — ${Math.floor(hoursIntoDay)}h into the NY day`
         : 'not run';
     return { name: feed.name, label: feed.label, state: 'missing', text: aged };
+}
+
+// The row's time line: "<text> <time> on <host> (<user>)". Naming the
+// publishing account is what makes a failed row actionable — one host can run
+// several accounts (GRQ#4223). Day files written before the `user` field
+// existed are still inside the 30-day retention window, so a missing or empty
+// user renders exactly as it did before: "on <host>", never "()" or
+// "undefined". Returns plain text — the caller escapes it for the DOM.
+function formatFeedRowWhen(row) {
+    if (!row) {
+        return '';
+    }
+    if (!row.ts) {
+        return row.text || '';
+    }
+    const host = row.host ? ` on ${row.host}` : '';
+    const user = row.user ? ` (${row.user})` : '';
+    return `${row.text} ${formatTimestamp(row.ts)}${host}${user}`;
 }
 
 function buildFeedRows(dayDoc, hoursIntoDay) {
@@ -900,9 +918,7 @@ function renderFeedCompletion() {
                     ${linkHtml}
                 </div>`;
         }
-        const whenHtml = row.ts
-            ? `<div class="repo-time">${escapeHtml(`${row.text} ${formatTimestamp(row.ts)}${row.host ? ` on ${row.host}` : ''}`)}</div>`
-            : `<div class="repo-time">${escapeHtml(row.text)}</div>`;
+        const whenHtml = `<div class="repo-time">${escapeHtml(formatFeedRowWhen(row))}</div>`;
         return `
         <div class="repo-health-item ${rowClass[row.state] || 'repo-healthy'}">
             <div class="repo-meta">
