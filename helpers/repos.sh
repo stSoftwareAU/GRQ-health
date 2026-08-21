@@ -28,7 +28,9 @@ set -euo pipefail
 #     repos.sh status=<status> reason=<reason> name='<repo_name>'
 #   Statuses: skipped | updated | added | failed-recorded | failed | unknown
 #   Reasons : rate-limited | success | failure-recorded | push-failed |
-#             validation-failed | unknown
+#             validation-failed | git-state-unresolved | unknown
+#   git-state-unresolved (GRQ#4237): the pre-commit pull could not be resolved,
+#   so the check-in aborted rather than committing from an unknown state.
 #   Callers that suppress stdout (e.g. runWithTimeout(..., { quiet: true }))
 #   can capture stderr to distinguish pushed/skipped/failed outcomes
 #   without parsing localised user-facing messages.
@@ -468,8 +470,17 @@ set +e
 cd "${PROJECT_ROOT}"
 
 # Step 1: Pull latest changes first to handle concurrent updates from other machines
+#
+# GRQ#4237: pull with --rebase --autostash. docs/repos.json was rewritten a few
+# lines above, so this pull always runs against a DIRTY tree: a plain `git pull`
+# refuses with "Your local changes … would be overwritten by merge" and, once a
+# peer host has pushed, adds "Need to specify how to reconcile divergent
+# branches". Both landed on the "could not resolve git state" path below, which
+# used to commit and push from that unresolved state anyway.
 GIT_PULL_SUCCESS=false
-if git pull --quiet 2>/dev/null; then
+PULL_HEAD_BEFORE=$(git rev-parse HEAD 2>/dev/null || echo "")
+PULL_STDERR_FILE=$(mktemp 2>/dev/null || echo "/tmp/repos_pull_stderr.$$")
+if grq_run_git pull --rebase --autostash --quiet 2>"$PULL_STDERR_FILE"; then
     GIT_PULL_SUCCESS=true
 else
     # If pull fails, try to recover from merge conflicts
@@ -488,7 +499,7 @@ else
             git merge --abort 2>/dev/null
         fi
         # Try pull again
-        if git pull --quiet 2>/dev/null; then
+        if grq_run_git pull --rebase --autostash --quiet 2>"$PULL_STDERR_FILE"; then
             GIT_PULL_SUCCESS=true
         fi
     fi
@@ -497,16 +508,69 @@ else
     if [ "$GIT_PULL_SUCCESS" = false ]; then
         if [ -d "${PROJECT_ROOT}/.git/rebase-apply" ] || [ -d "${PROJECT_ROOT}/.git/rebase-merge" ]; then
             git rebase --abort 2>/dev/null
-            if git pull --quiet 2>/dev/null; then
+            if grq_run_git pull --rebase --autostash --quiet 2>"$PULL_STDERR_FILE"; then
                 GIT_PULL_SUCCESS=true
             fi
         fi
     fi
 
     if [ "$GIT_PULL_SUCCESS" = false ]; then
-        echo "Warning: Could not resolve git state, will attempt to update repos.json anyway"
+        # GRQ#4237: never carry on from a state we have not resolved.
+        #
+        # A CONFLICT is the routine concurrent-writer case on the shared
+        # docs/repos.json: clear the half-finished rebase/merge so the tree is
+        # consistent again and let the push loop's rebase → reset → re-apply
+        # recovery (Issue #139) publish the update or report update-dropped.
+        # Anything else — an unreachable remote, a corrupt clone — is a genuine
+        # fault: abort loudly rather than committing and pushing blind.
+        if [ -d "${PROJECT_ROOT}/.git/rebase-apply" ] || \
+           [ -d "${PROJECT_ROOT}/.git/rebase-merge" ] || \
+           [ -f "${PROJECT_ROOT}/.git/MERGE_HEAD" ] || \
+           [ -n "$(git diff --name-only --diff-filter=U 2>/dev/null)" ]; then
+            git rebase --abort 2>/dev/null
+            git merge --abort 2>/dev/null
+            rm -rf "${PROJECT_ROOT}/.git/rebase-apply" "${PROJECT_ROOT}/.git/rebase-merge" 2>/dev/null
+            echo "Warning: pre-commit pull conflicted on the shared health files; rebase aborted, resolving during push"
+        fi
+
+        # Re-check: a state we could not make consistent must stop the check-in.
+        if [ "$GIT_PULL_SUCCESS" = false ] && { \
+             [ -d "${PROJECT_ROOT}/.git/rebase-apply" ] || \
+             [ -d "${PROJECT_ROOT}/.git/rebase-merge" ] || \
+             [ -f "${PROJECT_ROOT}/.git/MERGE_HEAD" ] || \
+             [ -n "$(git diff --name-only --diff-filter=U 2>/dev/null)" ] || \
+             ! git rev-parse --verify --quiet HEAD >/dev/null 2>&1 || \
+             ! grq_run_git ls-remote --exit-code origin >/dev/null 2>&1; }; then
+            echo "ERROR: could not resolve git state in ${PROJECT_ROOT}; aborting the health check-in" >&2
+            if [ -s "$PULL_STDERR_FILE" ]; then
+                echo "Last git pull stderr:" >&2
+                sed 's/^/  /' "$PULL_STDERR_FILE" >&2
+            fi
+            echo "Branch status (git status --porcelain=v2 --branch):" >&2
+            git status --porcelain=v2 --branch 2>&1 | sed 's/^/  /' >&2 || true
+            rm -f "$PULL_STDERR_FILE" 2>/dev/null
+            # Leave the clone as we found it: the uncommitted repos.json edit
+            # (and any failure log written for it) is regenerated next run.
+            if grq_recover_to_remote 2>/dev/null; then
+                echo "Info: reset local clone to the remote and cleaned working tree"
+            else
+                echo "Warning: failed to reset local clone to the remote" >&2
+            fi
+            RUN_STATUS="failed"
+            RUN_REASON="git-state-unresolved"
+            cd - > /dev/null 2>&1 || true
+            set -euo pipefail
+            exit 1
+        fi
     fi
 fi
+
+PULL_HEAD_AFTER=$(git rev-parse HEAD 2>/dev/null || echo "")
+if [ "$GIT_PULL_SUCCESS" = true ] && [ -n "$PULL_HEAD_BEFORE" ] && \
+   [ "$PULL_HEAD_BEFORE" != "$PULL_HEAD_AFTER" ]; then
+    echo "Info: pre-commit pull rebased onto the remote (${PULL_HEAD_BEFORE:0:7} -> ${PULL_HEAD_AFTER:0:7})"
+fi
+rm -f "$PULL_STDERR_FILE" 2>/dev/null
 
 # Step 2: Stage all changed files (repos.json and any log files)
 FILES_TO_ADD=("${REPOS_JSON}")
