@@ -66,11 +66,14 @@ Environment:
 
 Output:
   No-op:    "OK no bumps -- actions already current"
-  Skipped:  "OK no bumps -- <N> action(s) skipped" then one indented
-            line per action naming the upstream error, plus a WARNING
-            on stderr for each.
+  Skipped:  "OK no bumps -- <N> action(s) skipped, upstream state
+            unknown" then one indented line per action naming the
+            upstream error, plus a WARNING on stderr for each.
+  No tool:  "OK no bumps -- required tool unavailable: <tool>"
   Bump:     "OK bumped: <N> action(s)" then one indented diff line per
-            action: "owner/repo: oldsha -> newsha (vX.Y.Z -> vA.B.C)"
+            action: "owner/repo: oldsha -> newsha (vX.Y.Z -> vA.B.C)".
+            A bump run that also skipped an action appends the same
+            indented skip list under "Skipped: <N> action(s) ...".
 
 Exit codes:
   0  No-op, successful bump (audit gate green), or a run where some
@@ -133,15 +136,15 @@ fi
 # A prerequisite missing from an unattended PATH is not a bad bump: no
 # file has been touched, so warn loudly and exit 0 rather than signalling
 # "revert me" to the worker (Issue #195).
-MISSING_TOOL=""
-if ! command -v "$GH_CMD" >/dev/null 2>&1; then
-    MISSING_TOOL="$GH_CMD"
-elif ! command -v "$JQ_CMD" >/dev/null 2>&1; then
-    MISSING_TOOL="$JQ_CMD"
-fi
-if [ -n "$MISSING_TOOL" ]; then
-    echo "WARNING: '$MISSING_TOOL' is not on PATH -- no dependency bump was attempted" >&2
-    echo "OK no bumps -- required tool unavailable: $MISSING_TOOL"
+MISSING_TOOLS=""
+for required_tool in "$GH_CMD" "$JQ_CMD"; do
+    if ! command -v "$required_tool" >/dev/null 2>&1; then
+        MISSING_TOOLS="${MISSING_TOOLS:+$MISSING_TOOLS, }$required_tool"
+    fi
+done
+if [ -n "$MISSING_TOOLS" ]; then
+    echo "WARNING: not on PATH: ${MISSING_TOOLS} -- no dependency bump was attempted" >&2
+    echo "OK no bumps -- required tool unavailable: $MISSING_TOOLS"
     exit 0
 fi
 
@@ -165,10 +168,16 @@ iso_to_epoch() {
 # inside command substitutions, so the cause is passed back through a
 # file rather than a variable the subshell would drop (Issue #195).
 LOOKUP_ERROR_FILE="$(mktemp)"
-trap 'rm -f "$LOOKUP_ERROR_FILE"' EXIT
+# Scratch file for the stderr of the current gh/jq call. Created once and
+# trapped, so an interrupt mid-retry cannot leave one behind per call.
+API_STDERR_FILE="$(mktemp)"
+trap 'rm -f "$LOOKUP_ERROR_FILE" "$API_STDERR_FILE"' EXIT
 
+# Record a cause. Folded onto a single line: the text is upstream output,
+# and stdout feeds the scheduled workflow's $GITHUB_OUTPUT heredoc.
 set_lookup_error() {
-    printf '%s' "$1" >"$LOOKUP_ERROR_FILE"
+    printf '%s' "$1" | tr '\n\r' '  ' | sed 's/[[:space:]]\{1,\}/ /g; s/[[:space:]]*$//' \
+        >"$LOOKUP_ERROR_FILE"
 }
 
 get_lookup_error() {
@@ -189,15 +198,18 @@ wrap_lookup_error() {
 # operators with no way to tell a rate limit from a 404.
 gh_api() {
     local path="$1"
-    local attempt=1 err_file body rc api_error
-    err_file="$(mktemp)"
+    local attempt=1 body rc api_error
     while :; do
         rc=0
-        body=$("$GH_CMD" api "$path" 2>"$err_file") || rc=$?
+        body=$("$GH_CMD" api "$path" 2>"$API_STDERR_FILE") || rc=$?
         if [ "$rc" -eq 0 ]; then
-            rm -f "$err_file"
             printf '%s' "$body"
             return 0
+        fi
+        # A 404 is a settled answer, not a blip — retrying it just burns
+        # API quota and wall-clock on every future run.
+        if grep -q 'HTTP 404' "$API_STDERR_FILE"; then
+            break
         fi
         if [ "$attempt" -ge "$API_ATTEMPTS" ]; then
             break
@@ -207,8 +219,7 @@ gh_api() {
             sleep "$RETRY_DELAY"
         fi
     done
-    api_error="$(tr '\n' ' ' <"$err_file" | sed 's/[[:space:]]*$//')"
-    rm -f "$err_file"
+    api_error="$(cat "$API_STDERR_FILE")"
     if [ -z "$api_error" ]; then
         api_error="gh exited ${rc} with no diagnostic output"
     fi
@@ -232,6 +243,23 @@ record_skip() {
     echo "WARNING: skipping ${key} -- ${reason}" >&2
 }
 
+# One indented "owner/repo: cause" line per skipped action.
+print_skips() {
+    local i
+    for ((i=0; i<${#SKIP_KEYS[@]}; i++)); do
+        echo "  ${SKIP_KEYS[$i]}: ${SKIP_REASONS[$i]}"
+    done
+}
+
+# Append the skip list to a run that did bump something, so a partial
+# outage is visible in the same summary as the applied bumps.
+report_skips_if_any() {
+    if [ "${#SKIP_KEYS[@]}" -gt 0 ]; then
+        echo "Skipped ${#SKIP_KEYS[@]} action(s), upstream state unknown:"
+        print_skips
+    fi
+}
+
 # Classify owner — "internal" for stSoftwareAU, "external" otherwise.
 classify_owner() {
     local owner="$1"
@@ -247,8 +275,8 @@ classify_owner() {
 # jq the same way a real response does.
 json_field() {
     local body="$1" filter="$2" value
-    if ! value=$(printf '%s' "$body" | "$JQ_CMD" -r "$filter" 2>/dev/null); then
-        set_lookup_error "unparseable response from the registry"
+    if ! value=$(printf '%s' "$body" | "$JQ_CMD" -r "$filter" 2>"$API_STDERR_FILE"); then
+        set_lookup_error "unparseable response from the registry: $(cat "$API_STDERR_FILE")"
         return 1
     fi
     printf '%s' "$value"
@@ -496,13 +524,6 @@ print_diff() {
 
 SKIP_COUNT=${#SKIP_KEYS[@]}
 
-print_skips() {
-    local i
-    for ((i=0; i<SKIP_COUNT; i++)); do
-        echo "  ${SKIP_KEYS[$i]}: ${SKIP_REASONS[$i]}"
-    done
-}
-
 if [ "$PLAN_COUNT" -eq 0 ]; then
     if [ "$SKIP_COUNT" -gt 0 ]; then
         # Loud, but not a failure: nothing was written, so the worker has
@@ -514,13 +535,6 @@ if [ "$PLAN_COUNT" -eq 0 ]; then
     echo "OK no bumps -- actions already current"
     exit 0
 fi
-
-report_skips_if_any() {
-    if [ "$SKIP_COUNT" -gt 0 ]; then
-        echo "Skipped ${SKIP_COUNT} action(s), upstream state unknown:"
-        print_skips
-    fi
-}
 
 if [ "$DRY_RUN" = true ]; then
     echo "OK bumped: ${PLAN_COUNT} action(s) [dry-run]"

@@ -854,10 +854,22 @@ would disable dependency bumps for the repo entirely (Issue #195).
 | Invalid flag or option value | Usage error on stderr | 1 |
 
 Transient registry errors (rate limit, 5xx, network blip) are retried
-`BUMP_DEPS_API_ATTEMPTS` times before the action is skipped. A skip is
-never silent: `gh`'s own diagnostic is reported verbatim on stderr and
-each skipped action is listed in the run summary, so an operator can
-tell a rate limit from a deleted repository.
+`BUMP_DEPS_API_ATTEMPTS` times before the action is skipped. An `HTTP
+404` is a settled answer rather than a blip, so it is reported on the
+first attempt without burning further API quota.
+
+A skip is never silent: `gh`'s (or `jq`'s) own diagnostic is reported
+verbatim on stderr and each skipped action is listed in the run summary,
+so an operator can tell a rate limit from a deleted repository. The
+scheduled workflow re-surfaces that summary as a `::warning::`
+annotation, so a green run that bumped nothing because the registry was
+unreachable is still distinguishable from one where everything was
+already current.
+
+The scheduled workflow passes its own `GITHUB_TOKEN` to the script.
+Without it `gh api` falls back to GitHub's shared per-IP limit on hosted
+runners, which is what starved every lookup and failed the job on three
+consecutive runs (Issue #195).
 
 ### Reviewer responsibilities
 

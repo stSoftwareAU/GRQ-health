@@ -61,15 +61,19 @@ write_workflow() {
 }
 
 # Run the script inside the sandbox with retries made instantaneous.
+# Extra environment assignments may be passed in the BUMP_TEST_ENV array,
+# so every scenario goes through this one invocation path.
 run_in_sandbox() {
     local sandbox="$1"; shift
     (
         cd "$sandbox"
-        PATH="$sandbox/bin:$PATH" \
-        BUMP_DEPS_RETRY_DELAY_SECONDS=0 \
-        "$BUMP_SCRIPT" "$@"
+        env PATH="$sandbox/bin:$PATH" \
+            BUMP_DEPS_RETRY_DELAY_SECONDS=0 \
+            ${BUMP_TEST_ENV[@]+"${BUMP_TEST_ENV[@]}"} \
+            "$BUMP_SCRIPT" "$@"
     )
 }
+BUMP_TEST_ENV=()
 
 # ------- Test 1: release lookup failure is a warned skip, not a failure --
 SANDBOX=$(make_sandbox)
@@ -233,10 +237,8 @@ GHEOF
 chmod +x "$SANDBOX/bin/gh"
 
 set +e
-OUT=$(cd "$SANDBOX" && PATH="$SANDBOX/bin:$PATH" \
-    BUMP_DEPS_RETRY_DELAY_SECONDS=0 \
-    BUMP_TEST_COUNTER="$SANDBOX/attempts" \
-    "$BUMP_SCRIPT" 2>&1)
+BUMP_TEST_ENV=("BUMP_TEST_COUNTER=$SANDBOX/attempts")
+OUT=$(run_in_sandbox "$SANDBOX" 2>&1)
 RC=$?
 set -e
 if [ "$RC" -eq 0 ] && grep -q "actions/checkout@$NEW_SHA" "$SANDBOX/.github/workflows/test.yml"; then
@@ -245,6 +247,24 @@ else
     fail_test "Retry: rc=$RC, expected the retried lookup to succeed"
     echo "$OUT" | sed 's/^/    /'
 fi
+# BUMP_DEPS_API_ATTEMPTS=1 must make exactly one call and skip without
+# retrying, so the same stub leaves the pin alone.
+rm -f "$SANDBOX/attempts"
+write_workflow "$SANDBOX" "actions/checkout@$OLD_SHA # v4.0.0"
+set +e
+BUMP_TEST_ENV=("BUMP_TEST_COUNTER=$SANDBOX/attempts" "BUMP_DEPS_API_ATTEMPTS=1")
+OUT=$(run_in_sandbox "$SANDBOX" 2>&1)
+RC=$?
+set -e
+ATTEMPTS=$(cat "$SANDBOX/attempts" 2>/dev/null || echo 0)
+if [ "$RC" -eq 0 ] && [ "$ATTEMPTS" -eq 1 ] \
+   && grep -q "actions/checkout@$OLD_SHA" "$SANDBOX/.github/workflows/test.yml"; then
+    pass_test "Retry: BUMP_DEPS_API_ATTEMPTS=1 makes exactly one call and skips"
+else
+    fail_test "Retry: attempts=$ATTEMPTS rc=$RC, expected a single un-retried call"
+    echo "$OUT" | sed 's/^/    /'
+fi
+BUMP_TEST_ENV=()
 rm -rf "$SANDBOX"
 
 # ------- Test 6: a missing prerequisite tool is a warned no-op ------------
@@ -282,7 +302,103 @@ GHEOF
     rm -rf "$SANDBOX"
 done
 
-# ------- Test 7: usage errors still exit 1 -------------------------------
+# ------- Test 7: a non-JSON body is a warned skip naming jq's error ------
+SANDBOX=$(make_sandbox)
+trap 'rm -rf "$SANDBOX"' EXIT
+write_workflow "$SANDBOX" "actions/checkout@$OLD_SHA # v4.0.0"
+cat >"$SANDBOX/bin/gh" <<'GHEOF'
+#!/bin/bash
+# A rate-limit interstitial reaches jq the same way a real response does.
+echo '<html><body>Rate limited</body></html>'
+GHEOF
+chmod +x "$SANDBOX/bin/gh"
+
+set +e
+OUT=$(run_in_sandbox "$SANDBOX" 2>&1)
+RC=$?
+set -e
+if [ "$RC" -eq 0 ] \
+   && echo "$OUT" | grep -qi 'unparseable response' \
+   && echo "$OUT" | grep -qi 'jq' \
+   && grep -q "$OLD_SHA" "$SANDBOX/.github/workflows/test.yml"; then
+    pass_test "Non-JSON body: exits 0 and reports jq's own diagnostic"
+else
+    fail_test "Non-JSON body: rc=$RC, expected a warned skip naming jq's error"
+    echo "$OUT" | sed 's/^/    /'
+fi
+rm -rf "$SANDBOX"
+
+# ------- Test 8: a 404 is settled, so it is not retried -------------------
+SANDBOX=$(make_sandbox)
+trap 'rm -rf "$SANDBOX"' EXIT
+write_workflow "$SANDBOX" "actions/checkout@$OLD_SHA # v4.0.0"
+cat >"$SANDBOX/bin/gh" <<'GHEOF'
+#!/bin/bash
+set -uo pipefail
+counter="${BUMP_TEST_COUNTER:?counter path required}"
+attempts=$(cat "$counter" 2>/dev/null || echo 0)
+echo "$((attempts + 1))" >"$counter"
+echo "gh: Not Found (HTTP 404)" >&2
+exit 1
+GHEOF
+chmod +x "$SANDBOX/bin/gh"
+
+set +e
+BUMP_TEST_ENV=("BUMP_TEST_COUNTER=$SANDBOX/attempts")
+OUT=$(run_in_sandbox "$SANDBOX" 2>&1)
+RC=$?
+set -e
+BUMP_TEST_ENV=()
+ATTEMPTS=$(cat "$SANDBOX/attempts" 2>/dev/null || echo 0)
+if [ "$RC" -eq 0 ] && [ "$ATTEMPTS" -eq 1 ] && echo "$OUT" | grep -q '404'; then
+    pass_test "Permanent 404: called once, not retried, reported"
+else
+    fail_test "Permanent 404: attempts=$ATTEMPTS rc=$RC, expected a single call"
+    echo "$OUT" | sed 's/^/    /'
+fi
+rm -rf "$SANDBOX"
+
+# ------- Test 9: both missing tools are named in one run -----------------
+SANDBOX=$(make_sandbox)
+trap 'rm -rf "$SANDBOX"' EXIT
+write_workflow "$SANDBOX" "actions/checkout@$OLD_SHA # v4.0.0"
+
+set +e
+BUMP_TEST_ENV=("BUMP_DEPS_GH=no-such-gh-binary" "BUMP_DEPS_JQ=no-such-jq-binary")
+OUT=$(run_in_sandbox "$SANDBOX" 2>&1)
+RC=$?
+set -e
+BUMP_TEST_ENV=()
+if [ "$RC" -eq 0 ] \
+   && echo "$OUT" | grep -q 'no-such-gh-binary' \
+   && echo "$OUT" | grep -q 'no-such-jq-binary'; then
+    pass_test "Both tools missing: a single run names both"
+else
+    fail_test "Both tools missing: rc=$RC, expected both names in one run"
+    echo "$OUT" | sed 's/^/    /'
+fi
+rm -rf "$SANDBOX"
+
+# ------- Test 10: invalid retry settings are a usage error ---------------
+for bad in "BUMP_DEPS_API_ATTEMPTS=abc" "BUMP_DEPS_API_ATTEMPTS=0" \
+           "BUMP_DEPS_RETRY_DELAY_SECONDS=-1"; do
+    # Run from an empty directory: the setting is validated before any
+    # workflow scan, so no fixtures are needed.
+    EMPTY_DIR=$(mktemp -d)
+    set +e
+    OUT=$(cd "$EMPTY_DIR" && env "$bad" "$BUMP_SCRIPT" 2>&1)
+    RC=$?
+    set -e
+    rm -rf "$EMPTY_DIR"
+    if [ "$RC" -eq 1 ] && echo "$OUT" | grep -qi 'ERROR'; then
+        pass_test "Invalid setting '$bad' is rejected with exit 1"
+    else
+        fail_test "Invalid setting '$bad': rc=$RC, expected exit 1"
+        echo "$OUT" | sed 's/^/    /'
+    fi
+done
+
+# ------- Test 11: usage errors still exit 1 -------------------------------
 set +e
 OUT=$("$BUMP_SCRIPT" --no-such-flag 2>&1)
 RC=$?
