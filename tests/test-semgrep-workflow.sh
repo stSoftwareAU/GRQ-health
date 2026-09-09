@@ -1,8 +1,9 @@
 #!/bin/bash
-# Test for Issue #90: Semgrep SAST Scanning workflow
+# Test for Issue #90: Semgrep SAST Scanning workflow, extended by Issue #190.
 # Verifies that .github/workflows/semgrep.yml exists, is valid YAML,
 # and is wired up correctly (PR trigger, read-only permissions, container,
-# semgrep ci step, SHA-pinned actions).
+# semgrep ci step, SHA-pinned actions) — and that SEMGREP_APP_TOKEN is scoped
+# away from every job a pull request can reach (issue #190).
 
 set -euo pipefail
 
@@ -115,24 +116,110 @@ else
     fail_test "No step runs 'semgrep ci' with a --config ruleset"
 fi
 
-# Test 9: SEMGREP_APP_TOKEN env wired through to the semgrep step
-HAS_TOKEN_ENV=$(run_yaml "
-steps=((wf.get('jobs') or {}).get('semgrep') or {}).get('steps') or []
-ok=False
-for s in steps:
-    env=s.get('env') or {}
-    if 'SEMGREP_APP_TOKEN' in env:
-        ok=True
-        break
-print('yes' if ok else 'no')
+# --- Issue #190: token scoping -------------------------------------------
+# Test 9 previously asserted the opposite of what follows: it required the
+# `semgrep ci` step of the PR-gate job to expose SEMGREP_APP_TOKEN. Issue #190
+# reversed that requirement — a job triggered by `pull_request` checks out and
+# scans PR-controlled code, so any secret in its environment is readable by
+# whatever that code causes the job to execute. The assertions below therefore
+# replace the old test 9: the token must be absent from every job a pull
+# request can reach, and present only on a trusted, non-PR path.
+
+# Shared model: which jobs can a `pull_request` event actually run? A job is
+# PR-reachable when the workflow triggers on pull_request and the job's `if`
+# does not exclude the event. An `if` expression this matcher cannot model is
+# treated as reachable, so an unmodelled guard fails loudly rather than
+# silently exempting a job from the token check.
+PR_MODEL='
+import re
+
+def if_allows_pr(expr):
+    if expr is None:
+        return True
+    e = str(expr).strip()
+    m = re.fullmatch(r"\$\{\{(.*)\}\}", e, re.S)
+    if m:
+        e = m.group(1).strip()
+    e = e.replace("github.event_name", "\x27pull_request\x27")
+    e = e.replace("&&", " and ").replace("||", " or ")
+    e = re.sub(r"(?<![=!<>])!(?![=])", " not ", e)
+    if not re.fullmatch(r"[\sA-Za-z0-9_\x27\"()=!.]*", e):
+        return True
+    try:
+        return bool(eval(e, {"__builtins__": {}}, {}))
+    except Exception:
+        return True
+
+def jobs_reachable_by_pr():
+    if not (isinstance(on, dict) and "pull_request" in on):
+        return []
+    return [(jid, job) for jid, job in (wf.get("jobs") or {}).items()
+            if if_allows_pr((job or {}).get("if"))]
+
+def mentions_token(node):
+    return "SEMGREP_APP_TOKEN" in yaml.safe_dump(node, default_flow_style=False)
+'
+
+# Test 9: no job a pull request can reach exposes SEMGREP_APP_TOKEN, at any
+# level (workflow env, job env, container env, step env, or the command line).
+PR_TOKEN_JOBS=$(run_yaml "$PR_MODEL
+leaky = []
+if mentions_token(wf.get('env') or {}):
+    leaky.append('<workflow-level env>')
+leaky += [jid for jid, job in jobs_reachable_by_pr() if mentions_token(job or {})]
+print(','.join(leaky))
 ")
-if [ "$HAS_TOKEN_ENV" = "yes" ]; then
-    pass_test "semgrep step exposes SEMGREP_APP_TOKEN env"
+if [ -z "$PR_TOKEN_JOBS" ]; then
+    pass_test "No pull_request-reachable job exposes SEMGREP_APP_TOKEN"
 else
-    fail_test "No step exposes SEMGREP_APP_TOKEN env"
+    fail_test "SEMGREP_APP_TOKEN is exposed to PR-controlled code in: $PR_TOKEN_JOBS"
 fi
 
-# Test 10: every `uses:` reference is pinned to a 40-char commit SHA, not a tag
+# Test 10: the PR gate still scans — dropping the token must not have dropped
+# the scan with it.
+PR_SCAN_JOBS=$(run_yaml "$PR_MODEL
+ok = []
+for jid, job in jobs_reachable_by_pr():
+    for s in ((job or {}).get('steps') or []):
+        run = ' '.join(str(s.get('run', '')).split())
+        if 'semgrep ci' in run and '--config' in run:
+            ok.append(jid)
+            break
+print(','.join(ok))
+")
+if [ -n "$PR_SCAN_JOBS" ]; then
+    pass_test "A pull_request-reachable job still runs 'semgrep ci --config' ($PR_SCAN_JOBS)"
+else
+    fail_test "No pull_request-reachable job runs 'semgrep ci --config' — the PR gate scans nothing"
+fi
+
+# Test 11: the authenticated upload survives, on a trusted path only. The job
+# carrying the token must exist and must not be reachable from pull_request.
+UPLOAD_JOBS=$(run_yaml "$PR_MODEL
+pr_reachable = {jid for jid, _ in jobs_reachable_by_pr()}
+print(','.join(jid for jid, job in (wf.get('jobs') or {}).items()
+                if mentions_token(job or {}) and jid not in pr_reachable))
+")
+if [ -n "$UPLOAD_JOBS" ]; then
+    pass_test "SEMGREP_APP_TOKEN is scoped to trusted, non-PR job(s): $UPLOAD_JOBS"
+else
+    fail_test "No non-PR job carries SEMGREP_APP_TOKEN — the authenticated upload is gone"
+fi
+
+# Test 12: a trigger exists that can actually run the trusted upload job
+# (push, schedule or workflow_dispatch) — a gated job with no trigger to fire
+# it never runs.
+HAS_TRUSTED_TRIGGER=$(run_yaml "
+triggers = set(on.keys()) if isinstance(on, dict) else ({on} if isinstance(on, str) else set())
+print('yes' if triggers & {'push', 'schedule', 'workflow_dispatch', 'workflow_run'} else 'no')
+")
+if [ "$HAS_TRUSTED_TRIGGER" = "yes" ]; then
+    pass_test "Workflow declares a trusted (non-pull_request) trigger for the upload job"
+else
+    fail_test "Workflow has no push/schedule/workflow_dispatch trigger to run the upload job"
+fi
+
+# Test 13: every `uses:` reference is pinned to a 40-char commit SHA, not a tag
 UNPINNED=$(grep -E '^\s*-?\s*uses:\s*' "$WORKFLOW_FILE" | grep -vE '@[0-9a-f]{40}(\s|$)' || true)
 if [ -z "$UNPINNED" ]; then
     pass_test "All uses: references are pinned to 40-char commit SHAs"
