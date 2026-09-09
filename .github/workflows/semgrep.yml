@@ -38,7 +38,11 @@ jobs:
     # GitHub's 360-minute default (issue #188).
     timeout-minutes: 15
     container:
-      image: semgrep/semgrep
+      # Pinned to a release tag plus its immutable digest (issue #191). A bare
+      # `semgrep/semgrep` resolves to the mutable `:latest`, so the code running
+      # inside the scan could change with no commit here; the digest fixes the
+      # content, and the tag alongside it keeps version-bump tooling working.
+      image: semgrep/semgrep:1.176.1@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823
     steps:
       # actions/checkout v4 — pinned to commit SHA per supply-chain policy
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,7 +57,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: semgrep/semgrep
+      # Same pinned image as the PR gate above (issue #191).
+      image: semgrep/semgrep:1.176.1@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823
     steps:
       # actions/checkout v4 — pinned to commit SHA per supply-chain policy
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
