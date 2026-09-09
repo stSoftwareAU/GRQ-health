@@ -5,6 +5,14 @@ on:
   # `branches: ["*"]` skipped nested targets such as milestone/<slug>, because
   # the `*` glob matches zero or more characters excluding `/` (issue #192).
   pull_request:
+  # Trusted post-merge path for the authenticated upload (issue #190).
+  # Scheduled and dispatched runs check out the default branch, never a PR
+  # head, so SEMGREP_APP_TOKEN is only ever exposed to merged code. A daily
+  # scan rather than one per push: the health monitor pushes docs/** to
+  # Develop every few minutes, and each push would queue another full scan.
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
 
 # Cancel a superseded run when a new commit is pushed to the same PR
 # branch (issue #187). Keying the group on github.ref keeps each branch in
@@ -17,11 +25,32 @@ permissions:
   contents: read
 
 jobs:
+  # PR gate. This job checks out and scans PR-controlled code, so no secret is
+  # present in its environment: whatever that code causes semgrep (or its
+  # rules, or a dependency) to execute has nothing to exfiltrate (issue #190).
+  # Findings are reported in the job log and block the PR; they are not
+  # uploaded to the Semgrep dashboard.
   semgrep:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     # Semgrep runs in its own container and pulls the p/default ruleset, so it
     # gets slightly more headroom than the other scans — still far below
     # GitHub's 360-minute default (issue #188).
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep
+    steps:
+      # actions/checkout v4 — pinned to commit SHA per supply-chain policy
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: semgrep ci --config p/default
+
+  # Authenticated upload, on trusted content only. The `if` guard is defence in
+  # depth on top of the trigger list: even if a pull_request path were added
+  # later, this job — the only one holding SEMGREP_APP_TOKEN — will not run for
+  # it (issue #190).
+  semgrep-upload:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
       image: semgrep/semgrep
