@@ -11,6 +11,14 @@
 # the audit gate; any failure prints the offending bump diff and exits
 # non-zero so the worker can revert per VibeCoding#1613.
 #
+# Exit status is a verdict on *this repo*, not on the upstream registry
+# (Issue #195). A non-zero exit means "a bump was written and it is bad --
+# revert it", so an unreachable registry or a missing prerequisite tool
+# must NOT exit non-zero: nothing was written, so there is nothing to
+# revert, and three such exits in a row disable bumps for the repo. Those
+# conditions are reported loudly on stderr, the affected action is skipped
+# with its pin left untouched, and the run exits 0.
+#
 # Cross-platform: must run on macOS bash 3.2 — empty-array expansions are
 # guarded with ${arr[@]+"${arr[@]}"}, no GNU-only flags are used.
 
@@ -23,6 +31,11 @@ DRY_RUN=false
 WORKFLOW_DIR=".github/workflows"
 QUALITY_CMD="./quality.sh"
 GH_CMD="${BUMP_DEPS_GH:-gh}"
+JQ_CMD="${BUMP_DEPS_JQ:-jq}"
+# Transient registry errors (rate limit, 5xx, network blip) are retried
+# before an action is skipped for the run.
+API_ATTEMPTS="${BUMP_DEPS_API_ATTEMPTS:-3}"
+RETRY_DELAY="${BUMP_DEPS_RETRY_DELAY_SECONDS:-2}"
 
 show_help() {
     cat <<'HELP'
@@ -45,18 +58,26 @@ Options:
   --help, -h                Show this help and exit.
 
 Environment:
-  VIBE_BUMP_QUARANTINE_HOURS  Default quarantine window in hours (24).
-  BUMP_DEPS_GH                Override the gh binary used (test hook).
+  VIBE_BUMP_QUARANTINE_HOURS   Default quarantine window in hours (24).
+  BUMP_DEPS_GH                 Override the gh binary used (test hook).
+  BUMP_DEPS_JQ                 Override the jq binary used (test hook).
+  BUMP_DEPS_API_ATTEMPTS       Registry attempts per lookup (3).
+  BUMP_DEPS_RETRY_DELAY_SECONDS  Delay between attempts (2).
 
 Output:
   No-op:    "OK no bumps -- actions already current"
+  Skipped:  "OK no bumps -- <N> action(s) skipped" then one indented
+            line per action naming the upstream error, plus a WARNING
+            on stderr for each.
   Bump:     "OK bumped: <N> action(s)" then one indented diff line per
             action: "owner/repo: oldsha -> newsha (vX.Y.Z -> vA.B.C)"
 
 Exit codes:
-  0  No-op or successful bump (audit gate green).
-  1  Bump rejected by audit gate, invalid flag, or upstream lookup
-     failure. The worker should revert per VibeCoding#1613.
+  0  No-op, successful bump (audit gate green), or a run where some
+     actions were skipped because the registry or a prerequisite tool
+     was unavailable. Nothing was written for a skipped action.
+  1  A written bump was rejected by the audit gate, or an invalid flag
+     was supplied. The worker should revert per VibeCoding#1613.
 HELP
 }
 
@@ -95,14 +116,33 @@ if ! [[ "$QUARANTINE_HOURS" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-if ! command -v "$GH_CMD" >/dev/null 2>&1; then
-    echo "ERROR: '$GH_CMD' is required on PATH" >&2
+require_non_negative_integer() {
+    local name="$1" value="$2"
+    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: $name must be a non-negative integer, got '$value'" >&2
+        exit 1
+    fi
+}
+require_non_negative_integer BUMP_DEPS_API_ATTEMPTS "$API_ATTEMPTS"
+require_non_negative_integer BUMP_DEPS_RETRY_DELAY_SECONDS "$RETRY_DELAY"
+if [ "$API_ATTEMPTS" -lt 1 ]; then
+    echo "ERROR: BUMP_DEPS_API_ATTEMPTS must be at least 1, got '$API_ATTEMPTS'" >&2
     exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-    echo "ERROR: 'jq' is required on PATH" >&2
-    exit 1
+# A prerequisite missing from an unattended PATH is not a bad bump: no
+# file has been touched, so warn loudly and exit 0 rather than signalling
+# "revert me" to the worker (Issue #195).
+MISSING_TOOL=""
+if ! command -v "$GH_CMD" >/dev/null 2>&1; then
+    MISSING_TOOL="$GH_CMD"
+elif ! command -v "$JQ_CMD" >/dev/null 2>&1; then
+    MISSING_TOOL="$JQ_CMD"
+fi
+if [ -n "$MISSING_TOOL" ]; then
+    echo "WARNING: '$MISSING_TOOL' is not on PATH -- no dependency bump was attempted" >&2
+    echo "OK no bumps -- required tool unavailable: $MISSING_TOOL"
+    exit 0
 fi
 
 # Convert ISO-8601 (YYYY-MM-DDTHH:MM:SSZ) to epoch seconds. Tries GNU
@@ -121,6 +161,77 @@ iso_to_epoch() {
     return 1
 }
 
+# Last error text from the lookup helpers. Those helpers are invoked
+# inside command substitutions, so the cause is passed back through a
+# file rather than a variable the subshell would drop (Issue #195).
+LOOKUP_ERROR_FILE="$(mktemp)"
+trap 'rm -f "$LOOKUP_ERROR_FILE"' EXIT
+
+set_lookup_error() {
+    printf '%s' "$1" >"$LOOKUP_ERROR_FILE"
+}
+
+get_lookup_error() {
+    cat "$LOOKUP_ERROR_FILE"
+}
+
+# Prefix the recorded cause with the caller's context, e.g.
+# "failed to query the latest release (HTTP 403: rate limit exceeded)".
+wrap_lookup_error() {
+    local prefix="$1" cause
+    cause="$(get_lookup_error)"
+    set_lookup_error "${prefix} (${cause})"
+}
+
+# Call `gh api <path>`, retrying transient registry failures. Echoes the
+# response body on success. On failure returns 1 and records gh's own
+# diagnostic — the previous code sent it to /dev/null, which left
+# operators with no way to tell a rate limit from a 404.
+gh_api() {
+    local path="$1"
+    local attempt=1 err_file body rc api_error
+    err_file="$(mktemp)"
+    while :; do
+        rc=0
+        body=$("$GH_CMD" api "$path" 2>"$err_file") || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            rm -f "$err_file"
+            printf '%s' "$body"
+            return 0
+        fi
+        if [ "$attempt" -ge "$API_ATTEMPTS" ]; then
+            break
+        fi
+        attempt=$((attempt + 1))
+        if [ "$RETRY_DELAY" -gt 0 ]; then
+            sleep "$RETRY_DELAY"
+        fi
+    done
+    api_error="$(tr '\n' ' ' <"$err_file" | sed 's/[[:space:]]*$//')"
+    rm -f "$err_file"
+    if [ -z "$api_error" ]; then
+        api_error="gh exited ${rc} with no diagnostic output"
+    fi
+    set_lookup_error "after ${attempt} attempt(s): ${api_error}"
+    return 1
+}
+
+# Actions whose upstream state could not be established this run. Their
+# pins are left exactly as they are and reported, never silently dropped.
+SKIP_KEYS=()
+SKIP_REASONS=()
+record_skip() {
+    local key="$1" reason="$2" i
+    for ((i=0; i<${#SKIP_KEYS[@]}; i++)); do
+        if [ "${SKIP_KEYS[$i]}" = "$key" ]; then
+            return 0
+        fi
+    done
+    SKIP_KEYS+=("$key")
+    SKIP_REASONS+=("$reason")
+    echo "WARNING: skipping ${key} -- ${reason}" >&2
+}
+
 # Classify owner — "internal" for stSoftwareAU, "external" otherwise.
 classify_owner() {
     local owner="$1"
@@ -131,57 +242,121 @@ classify_owner() {
     fi
 }
 
+# Read one field out of a JSON body. Returns non-zero (and sets
+# LOOKUP_ERROR) when the body is not parseable — a rate-limit HTML page
+# reaches jq the same way a real response does.
+json_field() {
+    local body="$1" filter="$2" value
+    if ! value=$(printf '%s' "$body" | "$JQ_CMD" -r "$filter" 2>/dev/null); then
+        set_lookup_error "unparseable response from the registry"
+        return 1
+    fi
+    printf '%s' "$value"
+}
+
 # Resolve a tag to a 40-char commit SHA via gh. Echoes the SHA on
-# success, returns non-zero on failure.
+# success; on failure returns non-zero with the cause in LOOKUP_ERROR.
 resolve_tag_to_sha() {
     local owner="$1" repo="$2" tag="$3"
     local response sha obj_type obj_sha
-    if ! response=$("$GH_CMD" api "repos/${owner}/${repo}/git/refs/tags/${tag}" 2>/dev/null); then
-        echo "ERROR: failed to resolve tag '${tag}' for ${owner}/${repo}" >&2
+    if ! response=$(gh_api "repos/${owner}/${repo}/git/refs/tags/${tag}"); then
+        wrap_lookup_error "failed to resolve tag '${tag}'"
         return 1
     fi
-    obj_type=$(echo "$response" | jq -r '.object.type // ""')
-    obj_sha=$(echo "$response" | jq -r '.object.sha // ""')
+    obj_type=$(json_field "$response" '.object.type // ""') || return 1
+    obj_sha=$(json_field "$response" '.object.sha // ""') || return 1
     if [ -z "$obj_sha" ]; then
-        echo "ERROR: empty SHA in ref response for ${owner}/${repo}@${tag}" >&2
+        set_lookup_error "empty SHA in the ref response for tag '${tag}'"
         return 1
     fi
     # Annotated tag — dereference to the underlying commit.
     if [ "$obj_type" = "tag" ]; then
-        if ! response=$("$GH_CMD" api "repos/${owner}/${repo}/git/tags/${obj_sha}" 2>/dev/null); then
-            echo "ERROR: failed to dereference annotated tag for ${owner}/${repo}@${tag}" >&2
+        if ! response=$(gh_api "repos/${owner}/${repo}/git/tags/${obj_sha}"); then
+            wrap_lookup_error "failed to dereference annotated tag '${tag}'"
             return 1
         fi
-        sha=$(echo "$response" | jq -r '.object.sha // ""')
+        sha=$(json_field "$response" '.object.sha // ""') || return 1
     else
         sha="$obj_sha"
     fi
     if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-        echo "ERROR: invalid SHA '$sha' for ${owner}/${repo}@${tag}" >&2
+        set_lookup_error "invalid SHA '${sha}' for tag '${tag}'"
         return 1
     fi
     echo "$sha"
 }
 
 # Look up the latest release for a repo. Echoes "tag\tpublished_at" on
-# success. Returns non-zero on lookup failure.
+# success. On failure returns non-zero with the cause in LOOKUP_ERROR.
 lookup_latest_release() {
     local owner="$1" repo="$2"
     local response tag published_at
-    if ! response=$("$GH_CMD" api "repos/${owner}/${repo}/releases/latest" 2>/dev/null); then
-        echo "ERROR: failed to query latest release for ${owner}/${repo}" >&2
+    if ! response=$(gh_api "repos/${owner}/${repo}/releases/latest"); then
+        wrap_lookup_error "failed to query the latest release"
         return 1
     fi
-    tag=$(echo "$response" | jq -r '.tag_name // ""')
-    published_at=$(echo "$response" | jq -r '.published_at // ""')
+    tag=$(json_field "$response" '.tag_name // ""') || return 1
+    published_at=$(json_field "$response" '.published_at // ""') || return 1
     if [ -z "$tag" ] || [ -z "$published_at" ]; then
-        echo "ERROR: latest release for ${owner}/${repo} missing tag/published_at" >&2
+        set_lookup_error "latest release response missing tag_name/published_at"
         return 1
     fi
     # Normalise: keep tag with leading "v" intact for SHA resolution, but
     # also emit a bare "X.Y.Z" version so callers can format diffs without
     # producing "vv" by accident.
     printf '%s\t%s\n' "$tag" "$published_at"
+}
+
+# Establish the bump target for one action. Sets RESOLVED_STATE to one of:
+#   yes   — RESOLVED_SHA/RESOLVED_VER hold the target to bump to
+#   no    — the latest release is still inside the quarantine window
+#   skip  — upstream state is unknown; RESOLVED_REASON says why
+# Always returns 0: an unreachable registry is reported, not fatal.
+RESOLVED_SHA=""
+RESOLVED_VER=""
+RESOLVED_STATE=""
+RESOLVED_REASON=""
+resolve_action() {
+    local owner="$1" repo="$2"
+    local classification release_info target_tag published_at pub_epoch
+    RESOLVED_SHA=""
+    RESOLVED_VER=""
+    RESOLVED_STATE=""
+    RESOLVED_REASON=""
+    set_lookup_error ""
+    classification=$(classify_owner "$owner")
+
+    if ! release_info=$(lookup_latest_release "$owner" "$repo"); then
+        RESOLVED_STATE="skip"
+        RESOLVED_REASON="$(get_lookup_error)"
+        return 0
+    fi
+    target_tag=$(echo "$release_info" | cut -f1)
+    published_at=$(echo "$release_info" | cut -f2)
+    # Strip a single leading "v" so downstream formatting can always
+    # re-prepend it without producing "vv".
+    RESOLVED_VER="${target_tag#v}"
+
+    # Quarantine check (external only).
+    if [ "$classification" = "external" ]; then
+        if ! pub_epoch=$(iso_to_epoch "$published_at"); then
+            RESOLVED_STATE="skip"
+            RESOLVED_REASON="cannot parse published_at '${published_at}'"
+            return 0
+        fi
+        if [ "$pub_epoch" -gt "$CUTOFF_EPOCH" ]; then
+            RESOLVED_STATE="no"
+            return 0
+        fi
+    fi
+
+    if ! RESOLVED_SHA=$(resolve_tag_to_sha "$owner" "$repo" "$target_tag"); then
+        RESOLVED_SHA=""
+        RESOLVED_STATE="skip"
+        RESOLVED_REASON="$(get_lookup_error)"
+        return 0
+    fi
+    RESOLVED_STATE="yes"
 }
 
 # Plan storage: parallel arrays indexed by plan-entry. bash 3.2 has no
@@ -263,36 +438,12 @@ for wf in ${WORKFLOW_FILES[@]+"${WORKFLOW_FILES[@]}"}; do
             target_ver="${CACHE_TARGET_VER[$cache_idx]}"
             eligible="${CACHE_ELIGIBLE[$cache_idx]}"
         else
-            classification=$(classify_owner "$owner")
-
-            if ! release_info=$(lookup_latest_release "$owner" "$repo"); then
-                exit 1
-            fi
-            target_tag=$(echo "$release_info" | cut -f1)
-            published_at=$(echo "$release_info" | cut -f2)
-            # Strip a single leading "v" so downstream formatting can
-            # always re-prepend it without producing "vv".
-            target_ver="${target_tag#v}"
-
-            # Quarantine check (external only).
-            eligible="yes"
-            if [ "$classification" = "external" ]; then
-                if pub_epoch=$(iso_to_epoch "$published_at"); then
-                    if [ "$pub_epoch" -gt "$CUTOFF_EPOCH" ]; then
-                        eligible="no"
-                    fi
-                else
-                    echo "ERROR: cannot parse published_at '$published_at' for ${owner}/${repo}" >&2
-                    exit 1
-                fi
-            fi
-
-            if [ "$eligible" = "yes" ]; then
-                if ! target_sha=$(resolve_tag_to_sha "$owner" "$repo" "$target_tag"); then
-                    exit 1
-                fi
-            else
-                target_sha=""
+            resolve_action "$owner" "$repo"
+            target_sha="$RESOLVED_SHA"
+            target_ver="$RESOLVED_VER"
+            eligible="$RESOLVED_STATE"
+            if [ "$eligible" = "skip" ]; then
+                record_skip "$cache_key" "$RESOLVED_REASON"
             fi
 
             CACHE_KEYS+=("$cache_key")
@@ -341,14 +492,38 @@ print_diff() {
     done
 }
 
+SKIP_COUNT=${#SKIP_KEYS[@]}
+
+print_skips() {
+    local i
+    for ((i=0; i<SKIP_COUNT; i++)); do
+        echo "  ${SKIP_KEYS[$i]}: ${SKIP_REASONS[$i]}"
+    done
+}
+
 if [ "$PLAN_COUNT" -eq 0 ]; then
+    if [ "$SKIP_COUNT" -gt 0 ]; then
+        # Loud, but not a failure: nothing was written, so the worker has
+        # nothing to revert (Issue #195).
+        echo "OK no bumps -- ${SKIP_COUNT} action(s) skipped, upstream state unknown"
+        print_skips
+        exit 0
+    fi
     echo "OK no bumps -- actions already current"
     exit 0
 fi
 
+report_skips_if_any() {
+    if [ "$SKIP_COUNT" -gt 0 ]; then
+        echo "Skipped ${SKIP_COUNT} action(s), upstream state unknown:"
+        print_skips
+    fi
+}
+
 if [ "$DRY_RUN" = true ]; then
     echo "OK bumped: ${PLAN_COUNT} action(s) [dry-run]"
     print_diff
+    report_skips_if_any
     exit 0
 fi
 
@@ -409,7 +584,7 @@ done
 # Audit gate.
 echo "Audit gate: running ${QUALITY_CMD}..."
 audit_log="$(mktemp)"
-trap 'rm -f "$audit_log"' EXIT
+trap 'rm -f "$audit_log" "$LOOKUP_ERROR_FILE"' EXIT
 if ! "$QUALITY_CMD" >"$audit_log" 2>&1 < /dev/null; then
     cat "$audit_log" >&2 || true
     echo "" >&2
@@ -422,3 +597,4 @@ fi
 
 echo "OK bumped: ${PLAN_COUNT} action(s)"
 print_diff
+report_skips_if_any
