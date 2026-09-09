@@ -4,6 +4,13 @@ on:
   pull_request:
     branches: ["*"]
 
+# Cancel a superseded run when a new commit is pushed to the same PR
+# branch (issue #187). Keying the group on github.ref keeps each branch in
+# its own group, so concurrent PRs never cancel each other's runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
