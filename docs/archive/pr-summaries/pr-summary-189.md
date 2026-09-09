@@ -51,8 +51,7 @@ flowchart LR
     D -- no --> Z
     D -- yes --> E{"multi-line?"}
     E -- no --> Z
-    E -- yes --> F{"first non-comment line
-is set -euo pipefail?"}
+    E -- yes --> F{"first non-comment line<br/>is set -euo pipefail?"}
     F -- yes --> P["PASS"]
     F -- no --> X["FAIL"]
 ```

@@ -5,7 +5,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DENO="$HOME/.deno/bin/deno"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 LOG_VIEWER="$SCRIPT_DIR/../docs/log-viewer.html"
 
 echo "Testing Issue #34: XSS prevention in log-viewer.html"

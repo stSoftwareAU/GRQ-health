@@ -697,7 +697,10 @@ All tests must be **"what" tests** — they check **what** the code produces, no
 
 ### Writing JS Tests
 
-The project uses `deno` to run pure functions extracted from `docs/dashboard.js`:
+The project uses `deno` to run pure functions extracted from `docs/dashboard.js`.
+Tests locate the binary via `tests/find-deno.sh`: an explicit `$DENO` first, then
+`deno` on `PATH`, then the installer default `$HOME/.deno/bin/deno`. If none
+resolve, the test fails immediately with a message saying so.
 
 ```bash
 source tests/extract-functions.sh

@@ -31,7 +31,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 STYLES_CSS="$ROOT_DIR/docs/styles.css"
 FIXTURES="$SCRIPT_DIR/fixtures/dark-mode-cards"
 CHECKER="$SCRIPT_DIR/dark-mode-card-check.js"
-DENO="$HOME/.deno/bin/deno"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 
 echo "Testing Issue #172: dark mode host-card contrast sweep"
 echo "==========================================="

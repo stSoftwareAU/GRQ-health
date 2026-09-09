@@ -29,7 +29,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 STYLES_CSS="$ROOT_DIR/docs/styles.css"
 FIXTURES="$SCRIPT_DIR/fixtures/decoration-stacking"
 CHECKER="$SCRIPT_DIR/decoration-stacking-check.js"
-DENO="$HOME/.deno/bin/deno"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 
 echo "Testing Issue #173: host-card decoration stacking order"
 echo "==========================================="
