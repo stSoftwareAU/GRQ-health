@@ -33,6 +33,11 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Three deploy attempts with 30s + 60s backoff (issue #151) plus the
+    # artifact upload. 20 minutes leaves headroom for the retries while
+    # capping a wedged deploy well below GitHub's 360-minute default
+    # (issue #188).
+    timeout-minutes: 20
     # Suppress the Node punycode DEP0040 deprecation warning emitted from
     # within the GitHub-provided actions (issue #146). We are already on the
     # latest actions/deploy-pages (v5.0.0); the warning originates in that
