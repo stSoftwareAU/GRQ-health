@@ -242,9 +242,9 @@ classify_owner() {
     fi
 }
 
-# Read one field out of a JSON body. Returns non-zero (and sets
-# LOOKUP_ERROR) when the body is not parseable — a rate-limit HTML page
-# reaches jq the same way a real response does.
+# Read one field out of a JSON body. Returns non-zero, recording the
+# cause, when the body is not parseable — a rate-limit HTML page reaches
+# jq the same way a real response does.
 json_field() {
     local body="$1" filter="$2" value
     if ! value=$(printf '%s' "$body" | "$JQ_CMD" -r "$filter" 2>/dev/null); then
@@ -255,7 +255,8 @@ json_field() {
 }
 
 # Resolve a tag to a 40-char commit SHA via gh. Echoes the SHA on
-# success; on failure returns non-zero with the cause in LOOKUP_ERROR.
+# success; on failure returns non-zero with the cause recorded via
+# set_lookup_error.
 resolve_tag_to_sha() {
     local owner="$1" repo="$2" tag="$3"
     local response sha obj_type obj_sha
@@ -287,7 +288,8 @@ resolve_tag_to_sha() {
 }
 
 # Look up the latest release for a repo. Echoes "tag\tpublished_at" on
-# success. On failure returns non-zero with the cause in LOOKUP_ERROR.
+# success. On failure returns non-zero with the cause recorded via
+# set_lookup_error.
 lookup_latest_release() {
     local owner="$1" repo="$2"
     local response tag published_at
