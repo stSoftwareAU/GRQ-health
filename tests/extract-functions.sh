@@ -8,7 +8,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
-DENO="$HOME/.deno/bin/deno"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 
 # Extract pure functions from dashboard.js (everything from the THRESHOLDS
 # constant up to — but not including — the first DOM-aware helper).

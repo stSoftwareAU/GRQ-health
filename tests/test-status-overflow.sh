@@ -9,7 +9,8 @@ STYLES_CSS="$SCRIPT_DIR/../docs/styles.css"
 DASHBOARD_JS_PATH="$SCRIPT_DIR/../docs/dashboard.js"
 TRUNCATION_CHECKER="$SCRIPT_DIR/hostname-truncation-check.js"
 TRUNCATION_FIXTURES="$SCRIPT_DIR/fixtures/hostname-truncation"
-DENO="$HOME/.deno/bin/deno"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 
 echo "Testing Issue #17: Status badge overflow fix"
 echo "============================================="

@@ -28,7 +28,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 STYLES_CSS="$ROOT_DIR/docs/styles.css"
 CHECKER="$SCRIPT_DIR/dark-mode-table-check.js"
-DENO="$HOME/.deno/bin/deno"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 
 echo "Testing Issues #165/#170/#171: dark mode surface colours"
 echo "==========================================="

@@ -8,7 +8,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 THEME_JS="$ROOT_DIR/docs/theme.js"
-DENO="$HOME/.deno/bin/deno"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 
 echo "Testing Issue #161: light/dark/auto theme toggle"
 echo "================================================"
