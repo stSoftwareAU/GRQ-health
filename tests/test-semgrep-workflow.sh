@@ -93,11 +93,12 @@ elif isinstance(container, str):
 else:
     print('')
 ")
-if [ "$CONTAINER_IMAGE" = "semgrep/semgrep" ]; then
-    pass_test "semgrep job runs in semgrep/semgrep container"
-else
-    fail_test "Container image is '$CONTAINER_IMAGE', expected semgrep/semgrep"
-fi
+case "$CONTAINER_IMAGE" in
+    semgrep/semgrep|semgrep/semgrep:*|semgrep/semgrep@*)
+        pass_test "semgrep job runs in semgrep/semgrep container" ;;
+    *)
+        fail_test "Container image is '$CONTAINER_IMAGE', expected a semgrep/semgrep image" ;;
+esac
 
 # Test 8: a step runs `semgrep ci` with a config
 HAS_SEMGREP_CI=$(run_yaml "
@@ -226,6 +227,72 @@ if [ -z "$UNPINNED" ]; then
 else
     fail_test "Unpinned actions found:"
     echo "$UNPINNED" | sed 's/^/    /'
+fi
+
+# --- Issue #191: container image pinning ---------------------------------
+# A `container.image` with no tag and no digest resolves to the mutable
+# `:latest`, so the code running inside every PR scan can change without a
+# commit here. Every job's container must name an explicit release tag *and*
+# its immutable digest — the tag keeps version-bump tooling working, the
+# digest is what actually fixes the content.
+
+# Test 14: every job that declares a container pins image to tag@sha256:<64 hex>
+UNPINNED_IMAGES=$(run_yaml "
+import re
+PINNED = re.compile(r'^[^\s:@]+(?::[0-9]+)?(?:/[^\s:@]+)+:[^\s:@]+@sha256:[0-9a-f]{64}\$')
+bad = []
+for jid, job in (wf.get('jobs') or {}).items():
+    container = (job or {}).get('container')
+    if isinstance(container, dict):
+        image = container.get('image', '')
+    elif isinstance(container, str):
+        image = container
+    else:
+        continue
+    if not PINNED.match(str(image)):
+        bad.append('%s: %s' % (jid, image or '<empty>'))
+print('; '.join(bad))
+")
+if [ -z "$UNPINNED_IMAGES" ]; then
+    pass_test "Every job container image is pinned to <tag>@sha256:<digest>"
+else
+    fail_test "Container images not pinned to tag + digest: $UNPINNED_IMAGES"
+fi
+
+# Test 15: no job pins to a mutable rolling tag (latest/canary) even when a
+# digest is present — the tag is what bump tooling reads next time.
+MUTABLE_TAGS=$(run_yaml "
+bad = []
+for jid, job in (wf.get('jobs') or {}).items():
+    container = (job or {}).get('container')
+    image = container.get('image', '') if isinstance(container, dict) else (container or '')
+    ref = str(image).split('@', 1)[0]
+    tag = ref.rsplit(':', 1)[1] if ':' in ref.rsplit('/', 1)[-1] else ''
+    if tag in ('latest', 'canary', 'latest-nonroot', 'canary-nonroot'):
+        bad.append('%s: %s' % (jid, image))
+print('; '.join(bad))
+")
+if [ -z "$MUTABLE_TAGS" ]; then
+    pass_test "No job container uses a mutable rolling tag"
+else
+    fail_test "Container images use mutable rolling tags: $MUTABLE_TAGS"
+fi
+
+# Test 16: every job scanning with semgrep runs the same pinned image — a
+# split pin would scan PR code with different rules than the upload job.
+DISTINCT_IMAGES=$(run_yaml "
+images = set()
+for job in (wf.get('jobs') or {}).values():
+    container = (job or {}).get('container')
+    image = container.get('image', '') if isinstance(container, dict) else (container or '')
+    if image:
+        images.add(str(image))
+print(len(images))
+")
+if [ "$DISTINCT_IMAGES" = "1" ]; then
+    pass_test "All container jobs share one pinned image"
+else
+    fail_test "Expected a single pinned container image, found $DISTINCT_IMAGES distinct images"
 fi
 
 echo ""
