@@ -48,8 +48,15 @@ jobs:
 
       - name: Run bump-deps.sh
         id: bump
-        # Audit gate inside bump-deps.sh must succeed for this step to pass.
-        # Failures are surfaced loudly — the workflow fails so a human notices.
+        # A rejected bump fails this step so a human notices. An
+        # unreachable registry does not — bump-deps.sh exits 0 there
+        # because nothing was written (issue #195) — so the skip list is
+        # re-surfaced below as a workflow annotation instead.
+        env:
+          # gh api is IP-rate-limited without a token on shared runners,
+          # which is what starved every lookup and failed this job
+          # (issue #195). The job's own token lifts it to the repo limit.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Capture stdout for the PR body. Stderr is left to flow to the
@@ -60,6 +67,11 @@ jobs:
             cat bump-deps.out
             echo 'BUMP_EOF'
           } >> "$GITHUB_OUTPUT"
+          # A skipped action means the upstream state is unknown, so a
+          # green run is not the same as "everything is current".
+          if grep -q 'upstream state unknown' bump-deps.out; then
+            echo "::warning::bump-deps.sh could not reach the registry for some actions — see the log for the skip list"
+          fi
 
       # peter-evans/create-pull-request v8.1.1 — pinned to commit SHA per supply-chain policy
       - name: Open or update bump PR
