@@ -752,9 +752,11 @@ automated weekly job. The flow looks like:
 ```mermaid
 flowchart LR
     A[Cron: Mon 06:00 UTC] --> B[bump-deps.sh]
-    B --> C{Audit gate<br/>./quality.sh}
+    B --> R{Registry and<br/>tools reachable?}
+    R -- no --> S[Warn, skip the action,<br/>exit 0 -- nothing written]
+    R -- yes --> C{Audit gate<br/>./quality.sh}
     C -- pass --> D[PR on chore/bump-deps]
-    C -- fail --> E[Worker reverts]
+    C -- fail --> E[Exit 1 -- worker reverts]
 ```
 
 ### SHA pinning convention
@@ -775,7 +777,7 @@ comment in lock-step so reviewers can see the version change at a glance.
 `./bump-deps.sh` walks every `uses:` line in `.github/workflows/*.yml`,
 resolves each action's latest release tag to its commit SHA, and rewrites
 the SHA + version comment in place. After applying bumps it runs
-`./quality.sh` as the audit gate; any failure exits non-zero so the
+`./quality.sh` as the audit gate; a rejected bump exits non-zero so the
 worker can revert the change.
 
 Flags:
@@ -785,6 +787,14 @@ Flags:
 - `--quarantine-hours <H>` — override `VIBE_BUMP_QUARANTINE_HOURS` for
   this run. Must be a non-negative integer.
 - `--help`, `-h` — print full usage and exit.
+
+Environment overrides:
+
+- `VIBE_BUMP_QUARANTINE_HOURS` — default quarantine window in hours (24).
+- `BUMP_DEPS_API_ATTEMPTS` — registry attempts per lookup (3).
+- `BUMP_DEPS_RETRY_DELAY_SECONDS` — delay between attempts (2).
+- `BUMP_DEPS_GH` / `BUMP_DEPS_JQ` — override the `gh` / `jq` binaries
+  (test hooks).
 
 Run a manual bump locally:
 
@@ -825,6 +835,41 @@ gate. If quality checks fail, the script exits non-zero and prints the
 offending bump diff so the worker can revert the change per the
 VibeCoding #1613 contract. The scheduled workflow only opens a PR when
 the audit gate passes.
+
+### Upstream failures and the exit-code contract
+
+The exit status is a verdict on **this repo**, not on the upstream
+registry. A non-zero exit means *"a bump was written and it is bad —
+revert it"*, so a GitHub API outage must never produce one: nothing was
+written, so there is nothing to revert, and three such exits in a row
+would disable dependency bumps for the repo entirely (Issue #195).
+
+| Condition | Behaviour | Exit |
+| --- | --- | --- |
+| Nothing to bump | `OK no bumps -- actions already current` | 0 |
+| Bump applied, audit gate green | `OK bumped: <N> action(s)` + diff | 0 |
+| Registry lookup fails for an action | `WARNING:` on stderr, that action's pin is left untouched, remaining actions still bump | 0 |
+| `gh` or `jq` missing from `PATH` | `WARNING:` on stderr, no bump attempted | 0 |
+| Applied bump rejected by the audit gate | Gate output + offending diff on stderr | 1 |
+| Invalid flag or option value | Usage error on stderr | 1 |
+
+Transient registry errors (rate limit, 5xx, network blip) are retried
+`BUMP_DEPS_API_ATTEMPTS` times before the action is skipped. An `HTTP
+404` is a settled answer rather than a blip, so it is reported on the
+first attempt without burning further API quota.
+
+A skip is never silent: `gh`'s (or `jq`'s) own diagnostic is reported
+verbatim on stderr and each skipped action is listed in the run summary,
+so an operator can tell a rate limit from a deleted repository. The
+scheduled workflow re-surfaces that summary as a `::warning::`
+annotation, so a green run that bumped nothing because the registry was
+unreachable is still distinguishable from one where everything was
+already current.
+
+The scheduled workflow passes its own `GITHUB_TOKEN` to the script.
+Without it `gh api` falls back to GitHub's shared per-IP limit on hosted
+runners, which is what starved every lookup and failed the job on three
+consecutive runs (Issue #195).
 
 ### Reviewer responsibilities
 
