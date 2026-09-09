@@ -5,7 +5,9 @@
 
 set -e
 
-DENO="$HOME/.deno/bin/deno"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tests/find-deno.sh
+source "$SCRIPT_DIR/find-deno.sh"
 
 echo "Testing Issue #29: Log line classification"
 echo "============================================="
