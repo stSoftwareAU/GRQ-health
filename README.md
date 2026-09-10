@@ -673,6 +673,7 @@ bash -x run.sh
 
 ## Security Considerations
 
+- **Reporting a vulnerability, or triaging a failed Gitleaks/Semgrep run**: see [SECURITY.md](SECURITY.md), which names who is alerted and the route each security signal takes to a human
 - The script runs with the same permissions as the user executing it
 - No sensitive information is collected or stored
 - Hostnames are used as identifiers (ensure they don't contain sensitive data)
