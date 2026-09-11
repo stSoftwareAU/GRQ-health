@@ -122,6 +122,47 @@ else
     fail_test "graceful N/A load with known model — got $OUT4"
 fi
 
+# --- Issue #207: GPU memory must parse on a host that has no bc ---
+# Test 3 keeps the real PATH, so it only catches this on a host where bc is
+# missing. These two pin the conversion itself: the PATH holds the stubs plus
+# the coreutils the function needs, and deliberately no bc.
+NOBC_BIN="$WORK_DIR/nobc-bin"
+mkdir -p "$NOBC_BIN"
+for tool in grep sed tr head; do
+    src="$(command -v "$tool" 2>/dev/null || true)"
+    [ -n "$src" ] && ln -sf "$src" "$NOBC_BIN/$tool" 2>/dev/null || true
+done
+make_stub "$NOBC_BIN" "system_profiler" 'cat <<EOF
+    Chipset Model: Apple M2 Pro
+    Total Number of Cores: 19
+EOF'
+
+# $1 = "In use system memory" byte value, $2 = expected gpu_memory, $3 = label
+assert_gpu_memory_without_bc() {
+    local bytes="$1" expected="$2" label="$3" out
+    make_stub "$NOBC_BIN" "ioreg" \
+        "echo \"      \\\"PerformanceStatistics\\\" = {\\\"In use system memory (driver)\\\"=0,\\\"Device Utilization %\\\"=45,\\\"In use system memory\\\"=$bytes}\""
+    (
+        set -euo pipefail
+        OSTYPE="darwin23"
+        PATH="$NOBC_BIN"
+        collect_gpu_info
+        echo "$gpu_memory"
+    ) > "$WORK_DIR/out-nobc"
+    read -r out < "$WORK_DIR/out-nobc"
+    if [ "$out" = "$expected" ]; then
+        pass_test "$label — $out"
+    else
+        fail_test "$label — expected $expected, got $out"
+    fi
+}
+
+echo "Test 5: GPU memory converts without bc on the PATH..."
+assert_gpu_memory_without_bc 2684354560 "2.50 GB in use" "2.5 GiB reported in full"
+
+echo "Test 6: Sub-gigabyte GPU memory keeps its leading zero..."
+assert_gpu_memory_without_bc 536870912 "0.50 GB in use" "0.5 GiB formatted as 0.50"
+
 echo ""
 echo "========================================="
 echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
