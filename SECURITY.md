@@ -82,3 +82,42 @@ by `.github/workflows/bump-deps.yml`, which runs `./bump-deps.sh` and
 opens a PR. `.github/workflows/dependency-review.yml` blocks a PR that
 introduces a dependency carrying a known advisory. An advisory that
 neither catches is reported through the private route above.
+
+## Emergency Dependency Bump
+
+The weekly bump quarantines an external action's release until it is at
+least `VIBE_BUMP_QUARANTINE_HOURS` old (default 24h), so a compromised
+upstream release is not pinned the moment it is published. An
+actively-exploited CVE is the case where that wait costs more than it
+buys, and `bump-deps.sh --quarantine-hours` is the documented way out.
+
+Do not wait for the weekly schedule. Run the bump directly, with the
+window narrowed only as far as the fix requires:
+
+```bash
+# Ship an urgent fix now, bypassing the 24h quarantine for this run only.
+./bump-deps.sh --quarantine-hours 0
+```
+
+The flag overrides the window **for that run only** — it is a command-line
+argument, not a committed setting. Never lower the default in
+`bump-deps.sh` or in `.github/workflows/bump-deps.yml` to make an
+emergency easier to repeat; the next run must quarantine normally.
+
+Steps:
+
+1. **Confirm the advisory is real and exploited** — a GitHub advisory, a
+   CVE, or a maintainer's disclosure. Quarantine exists to defend against
+   a malicious release, so skipping it on rumour inverts the protection.
+2. **Run the bump** as above. `bump-deps.sh` runs `./quality.sh` as its
+   audit gate; a failure there means the bump is bad — revert it rather
+   than merging around it.
+3. **Open a PR and say why the window was bypassed**, naming the advisory.
+   The PR is the record that an override happened.
+4. **Escalate if the bump cannot be made to pass**: open an issue, label
+   it `security` and `needs-human`, and mention @stSoftwareAU — the same
+   route a failed scan takes above.
+
+If the urgent dependency is an internal `stSoftwareAU/*` action, no
+override is needed: internal actions are never quarantined and bump on
+the next run.

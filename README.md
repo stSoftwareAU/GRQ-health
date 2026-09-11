@@ -673,7 +673,7 @@ bash -x run.sh
 
 ## Security Considerations
 
-- **Reporting a vulnerability, or triaging a failed Gitleaks/Semgrep run**: see [SECURITY.md](SECURITY.md), which names who is alerted and the route each security signal takes to a human
+- **Reporting a vulnerability, triaging a failed Gitleaks/Semgrep run, or shipping an emergency dependency bump**: see [SECURITY.md](SECURITY.md), which names who is alerted, the route each security signal takes to a human, and the [emergency-bump procedure](SECURITY.md#emergency-dependency-bump) for an actively-exploited CVE
 - The script runs with the same permissions as the user executing it
 - No sensitive information is collected or stored
 - Hostnames are used as identifiers (ensure they don't contain sensitive data)
@@ -831,6 +831,11 @@ attacks: a release is only eligible to be bumped once it is at least
 `VIBE_BUMP_QUARANTINE_HOURS` old (default 24 hours). Internal actions
 under `stSoftwareAU/*` skip the quarantine and bump immediately, since
 we control the upstream.
+
+To ship a fix for an actively-exploited CVE ahead of that window, follow
+the [emergency-bump procedure](SECURITY.md#emergency-dependency-bump) in
+`SECURITY.md`. It overrides the window for a single run only — never
+lower the committed default.
 
 ### Audit gate
 
