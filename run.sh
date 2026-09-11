@@ -23,7 +23,7 @@ fi
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.27"
+VERSION="1.1.28"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -153,10 +153,18 @@ collect_gpu_info() {
                 # Match the exact key (the closing quote before "=" excludes the
                 # separate "In use system memory (driver)" entry).
                 gpu_mem_raw=$( { echo "$ioaccel" | grep -o '"In use system memory"=[0-9]\{1,\}' | head -1 | tr -dc '0-9'; } 2>/dev/null || true)
-                if [[ "$gpu_mem_raw" =~ ^[0-9]+$ ]] && [[ "$gpu_mem_raw" -gt 0 ]]; then
-                    gpu_mem_gb=$(echo "scale=2; $gpu_mem_raw / 1024 / 1024 / 1024" | bc -l 2>/dev/null || echo "0")
-                    # bc drops the leading zero for values < 1 (".50"); restore it.
-                    [[ "$gpu_mem_gb" == .* ]] && gpu_mem_gb="0$gpu_mem_gb"
+                # Issue #207: convert bytes to GB with shell integer arithmetic
+                # rather than bc. bc is absent on plenty of hosts, and its
+                # `|| echo "0"` fallback silently reported "0 GB in use" instead
+                # of the real figure. The 18-digit bound keeps the multiply below
+                # the 64-bit range bash arithmetic wraps at.
+                if [[ "$gpu_mem_raw" =~ ^[0-9]{1,18}$ ]] && [[ "$gpu_mem_raw" -gt 0 ]]; then
+                    local gpu_mem_gib gpu_mem_hundredths
+                    gpu_mem_gib=$((1024 * 1024 * 1024))
+                    # Round to the nearest hundredth, then split into GB.dd.
+                    gpu_mem_hundredths=$(( (gpu_mem_raw * 100 + gpu_mem_gib / 2) / gpu_mem_gib ))
+                    printf -v gpu_mem_gb '%d.%02d' \
+                        "$((gpu_mem_hundredths / 100))" "$((gpu_mem_hundredths % 100))"
                     gpu_memory="${gpu_mem_gb} GB in use"
                 fi
             fi
