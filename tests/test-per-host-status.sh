@@ -32,63 +32,8 @@ fail_test() {
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-# Build a self-contained harness that runs the real update_json from run.sh.
-build_harness() {
-    local dir="$1"
-    cat > "${dir}/test_harness.sh" << 'HARNESS_EOF'
-#!/bin/bash
-set -euo pipefail
-
-HOSTNAME="${HOSTNAME:-TEST-HOST}"
-USER_KEY="${USER_KEY:-testuser}"
-CURRENT_TS="${CURRENT_TS:-1700000000}"
-VERSION="1.0.90"
-USER_STALE_HOURS="${USER_STALE_HOURS:-24}"
-JSON_FILE="${JSON_FILE:-docs/index.json}"
-HOST_STATUS_DIR="${HOST_STATUS_DIR:-docs/host-status}"
-HEALTH_STATE_DIR="${HEALTH_STATE_DIR:-.health-state}"
-
-get_system_info() {
-    cat << 'SYSINFO'
-{
-    "uptime": 1000,
-    "free_disk_space": "100",
-    "mem_usage_percent": "10.0",
-    "cpu_load": "5.0%",
-    "timezone": "AEST",
-    "os_info": "macOS",
-    "os_version": "15.0",
-    "network_status": "connected",
-    "total_mem_gb": "16",
-    "cpu_cores": "8",
-    "total_disk_gb": "500",
-    "used_disk_percent": "20.0",
-    "cpu_breakdown": "5% user, 3% sys, 92% idle",
-    "load_averages": "5.0% (1m), 4.0% (5m), 3.0% (15m)",
-    "cpu_model": "M4",
-    "exception_count": 0,
-    "exception_summary": "No errors found",
-    "machine_type": "Mac mini",
-    "ip_addresses": "WiFi: 10.0.0.1",
-    "config_warning": ""
-}
-SYSINFO
-}
-
-HARNESS_EOF
-    # Extract update_json and its Issue #213 helpers from run.sh.
-    sed -n '/^# Function to update JSON file/,/^# Function to commit/{ /^# Function to commit/d; p; }' "$RUN_SH" >> "${dir}/test_harness.sh"
-    echo "${2:-update_json}" >> "${dir}/test_harness.sh"
-    chmod +x "${dir}/test_harness.sh"
-}
-
-run_harness() {
-    local dir="$1"
-    shift
-    # `env` is required: assignments that arrive as expanded words are ordinary
-    # arguments, not assignments.
-    (cd "$dir" && env RUN_SH="$RUN_SH" "$@" bash test_harness.sh 2>&1) || true
-}
+# shellcheck source=tests/health-harness.sh
+source "$SCRIPT_DIR/health-harness.sh"
 
 # Build a legacy fleet-wide index.json with many hosts, as the fleet has today.
 write_legacy_index() {
@@ -129,8 +74,13 @@ write_legacy_index() {
 echo "Test 1: heartbeat writes docs/host-status/<HOST>.json and a manifest..."
 TEST_DIR="${WORK_DIR}/test1"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
-run_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000100" > /dev/null
+build_health_harness "$TEST_DIR"
+run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000100" > /dev/null
+if [ "$LAST_HARNESS_STATUS" = "0" ]; then
+    pass_test "heartbeat exits 0"
+else
+    fail_test "heartbeat exited $LAST_HARNESS_STATUS"
+fi
 
 HOST_DOC="$TEST_DIR/docs/host-status/TEST-HOST.json"
 MANIFEST="$TEST_DIR/docs/host-status/index.json"
@@ -164,10 +114,10 @@ fi
 echo "Test 2: a heartbeat leaves the fleet-wide index.json byte-identical..."
 TEST_DIR="${WORK_DIR}/test2"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 write_legacy_index "$TEST_DIR/docs/index.json"
 BEFORE_SUM=$(cksum < "$TEST_DIR/docs/index.json")
-run_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000200" > /dev/null
+run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000200" > /dev/null
 AFTER_SUM=$(cksum < "$TEST_DIR/docs/index.json")
 
 if [ "$BEFORE_SUM" = "$AFTER_SUM" ]; then
@@ -218,7 +168,7 @@ fi
 # Test 4: a second heartbeat updates in place and preserves manual fields
 # ---------------------------------------------------------------------------
 echo "Test 4: a later heartbeat updates in place..."
-run_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700009999" > /dev/null
+run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700009999" > /dev/null
 if [ "$(jq -r '.users.testuser.heart_beat_ts' "$HOST_DOC")" = "1700009999" ] \
     && [ "$(jq -r '.location' "$HOST_DOC")" = "Newport Office" ]; then
     pass_test "heartbeat refreshed and manual fields preserved"
@@ -238,9 +188,9 @@ fi
 echo "Test 5: corrupted per-host document is recovered..."
 TEST_DIR="${WORK_DIR}/test5"
 mkdir -p "$TEST_DIR/docs/host-status"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 echo '{"uptime": 1000, BROKEN' > "$TEST_DIR/docs/host-status/TEST-HOST.json"
-OUTPUT=$(run_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000300")
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000300" || true)
 
 if jq . "$TEST_DIR/docs/host-status/TEST-HOST.json" > /dev/null 2>&1; then
     pass_test "corrupted per-host document recovered to valid JSON"
@@ -267,9 +217,9 @@ fi
 echo "Test 6: manifest is stable and preserves other hosts..."
 TEST_DIR="${WORK_DIR}/test6"
 mkdir -p "$TEST_DIR/docs/host-status"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 echo '{"host":"GRQ-99","heart_beat_ts":1699999999}' > "$TEST_DIR/docs/host-status/GRQ-99.json"
-run_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000400" > /dev/null
+run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000400" > /dev/null
 MANIFEST="$TEST_DIR/docs/host-status/index.json"
 
 if [ "$(jq -c '.hosts' "$MANIFEST")" = '["GRQ-99","TEST-HOST"]' ]; then
@@ -279,7 +229,7 @@ else
 fi
 
 MANIFEST_SUM_BEFORE=$(cksum < "$MANIFEST")
-run_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000500" > /dev/null
+run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000500" > /dev/null
 MANIFEST_SUM_AFTER=$(cksum < "$MANIFEST")
 if [ "$MANIFEST_SUM_BEFORE" = "$MANIFEST_SUM_AFTER" ]; then
     pass_test "manifest not rewritten when the host list is unchanged"
@@ -295,8 +245,8 @@ TEST_DIR="${WORK_DIR}/test7"
 mkdir -p "$TEST_DIR/docs/host-status"
 # The call is appended to the harness verbatim, so it must stay unexpanded here.
 # shellcheck disable=SC2016
-build_harness "$TEST_DIR" 'host_slug "$HOSTNAME"'
-SLUG=$(run_harness "$TEST_DIR" HOSTNAME="../../etc/passwd" USER_KEY="testuser")
+build_health_harness "$TEST_DIR" 'host_slug "$HOSTNAME"'
+SLUG=$(run_health_harness "$TEST_DIR" HOSTNAME="../../etc/passwd" USER_KEY="testuser")
 case "$SLUG" in
     */*|*..*|"")
         fail_test "hostname '../../etc/passwd' produced unsafe slug '$SLUG'"
@@ -306,7 +256,7 @@ case "$SLUG" in
         ;;
 esac
 
-SLUG=$(run_harness "$TEST_DIR" HOSTNAME=".hidden" USER_KEY="testuser")
+SLUG=$(run_health_harness "$TEST_DIR" HOSTNAME=".hidden" USER_KEY="testuser")
 case "$SLUG" in
     .*)
         fail_test "hostname '.hidden' produced a hidden filename '$SLUG'"
@@ -316,11 +266,58 @@ case "$SLUG" in
         ;;
 esac
 
-SLUG=$(run_harness "$TEST_DIR" HOSTNAME="GRQ-10" USER_KEY="testuser")
+SLUG=$(run_health_harness "$TEST_DIR" HOSTNAME="GRQ-10" USER_KEY="testuser")
 if [ "$SLUG" = "GRQ-10" ]; then
     pass_test "ordinary hostname passes through unchanged"
 else
     fail_test "ordinary hostname 'GRQ-10' was mangled to '$SLUG'"
+fi
+
+# The dashboard rejects any manifest entry that does not match
+# SAFE_HOST_NAME in docs/host-status.js, so a slug run.sh can emit but the
+# dashboard refuses is a host that silently disappears. Assert the producer
+# stays inside the consumer's grammar.
+SAFE_RE='^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+for raw in "../../etc/passwd" ".hidden" "-weird" "_build" "GRQ-10" "Tinas MacBook Air" \
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "!!!"; do
+    SLUG=$(run_health_harness "$TEST_DIR" HOSTNAME="$raw" USER_KEY="testuser")
+    if printf '%s' "$SLUG" | grep -Eq "$SAFE_RE"; then
+        pass_test "slug for '$raw' ('$SLUG') is accepted by the dashboard validator"
+    else
+        fail_test "slug for '$raw' ('$SLUG') would be rejected by the dashboard validator"
+    fi
+done
+
+# ---------------------------------------------------------------------------
+# Test 8: a heartbeat that cannot write fails loud
+# ---------------------------------------------------------------------------
+echo "Test 8: a failed write is reported and exits non-zero..."
+TEST_DIR="${WORK_DIR}/test8"
+mkdir -p "$TEST_DIR/docs"
+# Break get_system_info so the jq update cannot run — this is how a missing
+# dependency corrupts the captured JSON in practice.
+# shellcheck disable=SC2016
+build_health_harness "$TEST_DIR" 'get_system_info() { echo "not json at all"; }
+update_json'
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000600") \
+    && HARNESS_STATUS=0 || HARNESS_STATUS=$?
+
+if [ "$HARNESS_STATUS" != "0" ]; then
+    pass_test "failed write exits non-zero"
+else
+    fail_test "failed write reported success (exit $HARNESS_STATUS)"
+fi
+
+if echo "$OUTPUT" | grep -q "ERROR"; then
+    pass_test "failed write reports an error"
+else
+    fail_test "failed write produced no error message: $OUTPUT"
+fi
+
+if ! echo "$OUTPUT" | grep -q "Updated health information"; then
+    pass_test "failed write does not claim the health information was updated"
+else
+    fail_test "failed write still claimed success"
 fi
 
 echo ""

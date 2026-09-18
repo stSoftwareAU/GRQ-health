@@ -158,7 +158,9 @@ The script performs the following operations:
 2. **Health Check Logic**:
    - Checks if the last heartbeat was more than 12 hours ago
    - Only updates if an update is needed (prevents unnecessary writes)
-   - Creates backup of existing JSON file before updates
+   - Creates a backup of the existing document before updates, in
+     `.health-state/` at the repository root (outside `docs/`, so recovery
+     copies are never committed)
 
 3. **Data Storage**:
    - Updates `docs/host-status/<HOST>.json` with current host information
@@ -256,6 +258,33 @@ manifest, then each listed document, and merges the legacy file underneath.
 Manifest entries are validated as untrusted input — an entry that is not a bare
 filename component is rejected and reported, never fetched. When nothing loads
 at all the loader throws rather than rendering an empty fleet.
+
+The merge is **per user**, not per host. On a multi-user host each unix account
+runs its own checkout, so one user can be writing the per-host document while
+another still writes `docs/index.json`; the `users` maps are merged and the
+newer `heart_beat_ts` wins for a user present in both. The host-level roll-ups
+(`user_count`, `worst_user_heart_beat_ts`, `best_user_heart_beat_ts`,
+`heart_beat_ts`, `exception_count`, `reporting_warning_count`,
+`exception_summary`) are then recomputed from the merged map, so a user who has
+not migrated is never shown as stuck and never silently disappears.
+
+#### Finishing the migration
+
+The legacy file is retired by hand once every host has moved, so the dashboard
+never has to guess:
+
+1. Check that every host in `docs/index.json` also has a document in
+   `docs/host-status/` — compare the manifest's `hosts` array with the keys of
+   `docs/index.json`.
+2. Confirm each of those documents has a recent `heart_beat_ts` (a host that
+   stopped reporting is not migrated, it is dead — mark it dead in the usual
+   way first).
+3. Delete `docs/index.json` and the orphaned `docs/index.json.bak`. The loader
+   treats a missing legacy file as normal: `sources.legacy` becomes `false` and
+   nothing is reported as an error.
+
+Until step 3 happens, `docs/index.json` stays frozen at the moment each host
+migrated — old hosts still rewrite it, migrated ones do not.
 
 ### Repo Freshness JSON (`docs/repos.json`)
 
@@ -562,9 +591,11 @@ measure the rendered line boxes of a `Tinas-MacBook-Air` card.
 You can manually edit a host's document — `docs/host-status/<HOST>.json` for a
 host that has already reported under Issue #213, or its entry in the legacy
 `docs/index.json` for one that has not. A new host only needs the file; the
-manifest is rebuilt from the directory on the next heartbeat. The shape below
-is one host's document (in `docs/index.json` the same object sits under the
-hostname key):
+manifest is rebuilt from the directory on the next heartbeat.
+
+The examples below show the entry **as it appears in `docs/index.json`**, keyed
+by hostname. In `docs/host-status/<HOST>.json` the file holds just the inner
+object, with a `"host": "<HOST>"` field added — no hostname key wrapping it.
 
 ### Adding a New Active Host
 ```json

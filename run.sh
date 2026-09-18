@@ -1024,8 +1024,11 @@ read_recorded_user_field() {
     host_file="$(host_status_file)"
 
     if [ -f "$host_file" ]; then
-        value=$(jq -r --arg user "$USER_KEY" --arg field "$field" \
-            '.users[$user][$field] // empty' "$host_file" 2>/dev/null || echo "")
+        if ! value=$(jq -r --arg user "$USER_KEY" --arg field "$field" \
+            '.users[$user][$field] // empty' "$host_file" 2>/dev/null); then
+            echo "WARNING: could not read $field from $host_file — treating it as unrecorded" >&2
+            value=""
+        fi
     fi
     if [ -z "$value" ] && [ -f "$JSON_FILE" ]; then
         value=$(jq -r --arg host "$HOSTNAME" --arg user "$USER_KEY" --arg field "$field" \
@@ -1110,8 +1113,10 @@ update_json() {
     # corrupted copy for diagnosis — outside docs/, so it is never committed —
     # and rebuild from the migration seed.
     if [ -f "$host_file" ] && ! jq . "$host_file" > /dev/null 2>&1; then
-        echo "WARNING: $host_file is corrupted or invalid JSON — recovering"
-        cp "$host_file" "${HEALTH_STATE_DIR}/${host_base}.corrupted.$(date +%s)"
+        echo "WARNING: $host_file is corrupted or invalid JSON — recovering" >&2
+        # One copy, overwritten each time, so repeated corruption cannot fill
+        # the disk. It lives outside docs/, so it is never committed.
+        cp "$host_file" "${HEALTH_STATE_DIR}/${host_base}.corrupted"
         rm -f "$host_file"
     fi
 
@@ -1162,23 +1167,27 @@ update_json() {
        ' > "$tmp_file"; then
         mv "$tmp_file" "$host_file"
     else
-        echo "WARNING: jq update failed — restoring from backup"
+        # The heartbeat did not record anything. Restore the last good document
+        # and fail: a stale document must never be committed as a fresh one.
+        echo "ERROR: jq update failed — restoring from backup, no heartbeat recorded" >&2
         rm -f "$tmp_file"
         if [ -f "$backup_file" ]; then
             cp "$backup_file" "$host_file"
         fi
+        return 1
     fi
 
     # Issue #65: Post-write validation — ensure we never leave a corrupted file
     if [ -f "$host_file" ] && ! jq . "$host_file" > /dev/null 2>&1; then
-        echo "ERROR: Post-write validation failed — $host_file is invalid"
+        echo "ERROR: Post-write validation failed — $host_file is invalid" >&2
         if [ -f "$backup_file" ]; then
-            echo "Restoring from backup"
+            echo "Restoring from backup" >&2
             cp "$backup_file" "$host_file"
         fi
+        return 1
     fi
 
-    update_host_manifest
+    update_host_manifest || return 1
 
     echo "Updated health information for $HOSTNAME"
 }
@@ -1188,17 +1197,23 @@ update_json() {
 # The hostname comes from `uname -n`, so it is machine-supplied input that now
 # names a file under docs/host-status/ — sanitise it to a bare, visible
 # filename component that cannot climb out of that directory.
+#
+# The result must satisfy the dashboard's manifest validator
+# (SAFE_HOST_NAME in docs/host-status.js): it starts with an alphanumeric
+# character and is at most 64 characters long. A name this function can emit
+# but the dashboard would reject is a host that silently disappears.
 host_slug() {
     local slug
     slug="$(printf '%s' "${1:-}" | tr ' ' '_' | tr -cd '[:alnum:]._-')"
     slug="${slug//../_}"
-    while [ "${slug#.}" != "$slug" ]; do
-        slug="${slug#.}"
+    # Drop leading characters until the name starts with an alphanumeric one.
+    while [ -n "$slug" ] && [ -z "$(printf '%s' "${slug%"${slug#?}"}" | tr -cd '[:alnum:]')" ]; do
+        slug="${slug#?}"
     done
     if [ -z "$slug" ]; then
         slug="unknown"
     fi
-    printf '%s' "$slug"
+    printf '%s' "${slug:0:64}"
 }
 
 # Path of this host's status document (Issue #213).
@@ -1239,7 +1254,10 @@ update_host_manifest() {
     done
 
     if [ ${#names[@]} -eq 0 ]; then
-        echo "ERROR: no host documents found in ${HOST_STATUS_DIR} — leaving the manifest unchanged"
+        # Unreachable unless this host's own document failed to appear, so the
+        # heartbeat is broken: say so and fail rather than write an empty
+        # manifest that would empty the dashboard.
+        echo "ERROR: no host documents found in ${HOST_STATUS_DIR} — the heartbeat wrote nothing" >&2
         return 1
     fi
 

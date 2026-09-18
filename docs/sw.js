@@ -2,8 +2,9 @@
 // Version: 1.1.29
 
 // Issue #213: the health data loader is shared with the dashboard so the
-// service worker syncs the same per-host documents the page reads.
-importScripts('./host-status.js');
+// service worker syncs the same per-host documents the page reads. Versioned
+// like every other asset, so an updated worker cannot execute a stale loader.
+importScripts('./host-status.js?v=1.1.29');
 
 const CACHE_NAME = 'grq-health-v1.1.29';
 const STATIC_CACHE_NAME = 'grq-health-static-v1.1.29';
@@ -26,6 +27,9 @@ const STATIC_FILES = [
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js',
   'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css'
 ];
+
+// Issue #213: where the background sync parks the merged fleet snapshot.
+const OFFLINE_SNAPSHOT_URL = './host-status/offline-snapshot.json';
 
 // Issue #213: health data is the fleet-wide index.json plus the per-host
 // documents under host-status/. Both are treated as data, not static assets.
@@ -117,6 +121,14 @@ self.addEventListener('fetch', (event) => {
             if (!response || response.status !== 200 || response.type !== 'basic') {
               return response;
             }
+
+            // Issue #213: health data is requested with a unique ?t= cache
+            // buster, so a cached copy can never be matched again. Caching it
+            // would grow the cache without bound — one dead entry per host per
+            // refresh. The background sync keeps the offline snapshot instead.
+            if (isHealthDataPath(url.pathname)) {
+              return response;
+            }
             
             // Clone the response for caching
             const responseToCache = response.clone();
@@ -173,10 +185,11 @@ self.addEventListener('sync', (event) => {
       self.GRQHostStatus.loadHostStatus(fetch, Date.now())
         .then((health) => {
           health.errors.forEach((message) => console.warn('Service Worker: health data:', message));
-          // Cache the merged snapshot for offline use
+          // Cache the merged snapshot for offline use, under its own key —
+          // it is a merge of every source, not a copy of the legacy file.
           return caches.open(CACHE_NAME)
             .then((cache) => {
-              return cache.put('./index.json', new Response(JSON.stringify(health.data)));
+              return cache.put(OFFLINE_SNAPSHOT_URL, new Response(JSON.stringify(health.data)));
             });
         })
         .then(() => {

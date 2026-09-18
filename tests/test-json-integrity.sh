@@ -34,59 +34,8 @@ fail_test() {
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-# Build a self-contained test harness that sources update_json from run.sh
-build_harness() {
-    local dir="$1"
-    cat > "${dir}/test_harness.sh" << 'HARNESS_EOF'
-#!/bin/bash
-set -euo pipefail
-
-# Minimal stubs for testing update_json in isolation
-HOSTNAME="${HOSTNAME:-TEST-HOST}"
-USER_KEY="${USER_KEY:-testuser}"
-CURRENT_TS="${CURRENT_TS:-1700000000}"
-VERSION="1.0.90"
-USER_STALE_HOURS="${USER_STALE_HOURS:-24}"
-JSON_FILE="${JSON_FILE:-docs/index.json}"
-HOST_STATUS_DIR="${HOST_STATUS_DIR:-docs/host-status}"
-HEALTH_STATE_DIR="${HEALTH_STATE_DIR:-.health-state}"
-
-# Minimal get_system_info that returns valid JSON
-get_system_info() {
-    cat << 'SYSINFO'
-{
-    "uptime": 1000,
-    "free_disk_space": "100",
-    "disk_usage_percent": "20.0",
-    "mem_usage_percent": "10.0",
-    "cpu_load": "5.0%",
-    "timezone": "AEST",
-    "os_info": "macOS",
-    "os_version": "15.0",
-    "network_status": "connected",
-    "total_mem_gb": "16",
-    "cpu_cores": "8",
-    "total_disk_gb": "500",
-    "used_disk_percent": "20.0",
-    "cpu_breakdown": "5% user, 3% sys, 92% idle",
-    "load_averages": "5.0% (1m), 4.0% (5m), 3.0% (15m)",
-    "cpu_model": "M4",
-    "exception_count": 0,
-    "exception_summary": "No errors found",
-    "machine_type": "Mac mini",
-    "ip_addresses": "WiFi: 10.0.0.1",
-    "config_warning": ""
-}
-SYSINFO
-}
-
-HARNESS_EOF
-    # Extract update_json function from run.sh (between the two function comments)
-    sed -n '/^# Function to update JSON file/,/^# Function to commit/{ /^# Function to commit/d; p; }' "$RUN_SH" >> "${dir}/test_harness.sh"
-    # Call update_json at the end
-    echo 'update_json' >> "${dir}/test_harness.sh"
-    chmod +x "${dir}/test_harness.sh"
-}
+# shellcheck source=tests/health-harness.sh
+source "$SCRIPT_DIR/health-harness.sh"
 
 # The document a heartbeat writes (Issue #213).
 HOST_DOC="docs/host-status/TEST-HOST.json"
@@ -95,7 +44,7 @@ HOST_DOC="docs/host-status/TEST-HOST.json"
 echo "Test 1: Missing host document creates a new file..."
 TEST_DIR="${WORK_DIR}/test1"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
@@ -115,7 +64,7 @@ fi
 echo "Test 2: Corrupted host document is detected and recovered..."
 TEST_DIR="${WORK_DIR}/test2"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 # Write corrupted JSON
@@ -139,7 +88,7 @@ fi
 echo "Test 3: Empty host document is handled..."
 TEST_DIR="${WORK_DIR}/test3"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 # Write empty file
@@ -165,7 +114,7 @@ fi
 echo "Test 4: Valid index.json preserves existing hosts..."
 TEST_DIR="${WORK_DIR}/test4"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 cat > docs/index.json << 'EXISTING'
@@ -202,7 +151,7 @@ fi
 echo "Test 5: Post-write JSON validation..."
 TEST_DIR="${WORK_DIR}/test5"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 echo '{}' > docs/index.json
@@ -225,7 +174,7 @@ fi
 echo "Test 6: Corruption detected and reported in output..."
 TEST_DIR="${WORK_DIR}/test6"
 mkdir -p "$TEST_DIR/docs"
-build_harness "$TEST_DIR"
+build_health_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 mkdir -p docs/host-status

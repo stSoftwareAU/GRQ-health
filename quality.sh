@@ -64,6 +64,35 @@ else
 fi
 echo ""
 
+# Check for JSON syntax errors in the per-host documents (Issue #213)
+echo "Checking JSON syntax in docs/host-status/..."
+echo "---"
+if [ -d "$SCRIPT_DIR/docs/host-status" ]; then
+    if command -v jq >/dev/null 2>&1; then
+        INVALID_DOCS=0
+        for host_doc in "$SCRIPT_DIR"/docs/host-status/*.json; do
+            [ -f "$host_doc" ] || continue
+            if ! jq . "$host_doc" > /dev/null 2>&1; then
+                echo "Invalid JSON: $host_doc"
+                INVALID_DOCS=$((INVALID_DOCS + 1))
+            fi
+        done
+        if [ "$INVALID_DOCS" -eq 0 ]; then
+            echo "Status: PASSED - all host documents are valid JSON"
+            PASSED_TESTS=$((PASSED_TESTS + 1))
+        else
+            echo "Status: FAILED - $INVALID_DOCS host document(s) have JSON syntax errors"
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+        fi
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    else
+        echo "Status: SKIPPED - jq not installed"
+    fi
+else
+    echo "Status: SKIPPED - docs/host-status not found (no host has reported yet)"
+fi
+echo ""
+
 # Check for version consistency
 echo "Checking version consistency..."
 echo "---"

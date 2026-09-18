@@ -78,7 +78,7 @@ else
     fail_test "sw.js dashboard.js?v= ($SW_DASH) != run.sh ($VERSION_RUN_SH)"
 fi
 
-# index.html — three cache busters
+# index.html — cache busters for every versioned asset
 for asset in "styles.css" "dashboard.js" "host-status.js" "sw.js"; do
     HTML_VER=$(grep "${asset}?v=" "$ROOT_DIR/docs/index.html" | head -1 | sed "s/.*${asset}?v=\([0-9.]*\).*/\1/")
     if [ "$HTML_VER" = "$VERSION_RUN_SH" ]; then

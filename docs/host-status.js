@@ -4,13 +4,15 @@
 // change a few fields of one host. run.sh now writes docs/host-status/<HOST>.json
 // (~2 KB) plus a small manifest, so a heartbeat commits one small file.
 //
-// Hosts run their own checkout of run.sh, so the fleet migrates one host at a
-// time. This loader therefore reads BOTH sources and merges them: the legacy
-// docs/index.json provides hosts that have not updated yet, and a per-host
-// document — written by a host that has — always wins for that host.
+// Hosts run their own checkout of run.sh — and on a multi-user host each unix
+// user runs their own — so the fleet migrates one user at a time. This loader
+// therefore reads BOTH sources and merges them: the legacy docs/index.json
+// carries users and hosts that have not updated yet, and a per-host document
+// wins field by field, with the `users` maps merged per user on the newest
+// heartbeat so a user still writing to the legacy file is never dropped.
 //
-// Shared by dashboard.js (index.html) and simple.html. Plain script, no module
-// syntax, so it loads with a <script src> tag on both pages.
+// Shared by dashboard.js (index.html), simple.html and sw.js. Plain script, no
+// module syntax, so it loads with a <script src> tag and with importScripts().
 (function (self) {
     'use strict';
 
@@ -21,7 +23,8 @@
     // A manifest entry names a file under docs/host-status/. It is data written
     // by whichever host ran last, so validate it as untrusted input: a bare
     // filename component, nothing that can climb out of the directory or carry
-    // a query string.
+    // a query string. Kept in step with host_slug() in run.sh, which is what
+    // produces these names.
     var SAFE_HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
     function isSafeHostName(name) {
@@ -34,23 +37,105 @@
         return url + '?t=' + encodeURIComponent(timestamp);
     }
 
-    // Per-host documents override the legacy fleet-wide entry for the same host.
-    function mergeHostStatus(legacy, perHost) {
-        var merged = {};
-        var hostname;
-        if (legacy && typeof legacy === 'object') {
-            for (hostname in legacy) {
-                if (Object.prototype.hasOwnProperty.call(legacy, hostname)) {
-                    merged[hostname] = legacy[hostname];
-                }
-            }
+    function isObject(value) {
+        return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    // Host names come from untrusted JSON, so collect them on a prototype-less
+    // map: a host called "__proto__" then adds an entry instead of mutating
+    // Object.prototype.
+    function emptyMap() {
+        return Object.create(null);
+    }
+
+    function copyInto(target, source) {
+        if (!isObject(source)) {
+            return target;
         }
-        if (perHost && typeof perHost === 'object') {
-            for (hostname in perHost) {
-                if (Object.prototype.hasOwnProperty.call(perHost, hostname)) {
-                    merged[hostname] = perHost[hostname];
+        Object.keys(source).forEach(function (key) {
+            target[key] = source[key];
+        });
+        return target;
+    }
+
+    function heartbeatOf(entry) {
+        return (isObject(entry) && Number(entry.heart_beat_ts)) || 0;
+    }
+
+    function numberOf(entry, field) {
+        return (isObject(entry) && Number(entry[field])) || 0;
+    }
+
+    // Union of both users maps; for a user in both, the newer heartbeat wins.
+    // That is what keeps a user still writing to the legacy file visible while
+    // another user on the same host has already migrated.
+    function mergeUsers(legacyUsers, docUsers) {
+        var merged = emptyMap();
+        copyInto(merged, legacyUsers);
+        if (isObject(docUsers)) {
+            Object.keys(docUsers).forEach(function (username) {
+                var existing = merged[username];
+                if (!existing || heartbeatOf(docUsers[username]) >= heartbeatOf(existing)) {
+                    merged[username] = docUsers[username];
                 }
-            }
+            });
+        }
+        return merged;
+    }
+
+    // Recompute the host-level roll-ups run.sh derives from the users map, so
+    // a merged host reports the same aggregates it would if one writer had
+    // produced the whole document.
+    function applyUserAggregates(host) {
+        var usernames = Object.keys(host.users);
+        if (usernames.length === 0) {
+            return host;
+        }
+        var heartbeats = usernames.map(function (username) {
+            return heartbeatOf(host.users[username]);
+        });
+        var failing = usernames.filter(function (username) {
+            return numberOf(host.users[username], 'exception_count') > 0;
+        });
+
+        host.user_count = usernames.length;
+        host.worst_user_heart_beat_ts = Math.min.apply(null, heartbeats);
+        host.best_user_heart_beat_ts = Math.max.apply(null, heartbeats);
+        host.heart_beat_ts = host.best_user_heart_beat_ts;
+        host.exception_count = usernames.reduce(function (total, username) {
+            return total + numberOf(host.users[username], 'exception_count');
+        }, 0);
+        host.reporting_warning_count = usernames.reduce(function (total, username) {
+            return total + numberOf(host.users[username], 'reporting_warning_count');
+        }, 0);
+        host.exception_summary = host.exception_count > 0
+            ? host.exception_count + ' errors across ' + host.user_count + ' user(s) (' +
+                failing.map(function (username) {
+                    return username + ': ' + (host.users[username].exception_summary || '');
+                }).join('; ') + ')'
+            : 'No errors found';
+        return host;
+    }
+
+    // One host: the per-host document wins field by field, but the users maps
+    // are merged so neither writer's heartbeats are lost mid-migration.
+    function mergeHostEntry(legacyEntry, doc) {
+        var merged = copyInto(emptyMap(), legacyEntry);
+        copyInto(merged, doc);
+        if (!isObject(legacyEntry) || !isObject(legacyEntry.users)) {
+            return merged;
+        }
+        merged.users = mergeUsers(legacyEntry.users, isObject(doc) ? doc.users : null);
+        return applyUserAggregates(merged);
+    }
+
+    function mergeHostStatus(legacy, perHost) {
+        var merged = emptyMap();
+        copyInto(merged, legacy);
+        if (isObject(perHost)) {
+            Object.keys(perHost).forEach(function (hostname) {
+                merged[hostname] = mergeHostEntry(merged[hostname], perHost[hostname]);
+            });
         }
         return merged;
     }
@@ -58,26 +143,36 @@
     async function fetchJson(fetchFn, url) {
         var response = await fetchFn(url);
         if (!response || !response.ok) {
-            throw new Error('HTTP ' + ((response && response.status) || 'error') + ' for ' + url);
+            var failure = new Error('HTTP ' + ((response && response.status) || 'error') + ' for ' + url);
+            failure.status = (response && response.status) || 0;
+            throw failure;
         }
         return await response.json();
     }
 
     // Fetch the manifest and every per-host document it lists.
-    // Returns { docs, listed, errors } — a failed document is reported, never
-    // swallowed, but the hosts that did load are still returned.
+    // Returns { docs, listed, found } — a failure is always reported through
+    // `errors`, never swallowed, but the hosts that did load are still returned.
     async function fetchPerHost(fetchFn, timestamp, errors) {
         var manifest;
         try {
             manifest = await fetchJson(fetchFn, bust(MANIFEST_URL, timestamp));
         } catch (error) {
-            // No manifest yet: the whole fleet is still pre-migration.
-            return { docs: {}, listed: 0, found: false };
+            // 404 is the expected pre-migration state: no host has written a
+            // document yet. Anything else is a real fault and must be seen.
+            if (error.status !== 404) {
+                errors.push('Failed to load the host-status manifest: ' + error.message);
+            }
+            return { docs: emptyMap(), listed: 0, found: false };
         }
 
-        var names = (manifest && Array.isArray(manifest.hosts)) ? manifest.hosts : [];
+        if (!isObject(manifest) || !Array.isArray(manifest.hosts)) {
+            errors.push('Malformed host-status manifest: expected a "hosts" array');
+            return { docs: emptyMap(), listed: 0, found: false };
+        }
+
         var safeNames = [];
-        names.forEach(function (name) {
+        manifest.hosts.forEach(function (name) {
             if (isSafeHostName(name)) {
                 safeNames.push(name);
             } else {
@@ -94,9 +189,9 @@
                 });
         }));
 
-        var docs = {};
+        var docs = emptyMap();
         settled.forEach(function (entry) {
-            if (!entry || !entry.doc || typeof entry.doc !== 'object') {
+            if (!entry || !isObject(entry.doc)) {
                 return;
             }
             // The document names its own host; the filename is only a slug of it.
@@ -134,8 +229,14 @@
             // one that matters for a fleet that has not migrated.
             throw legacyError || new Error('No health data available from ' + LEGACY_URL + ' or ' + MANIFEST_URL);
         }
-        if (legacyError && perHost.found && perHost.listed === 0) {
+        if (legacyError && perHost.listed === 0) {
             throw new Error('No health data available: ' + legacyError.message + ' and the host-status manifest lists no hosts');
+        }
+        if (legacyError && legacyError.status !== 404) {
+            // The fleet file is still expected until the migration completes,
+            // so a failure that is not "gone" means hosts may be missing.
+            errors.push('Failed to load ' + LEGACY_URL + ': ' + legacyError.message +
+                ' — hosts that have not migrated are missing');
         }
 
         return {
