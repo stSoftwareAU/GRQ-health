@@ -53,6 +53,12 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **All exceptions trigger health updates** regardless of heartbeat timing
 - **Excluded**: Lines containing `[MemoryMonitor]` are filtered out before scanning — these are operational cache-clearing messages, not real errors
 
+#### get_system_info stdout contract (Issue #214):
+- **Rule**: `get_system_info()` writes **only** the host JSON document to stdout. Every diagnostic it emits — the "bc not found" dependency warning included — goes to **stderr**.
+- **Why**: `update_json` captures the function with `system_info=$(get_system_info)` and passes the result to `jq --argjson`. Anything else on stdout is prepended to the JSON, `jq` rejects it, and the host's health document is never updated.
+- **Applies to**: every helper `get_system_info` calls (`collect_gpu_info`, `scan_log_errors`, `collect_vibe_coder_state`) — their stdout is captured with the caller's.
+- **Test**: `tests/test-system-info-stdout-json.sh` runs `get_system_info` with `bc` masked off the PATH and asserts stdout still parses as JSON while the warning lands on stderr.
+
 #### Multi-user Hosts (per-user heartbeats):
 - **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
 - **Storage**: `docs/index.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
