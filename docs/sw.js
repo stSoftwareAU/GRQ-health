@@ -1,8 +1,12 @@
 // GRQ Health Dashboard Service Worker
-// Version: 1.1.28
+// Version: 1.1.29
 
-const CACHE_NAME = 'grq-health-v1.1.28';
-const STATIC_CACHE_NAME = 'grq-health-static-v1.1.28';
+// Issue #213: the health data loader is shared with the dashboard so the
+// service worker syncs the same per-host documents the page reads.
+importScripts('./host-status.js');
+
+const CACHE_NAME = 'grq-health-v1.1.29';
+const STATIC_CACHE_NAME = 'grq-health-static-v1.1.29';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
@@ -11,7 +15,8 @@ const STATIC_FILES = [
   './styles.css',
   './theme.css?v=1.1.19',
   './theme.js?v=1.1.19',
-  './dashboard.js?v=1.1.28',
+  './host-status.js?v=1.1.29',
+  './dashboard.js?v=1.1.29',
   './medical-check.png',
   './unhealthy.png',
   './manifest.json',
@@ -21,6 +26,12 @@ const STATIC_FILES = [
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js',
   'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css'
 ];
+
+// Issue #213: health data is the fleet-wide index.json plus the per-host
+// documents under host-status/. Both are treated as data, not static assets.
+function isHealthDataPath(pathname) {
+  return pathname.endsWith('index.json') || pathname.includes('/host-status/');
+}
 
 // Install event - cache static files
 self.addEventListener('install', (event) => {
@@ -88,8 +99,8 @@ self.addEventListener('fetch', (event) => {
         if (cachedResponse) {
           console.log('Service Worker: Serving from cache', request.url);
           
-          // For data requests (index.json), add cache indicator header
-          if (url.pathname.endsWith('index.json')) {
+          // For data requests, add cache indicator header
+          if (isHealthDataPath(url.pathname)) {
             const response = cachedResponse.clone();
             response.headers.set('X-Served-From-Cache', 'true');
             response.headers.set('X-Validation-Warning', 'CACHED-DATA');
@@ -127,7 +138,7 @@ self.addEventListener('fetch', (event) => {
             }
             
             // For other requests, return a basic offline response
-            if (url.pathname.endsWith('index.json')) {
+            if (isHealthDataPath(url.pathname)) {
               return new Response(
                 JSON.stringify({
                   error: 'Offline',
@@ -157,19 +168,15 @@ self.addEventListener('sync', (event) => {
   if (event.tag === 'health-data-sync') {
     console.log('Service Worker: Background sync triggered');
     event.waitUntil(
-      // Try to fetch fresh health data
-      fetch('./index.json')
-        .then((response) => {
-          if (response.ok) {
-            return response.json();
-          }
-          throw new Error('Failed to fetch health data');
-        })
-        .then((data) => {
-          // Cache the fresh data
+      // Try to fetch fresh health data (per-host documents merged with the
+      // legacy fleet-wide index.json, exactly as the dashboard reads it).
+      self.GRQHostStatus.loadHostStatus(fetch, Date.now())
+        .then((health) => {
+          health.errors.forEach((message) => console.warn('Service Worker: health data:', message));
+          // Cache the merged snapshot for offline use
           return caches.open(CACHE_NAME)
             .then((cache) => {
-              return cache.put('./index.json', new Response(JSON.stringify(data)));
+              return cache.put('./index.json', new Response(JSON.stringify(health.data)));
             });
         })
         .then(() => {

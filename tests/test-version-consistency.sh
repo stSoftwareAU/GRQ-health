@@ -64,6 +64,13 @@ else
     fail_test "sw.js STATIC_CACHE_NAME ($SW_STATIC) != run.sh ($VERSION_RUN_SH) — stale static cache will be served"
 fi
 
+SW_HOST_STATUS=$(grep "host-status\.js?v=" "$ROOT_DIR/docs/sw.js" | head -1 | sed "s/.*host-status\.js?v=\([0-9.]*\)['\"].*/\1/")
+if [ "$SW_HOST_STATUS" = "$VERSION_RUN_SH" ]; then
+    pass_test "sw.js host-status.js?v= cache buster matches run.sh ($SW_HOST_STATUS)"
+else
+    fail_test "sw.js host-status.js?v= ($SW_HOST_STATUS) != run.sh ($VERSION_RUN_SH)"
+fi
+
 SW_DASH=$(grep "dashboard\.js?v=" "$ROOT_DIR/docs/sw.js" | head -1 | sed "s/.*dashboard\.js?v=\([0-9.]*\)['\"].*/\1/")
 if [ "$SW_DASH" = "$VERSION_RUN_SH" ]; then
     pass_test "sw.js dashboard.js?v= cache buster matches run.sh ($SW_DASH)"
@@ -72,7 +79,7 @@ else
 fi
 
 # index.html — three cache busters
-for asset in "styles.css" "dashboard.js" "sw.js"; do
+for asset in "styles.css" "dashboard.js" "host-status.js" "sw.js"; do
     HTML_VER=$(grep "${asset}?v=" "$ROOT_DIR/docs/index.html" | head -1 | sed "s/.*${asset}?v=\([0-9.]*\).*/\1/")
     if [ "$HTML_VER" = "$VERSION_RUN_SH" ]; then
         pass_test "index.html ${asset}?v= matches run.sh ($HTML_VER)"

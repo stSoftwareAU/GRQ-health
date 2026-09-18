@@ -1,13 +1,19 @@
 #!/bin/bash
-# Test for Issue #65: Index.json corruption/removal recovery
-# Verifies that run.sh handles corrupted or missing index.json gracefully
+# Test for Issue #65: health document corruption/removal recovery
+# Verifies that run.sh handles a corrupted or missing health document gracefully
+#
+# Issue #213 moved the document a heartbeat writes from the fleet-wide
+# docs/index.json to this host's own docs/host-status/<HOST>.json, so every
+# check below now targets that file. The Issue #65 behaviours are unchanged:
+# missing, corrupted and empty documents are all recovered, the recovery is
+# reported rather than silent, and the result is always valid JSON.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_SH="$SCRIPT_DIR/../run.sh"
 
-echo "Testing Issue #65: Index.json integrity and recovery"
+echo "Testing Issue #65: health document integrity and recovery"
 echo "====================================================="
 echo ""
 
@@ -42,6 +48,8 @@ CURRENT_TS="${CURRENT_TS:-1700000000}"
 VERSION="1.0.90"
 USER_STALE_HOURS="${USER_STALE_HOURS:-24}"
 JSON_FILE="${JSON_FILE:-docs/index.json}"
+HOST_STATUS_DIR="${HOST_STATUS_DIR:-docs/host-status}"
+HEALTH_STATE_DIR="${HEALTH_STATE_DIR:-.health-state}"
 
 # Minimal get_system_info that returns valid JSON
 get_system_info() {
@@ -80,8 +88,11 @@ HARNESS_EOF
     chmod +x "${dir}/test_harness.sh"
 }
 
-# Test 1: Missing index.json - should create it fresh
-echo "Test 1: Missing index.json creates a new file..."
+# The document a heartbeat writes (Issue #213).
+HOST_DOC="docs/host-status/TEST-HOST.json"
+
+# Test 1: Missing host document - should create it fresh
+echo "Test 1: Missing host document creates a new file..."
 TEST_DIR="${WORK_DIR}/test1"
 mkdir -p "$TEST_DIR/docs"
 build_harness "$TEST_DIR"
@@ -90,63 +101,67 @@ cd "$TEST_DIR"
 RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
     CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true
 
-if [ -f "docs/index.json" ]; then
-    if jq . docs/index.json > /dev/null 2>&1; then
-        pass_test "Missing index.json: created valid JSON file"
+if [ -f "$HOST_DOC" ]; then
+    if jq . "$HOST_DOC" > /dev/null 2>&1; then
+        pass_test "Missing host document: created valid JSON file"
     else
-        fail_test "Missing index.json: created file but it is invalid JSON"
+        fail_test "Missing host document: created file but it is invalid JSON"
     fi
 else
-    fail_test "Missing index.json: file was not created"
+    fail_test "Missing host document: file was not created"
 fi
 
-# Test 2: Corrupted index.json - should recover and produce valid output
-echo "Test 2: Corrupted index.json is detected and recovered..."
+# Test 2: Corrupted host document - should recover and produce valid output
+echo "Test 2: Corrupted host document is detected and recovered..."
 TEST_DIR="${WORK_DIR}/test2"
 mkdir -p "$TEST_DIR/docs"
 build_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 # Write corrupted JSON
-echo '{"GRQ-1": {"uptime": 1000, BROKEN' > docs/index.json
+mkdir -p docs/host-status
+echo '{"uptime": 1000, BROKEN' > "$HOST_DOC"
 
 OUTPUT=$(RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
     CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true)
 
-if [ -f "docs/index.json" ]; then
-    if jq . docs/index.json > /dev/null 2>&1; then
-        pass_test "Corrupted index.json: recovered to valid JSON"
+if [ -f "$HOST_DOC" ]; then
+    if jq . "$HOST_DOC" > /dev/null 2>&1; then
+        pass_test "Corrupted host document: recovered to valid JSON"
     else
-        fail_test "Corrupted index.json: file is still invalid JSON"
+        fail_test "Corrupted host document: file is still invalid JSON"
     fi
 else
-    fail_test "Corrupted index.json: file was removed instead of recovered"
+    fail_test "Corrupted host document: file was removed instead of recovered"
 fi
 
-# Test 3: Empty index.json - should recover
-echo "Test 3: Empty index.json is handled..."
+# Test 3: Empty host document - should recover
+echo "Test 3: Empty host document is handled..."
 TEST_DIR="${WORK_DIR}/test3"
 mkdir -p "$TEST_DIR/docs"
 build_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 # Write empty file
-true > docs/index.json
+mkdir -p docs/host-status
+true > "$HOST_DOC"
 
 OUTPUT=$(RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
     CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true)
 
-if [ -f "docs/index.json" ]; then
-    if jq . docs/index.json > /dev/null 2>&1; then
-        pass_test "Empty index.json: recovered to valid JSON"
+if [ -f "$HOST_DOC" ]; then
+    if jq . "$HOST_DOC" > /dev/null 2>&1; then
+        pass_test "Empty host document: recovered to valid JSON"
     else
-        fail_test "Empty index.json: file is still invalid"
+        fail_test "Empty host document: file is still invalid"
     fi
 else
-    fail_test "Empty index.json: file was removed instead of recovered"
+    fail_test "Empty host document: file was removed instead of recovered"
 fi
 
 # Test 4: Valid index.json preserves existing hosts
+# Issue #213: the other hosts are preserved by not writing the fleet-wide file
+# at all, and this host's entry is seeded into its own document.
 echo "Test 4: Valid index.json preserves existing hosts..."
 TEST_DIR="${WORK_DIR}/test4"
 mkdir -p "$TEST_DIR/docs"
@@ -170,11 +185,11 @@ RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="test
 if jq . docs/index.json > /dev/null 2>&1; then
     # Check that GRQ-99 still exists
     if jq -e '.["GRQ-99"]' docs/index.json > /dev/null 2>&1; then
-        # Check that TEST-HOST was added
-        if jq -e '.["TEST-HOST"]' docs/index.json > /dev/null 2>&1; then
+        # Check that TEST-HOST got its own document
+        if jq -e '.heart_beat_ts' "$HOST_DOC" > /dev/null 2>&1; then
             pass_test "Valid index.json: existing hosts preserved and new host added"
         else
-            fail_test "Valid index.json: new host was not added"
+            fail_test "Valid index.json: new host document was not written"
         fi
     else
         fail_test "Valid index.json: existing host GRQ-99 was lost"
@@ -195,8 +210,8 @@ echo '{}' > docs/index.json
 RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
     CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true
 
-if jq . docs/index.json > /dev/null 2>&1; then
-    local_ts=$(jq -r '.["TEST-HOST"].heart_beat_ts' docs/index.json 2>/dev/null)
+if jq . "$HOST_DOC" > /dev/null 2>&1; then
+    local_ts=$(jq -r '.heart_beat_ts' "$HOST_DOC" 2>/dev/null)
     if [ -n "$local_ts" ] && [ "$local_ts" != "null" ]; then
         pass_test "Post-write validation: JSON is valid with required fields"
     else
@@ -213,7 +228,8 @@ mkdir -p "$TEST_DIR/docs"
 build_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
-echo 'NOT VALID JSON AT ALL' > docs/index.json
+mkdir -p docs/host-status
+echo 'NOT VALID JSON AT ALL' > "$HOST_DOC"
 
 OUTPUT=$(RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
     CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true)

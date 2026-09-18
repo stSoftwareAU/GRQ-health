@@ -24,8 +24,9 @@ if [ -f "docs/index.html" ]; then
     # Update CSS link
     sed -i.bak "s|styles\.css?v=[0-9.]*|styles.css?v=$VERSION|g" docs/index.html
     
-    # Update JS link
+    # Update JS links
     sed -i.bak "s|dashboard\.js?v=[0-9.]*|dashboard.js?v=$VERSION|g" docs/index.html
+    sed -i.bak "s|host-status\.js?v=[0-9.]*|host-status.js?v=$VERSION|g" docs/index.html
     
     # Update service worker link
     sed -i.bak "s|sw\.js?v=[0-9.]*|sw.js?v=$VERSION|g" docs/index.html
@@ -45,8 +46,9 @@ if [ -f "docs/simple.html" ]; then
     # Update CSS link
     sed -i.bak "s|styles\.css?v=[0-9.]*|styles.css?v=$VERSION|g" docs/simple.html
     
-    # Update JS link
+    # Update JS links
     sed -i.bak "s|dashboard\.js?v=[0-9.]*|dashboard.js?v=$VERSION|g" docs/simple.html
+    sed -i.bak "s|host-status\.js?v=[0-9.]*|host-status.js?v=$VERSION|g" docs/simple.html
     
     # Version display is now dynamic via JavaScript, no need to update static HTML
     
@@ -80,8 +82,9 @@ if [ -f "docs/sw.js" ]; then
     sed -i.bak "s/grq-health-v[0-9.]*/grq-health-v$VERSION/g" docs/sw.js
     sed -i.bak "s/grq-health-static-v[0-9.]*/grq-health-static-v$VERSION/g" docs/sw.js
     
-    # Update dashboard.js reference in cache list
+    # Update script references in the cache list
     sed -i.bak "s|dashboard\.js?v=[0-9.]*|dashboard.js?v=$VERSION|g" docs/sw.js
+    sed -i.bak "s|host-status\.js?v=[0-9.]*|host-status.js?v=$VERSION|g" docs/sw.js
     
     # Clean up backup files
     rm -f docs/sw.js.bak
