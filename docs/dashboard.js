@@ -2020,18 +2020,22 @@ async function loadData() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        await fetchRepoHealth(timestamp, true);
-        await fetchFeedCompletion(timestamp, true);
 
-        // Convert to array of [hostname, data] pairs
+        // Convert to array of [hostname, data] pairs.
+        // Issue #212: this must happen before the repo rows render — a stale
+        // "Vibe Coder:<host>" row is diagnosed from the worker state in the
+        // host record, so rendering first leaves every row as plain "Error".
         allHosts = Object.entries(data);
-        
+
         // Store current data for future comparisons
         previousHosts.clear();
         allHosts.forEach(([hostname, hostData]) => {
             previousHosts.set(hostname, JSON.stringify(hostData));
         });
-        
+
+        await fetchRepoHealth(timestamp, true);
+        await fetchFeedCompletion(timestamp, true);
+
         // Reset the full refresh timer
         lastFullRefresh = Date.now();
 
@@ -2130,6 +2134,12 @@ async function loadDataIncremental() {
             refreshHealthStatuses(allHosts);
             // Update stats
             updateStats(allHosts);
+
+            // Issue #212: the rows carry a diagnosis read from the host
+            // records, so new worker state has to reach them too — a hook that
+            // starts failing must change the row on this refresh, not the next
+            // full reload.
+            renderRepoHealth();
 
             // Update individual changed cards if they're currently visible
             changedHosts.forEach(([hostname, hostData]) => {
