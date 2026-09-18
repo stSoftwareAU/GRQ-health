@@ -23,7 +23,7 @@ fi
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.29"
+VERSION="1.1.30"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -771,13 +771,16 @@ get_system_info() {
         fi
     fi
     
-    # Check if bc is available for calculations
+    # Check if bc is available for calculations.
+    # Issue #214: this function's stdout is captured by update_json and fed to
+    # `jq --argjson`, so every diagnostic must go to stderr — a warning on
+    # stdout corrupts the health document and the update fails.
     if ! command -v bc >/dev/null 2>&1; then
-        echo "Warning: bc not found. Some calculations may be simplified."
-        echo "Installation:"
-        echo "  macOS: brew install bc"
-        echo "  Ubuntu/Debian: sudo apt-get install bc"
-        echo "  Amazon Linux: sudo yum install bc"
+        echo "Warning: bc not found. Some calculations may be simplified." >&2
+        echo "Installation:" >&2
+        echo "  macOS: brew install bc" >&2
+        echo "  Ubuntu/Debian: sudo apt-get install bc" >&2
+        echo "  Amazon Linux: sudo yum install bc" >&2
     fi
     
     # Get load averages (1, 5, 15 minute averages) for detailed breakdown
