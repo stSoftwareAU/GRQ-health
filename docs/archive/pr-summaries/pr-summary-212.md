@@ -47,7 +47,28 @@ counters above the repo list use the same diagnosis, so rows and totals agree.
 
 ## Evidence
 
-EVIDENCE_PLACEHOLDER
+Both screenshots were captured with Playwright MCP against the dashboard served
+from a local static server, using an `index.json` fixture that reproduces the
+GRQ-25 outage: the `Vibe Coder:GRQ-25` row is 1d 6h stale (dead by the 8-hour
+threshold) while its host record says the worker was alive just now and its
+heartbeat hooks have failed 12 times, and `Vibe Coder:GRQ-23` is stale with a
+live worker that has claimed nothing all window.
+
+**Before** — every stale row reads the same `ERROR`, so nothing on the board
+separates a dead worker from a working one whose reporting path is broken:
+
+![Dashboard before: GRQ-23, GRQ-25 and GRQ-3 all read ERROR](docs/evidence/issue-212-before.png)
+
+**After** — the same data, diagnosed. `Vibe Coder:GRQ-25` reads `HOOKS FAILING`
+with the hook's own stderr (`could not fetch …/GRQ-health.git — checkout missing
+after work-volume reset`), `Vibe Coder:GRQ-23` reads `IDLE`, and
+`Vibe Coder:GRQ-3` — stale with no worker state to explain it — correctly stays
+`ERROR`. The counters follow: `4 error` becomes `2 error, 1 warning, 18 good`:
+
+![Dashboard after: GRQ-25 HOOKS FAILING with stderr, GRQ-23 IDLE, GRQ-3 still ERROR](docs/evidence/issue-212-after.png)
+
+`run.sh` is backend shell with no web surface, so it is covered by the extracted
+function tests below rather than a screenshot.
 
 ## Test Plan
 
@@ -66,5 +87,11 @@ EVIDENCE_PLACEHOLDER
   than the row, a healthy row, and a host with no `vibe_coder` block all stay as
   they were; the stats counters follow the diagnosis; the stderr excerpt is
   bounded.
-- `./quality.sh` — 76/76 passed (74 existing + the 2 new suites), JSON valid,
+- Added `tests/test-vibe-coder-row-render-order.sh` (2 assertions) — the
+  diagnosis is read from the host records, so those records have to be in place
+  before the repo rows render. Drives `loadData` and `loadDataIncremental`
+  against stubbed fetches and asserts the GRQ-25 row renders as `Hooks failing`
+  on a full load, and flips from `Error` to `Hooks failing` on an incremental
+  refresh that brings new worker state.
+- `./quality.sh` — 77/77 passed (74 existing + the 3 new suites), JSON valid,
   versions consistent at 1.1.29.
