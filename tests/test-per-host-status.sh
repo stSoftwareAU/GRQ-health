@@ -320,6 +320,201 @@ else
     fail_test "failed write still claimed success"
 fi
 
+# ---------------------------------------------------------------------------
+# Test 9: a manifest render failure leaves the existing manifest untouched
+# ---------------------------------------------------------------------------
+echo "Test 9: manifest render failure does not clobber the existing manifest..."
+TEST_DIR="${WORK_DIR}/test9"
+mkdir -p "$TEST_DIR/docs/host-status"
+cat > "$TEST_DIR/docs/host-status/OTHER-HOST.json" << 'EOF'
+{"host": "OTHER-HOST", "users": {"someone": {"heart_beat_ts": 1699999000, "version": "1.0.90"}}}
+EOF
+printf '%s' '{"hosts":["OTHER-HOST"]}' > "$TEST_DIR/docs/host-status/index.json"
+BEFORE_MANIFEST=$(cat "$TEST_DIR/docs/host-status/index.json")
+# Shadow jq -R specifically, so update_json's own writes still work and only
+# update_host_manifest's render step (the only caller of `jq -R`) fails.
+# shellcheck disable=SC2016
+build_health_harness "$TEST_DIR" 'jq() { if [ "$1" = "-R" ]; then return 1; fi; command jq "$@"; }
+update_json'
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000000") \
+    && HARNESS_STATUS=0 || HARNESS_STATUS=$?
+
+if [ "$HARNESS_STATUS" != "0" ]; then
+    pass_test "manifest render failure exits non-zero"
+else
+    fail_test "manifest render failure reported success"
+fi
+
+if echo "$OUTPUT" | grep -q "could not render"; then
+    pass_test "manifest render failure reports a clear error"
+else
+    fail_test "manifest render failure produced no error message: $OUTPUT"
+fi
+
+AFTER_MANIFEST=$(cat "$TEST_DIR/docs/host-status/index.json")
+if [ "$AFTER_MANIFEST" = "$BEFORE_MANIFEST" ]; then
+    pass_test "existing manifest is left alone when the re-render fails"
+else
+    fail_test "existing manifest was clobbered despite the render failing"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 10: a zero-byte per-host document is recovered, not fatal
+# ---------------------------------------------------------------------------
+echo "Test 10: a zero-byte per-host document is recovered..."
+TEST_DIR="${WORK_DIR}/test10"
+mkdir -p "$TEST_DIR/docs/host-status"
+: > "$TEST_DIR/docs/host-status/TEST-HOST.json"
+build_health_harness "$TEST_DIR"
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000000") \
+    && HARNESS_STATUS=0 || HARNESS_STATUS=$?
+
+if [ "$HARNESS_STATUS" = "0" ]; then
+    pass_test "zero-byte per-host document does not abort the heartbeat"
+else
+    fail_test "zero-byte per-host document aborted the heartbeat: $OUTPUT"
+fi
+
+if jq -e 'type == "object"' "$TEST_DIR/docs/host-status/TEST-HOST.json" > /dev/null 2>&1; then
+    pass_test "recovered document is valid JSON"
+else
+    fail_test "recovered document is not valid JSON"
+fi
+
+RECORDED_TS=$(jq -r '.users.testuser.heart_beat_ts' "$TEST_DIR/docs/host-status/TEST-HOST.json")
+if [ "$RECORDED_TS" = "1700000000" ]; then
+    pass_test "heartbeat is recorded after recovering from a zero-byte document"
+else
+    fail_test "heartbeat was not recorded after recovery (got '$RECORDED_TS')"
+fi
+
+if echo "$OUTPUT" | grep -qi "corrupt"; then
+    pass_test "zero-byte document recovery is reported"
+else
+    fail_test "zero-byte document recovery produced no warning: $OUTPUT"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 11: two hostnames that slug to the same filename are refused
+# ---------------------------------------------------------------------------
+echo "Test 11: a filename collision between two hostnames is refused..."
+TEST_DIR="${WORK_DIR}/test11"
+mkdir -p "$TEST_DIR/docs/host-status"
+build_health_harness "$TEST_DIR"
+run_health_harness "$TEST_DIR" HOSTNAME="GRQ3" USER_KEY="testuser" CURRENT_TS="1700000000" > /dev/null
+BEFORE_COLLISION=$(cat "$TEST_DIR/docs/host-status/GRQ3.json")
+
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="GRQ:3" USER_KEY="testuser" CURRENT_TS="1700000600") \
+    && HARNESS_STATUS=0 || HARNESS_STATUS=$?
+
+if [ "$HARNESS_STATUS" != "0" ]; then
+    pass_test "colliding hostname is refused rather than silently overwriting"
+else
+    fail_test "colliding hostname was accepted and overwrote another host's document"
+fi
+
+if echo "$OUTPUT" | grep -q "already belongs to"; then
+    pass_test "filename collision reports a clear error"
+else
+    fail_test "filename collision produced no error message: $OUTPUT"
+fi
+
+AFTER_COLLISION=$(cat "$TEST_DIR/docs/host-status/GRQ3.json")
+if [ "$AFTER_COLLISION" = "$BEFORE_COLLISION" ]; then
+    pass_test "the first host's document is unchanged after the collision is refused"
+else
+    fail_test "the first host's document was overwritten despite the collision being refused"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 12: host_slug is locale-independent
+# ---------------------------------------------------------------------------
+echo "Test 12: host_slug is locale-independent..."
+TEST_DIR="${WORK_DIR}/test12"
+mkdir -p "$TEST_DIR/docs/host-status"
+build_health_harness "$TEST_DIR" 'host_slug "$HOSTNAME"'
+SLUG=$(run_health_harness "$TEST_DIR" HOSTNAME="café-box" LC_ALL="en_AU.UTF-8" LANG="en_AU.UTF-8")
+if printf '%s' "$SLUG" | grep -Eq "$SAFE_RE"; then
+    pass_test "host_slug produces a dashboard-safe slug for 'café-box' under a non-C locale ('$SLUG')"
+else
+    fail_test "host_slug produced an unsafe slug for 'café-box' under a non-C locale ('$SLUG')"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 13: should_update falls back to the legacy file when no per-host
+# document has been written yet, and prefers the per-host document once one
+# exists — the mixed-fleet migration path.
+# ---------------------------------------------------------------------------
+echo "Test 13: should_update honours the legacy-then-per-host precedence..."
+
+# 13a: corrupt legacy file, no per-host document — read_recorded_user_field
+# swallows the jq failure and reports "unrecorded", so an update is still
+# triggered rather than the corruption wedging the heartbeat forever.
+TEST_DIR="${WORK_DIR}/test13a"
+mkdir -p "$TEST_DIR/docs/host-status"
+build_health_harness "$TEST_DIR" 'should_update && echo "RESULT:0" || echo "RESULT:$?"'
+echo '{"TEST-HOST": BROKEN' > "$TEST_DIR/docs/index.json"
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000000")
+RESULT=$(echo "$OUTPUT" | grep -o 'RESULT:[0-9]*' | tail -1)
+if [ "$RESULT" = "RESULT:0" ]; then
+    pass_test "corrupt legacy file with no per-host document still triggers an update"
+else
+    fail_test "corrupt legacy file with no per-host document did not trigger an update ($OUTPUT)"
+fi
+
+# 13b: no per-host file, legacy is recent and on the current version — no
+# update needed while this host has not migrated yet.
+TEST_DIR="${WORK_DIR}/test13b"
+mkdir -p "$TEST_DIR/docs/host-status"
+build_health_harness "$TEST_DIR" 'should_update && echo "RESULT:0" || echo "RESULT:$?"'
+cat > "$TEST_DIR/docs/index.json" << 'EOF'
+{"TEST-HOST": {"users": {"testuser": {"heart_beat_ts": 1699999000, "version": "1.0.90"}}}}
+EOF
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000000" HEARTBEAT_THRESHOLD_HOURS="4")
+RESULT=$(echo "$OUTPUT" | grep -o 'RESULT:[0-9]*' | tail -1)
+if [ "$RESULT" = "RESULT:1" ]; then
+    pass_test "recent legacy heartbeat with current version needs no update while the host has not migrated"
+else
+    fail_test "recent legacy heartbeat with current version incorrectly triggered an update ($OUTPUT)"
+fi
+
+# 13c: a per-host document exists and is authoritative — a stale version there
+# triggers an update even though its heartbeat is recent, ignoring the legacy
+# file entirely.
+TEST_DIR="${WORK_DIR}/test13c"
+mkdir -p "$TEST_DIR/docs/host-status"
+build_health_harness "$TEST_DIR" 'should_update && echo "RESULT:0" || echo "RESULT:$?"'
+cat > "$TEST_DIR/docs/host-status/TEST-HOST.json" << 'EOF'
+{"host": "TEST-HOST", "users": {"testuser": {"heart_beat_ts": 1699999900, "version": "1.0.80"}}}
+EOF
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000000" HEARTBEAT_THRESHOLD_HOURS="4")
+RESULT=$(echo "$OUTPUT" | grep -o 'RESULT:[0-9]*' | tail -1)
+if [ "$RESULT" = "RESULT:0" ]; then
+    pass_test "per-host document with a stale version triggers an update even though the heartbeat is recent"
+else
+    fail_test "per-host document with a stale version did not trigger an update ($OUTPUT)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 14: update_host_manifest fails loud against an empty directory
+# ---------------------------------------------------------------------------
+echo "Test 14: update_host_manifest fails loud with no host documents..."
+TEST_DIR="${WORK_DIR}/test14"
+mkdir -p "$TEST_DIR/docs/host-status"
+build_health_harness "$TEST_DIR" 'update_host_manifest && echo "RESULT:0" || echo "RESULT:$?"'
+OUTPUT=$(run_health_harness "$TEST_DIR" HOSTNAME="TEST-HOST" USER_KEY="testuser" CURRENT_TS="1700000000")
+RESULT=$(echo "$OUTPUT" | grep -o 'RESULT:[0-9]*' | tail -1)
+if [ "$RESULT" = "RESULT:1" ]; then
+    pass_test "update_host_manifest fails loud against an empty host-status directory"
+else
+    fail_test "update_host_manifest did not fail against an empty host-status directory ($OUTPUT)"
+fi
+if echo "$OUTPUT" | grep -q "no host documents found"; then
+    pass_test "empty host-status directory reports a clear error"
+else
+    fail_test "empty host-status directory produced no error message ($OUTPUT)"
+fi
+
 echo ""
 echo "============================================="
 echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
