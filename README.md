@@ -65,6 +65,29 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Health logic**: The dashboard treats the host as unhealthy if **any discovered user** is stale (uses the *oldest* user heartbeat for host health classification).
 - **Logs**: `run.sh` writes only `docs/<HOST>/node-<user>.log` (one file per user). The generic `node.log` is no longer created.
 
+#### Published Logs Are a Tail Only (Issue #211):
+- **Problem**: `run.sh` copied the whole host log (up to ~8 MB) into `docs/<HOST>/` on every heartbeat and git kept every version. The repository reached 897 MB for a 32 MB working tree, and a full clone could no longer finish inside the fleet hooks' 60 s git bound.
+- **Rule**: No history of the logs is needed. `run.sh` publishes only the last 64 KB of `~/logs/node[-<pid>].log`, through `grq_copy_log_tail` in `helpers/log-tail.sh`. A truncated log starts on a line boundary under a one-line `[log truncated by run.sh: …]` marker. The full log stays on the host.
+- **Tuning**: set `GRQ_LOG_TAIL_BYTES` to change the limit. Invalid or zero values fall back to 64 KB.
+- **Unaffected**: `scan_log_errors` still reads the full local log, so exception counts on the dashboard do not change.
+- **Rollout**: each host shrinks its own `docs/<HOST>/node-<user>.log` on its next heartbeat. Do not truncate the committed logs by hand in a PR; every heartbeat rewrites them, so such a branch conflicts with `Develop` within minutes.
+- **Test**: `tests/test-log-tail.sh`.
+
+#### Cloning This Repository (Issue #211):
+Until the old log history is pruned, consumers that only need the current tree should avoid downloading it:
+
+```bash
+git clone --filter=blob:none --single-branch --branch Develop https://github.com/stSoftwareAU/GRQ-health.git
+```
+
+Pruning the history is a one-off maintainer job, run once every host is on `run.sh` 1.1.31 or later. It rewrites `Develop`, so every checkout must be re-cloned afterwards (`run.sh` and the hooks already treat their checkouts as disposable):
+
+```bash
+git clone --mirror https://github.com/stSoftwareAU/GRQ-health.git && cd GRQ-health.git
+git filter-repo --invert-paths --path-glob 'docs/*/node*.log'
+git push --force --mirror
+```
+
 #### Market Feed Repository Freshness:
 - **Manual updates**: Each background task updates `docs/repos.json` immediately after it finishes, recording its latest commit/publish timestamp.
 - **Helper script**: Use `helpers/update_repo_timestamp.sh` to update (or create) the entry for a service.

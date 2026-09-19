@@ -40,6 +40,9 @@ source "$SCRIPT_DIR/health-harness.sh"
 # The document a heartbeat writes (Issue #213).
 HOST_DOC="docs/host-status/TEST-HOST.json"
 
+# Tests 1-3 assert on the host record, not just `jq .`: a plain `jq .` exits 0
+# on an empty file, which hid a fresh-file jq call that lacked -n and wrote
+# nothing when stdin was closed.
 # Test 1: Missing host document - should create it fresh
 echo "Test 1: Missing host document creates a new file..."
 TEST_DIR="${WORK_DIR}/test1"
@@ -48,7 +51,7 @@ build_health_harness "$TEST_DIR"
 
 cd "$TEST_DIR"
 RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
-    CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true
+    CURRENT_TS="$(date +%s)" bash test_harness.sh < /dev/null 2>&1 || true
 
 if [ -f "$HOST_DOC" ]; then
     if jq . "$HOST_DOC" > /dev/null 2>&1; then
@@ -72,7 +75,7 @@ mkdir -p docs/host-status
 echo '{"uptime": 1000, BROKEN' > "$HOST_DOC"
 
 OUTPUT=$(RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
-    CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true)
+    CURRENT_TS="$(date +%s)" bash test_harness.sh < /dev/null 2>&1 || true)
 
 if [ -f "$HOST_DOC" ]; then
     if jq . "$HOST_DOC" > /dev/null 2>&1; then
@@ -96,7 +99,7 @@ mkdir -p docs/host-status
 true > "$HOST_DOC"
 
 OUTPUT=$(RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
-    CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true)
+    CURRENT_TS="$(date +%s)" bash test_harness.sh < /dev/null 2>&1 || true)
 
 if [ -f "$HOST_DOC" ]; then
     if jq . "$HOST_DOC" > /dev/null 2>&1; then
@@ -129,7 +132,7 @@ cat > docs/index.json << 'EXISTING'
 EXISTING
 
 RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
-    CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true
+    CURRENT_TS="$(date +%s)" bash test_harness.sh < /dev/null 2>&1 || true
 
 if jq . docs/index.json > /dev/null 2>&1; then
     # Check that GRQ-99 still exists
@@ -157,7 +160,7 @@ cd "$TEST_DIR"
 echo '{}' > docs/index.json
 
 RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
-    CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true
+    CURRENT_TS="$(date +%s)" bash test_harness.sh < /dev/null 2>&1 || true
 
 if jq . "$HOST_DOC" > /dev/null 2>&1; then
     local_ts=$(jq -r '.heart_beat_ts' "$HOST_DOC" 2>/dev/null)
@@ -181,7 +184,7 @@ mkdir -p docs/host-status
 echo 'NOT VALID JSON AT ALL' > "$HOST_DOC"
 
 OUTPUT=$(RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
-    CURRENT_TS="$(date +%s)" bash test_harness.sh 2>&1 || true)
+    CURRENT_TS="$(date +%s)" bash test_harness.sh < /dev/null 2>&1 || true)
 
 if echo "$OUTPUT" | grep -qi "corrupt\|invalid\|recover"; then
     pass_test "Corruption detected and reported in output"

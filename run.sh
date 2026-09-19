@@ -20,6 +20,13 @@ if [ -f "${BASE_DIR}/helpers/git-retry.sh" ]; then
     . "${BASE_DIR}/helpers/git-retry.sh"
 fi
 
+# Source the log tail helper (Issue #211): only a bounded tail of the host
+# log is ever committed, never the whole file.
+if [ -f "${BASE_DIR}/helpers/log-tail.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${BASE_DIR}/helpers/log-tail.sh"
+fi
+
 # Configuration
 #
 # Issue #213: a heartbeat writes this host's own document under
@@ -33,7 +40,7 @@ HOST_STATUS_DIR="docs/host-status"
 # `git add docs/` in commit_and_push.
 HEALTH_STATE_DIR="${BASE_DIR}/.health-state"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.31"
+VERSION="1.1.32"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -1635,9 +1642,17 @@ main() {
         # Issue #63: Only upload the per-user log file (e.g. node-score.log),
         # not a duplicate node.log. The dashboard links directly to per-user logs.
         LOG_DEST_USER="${LOG_DEST_DIR}/node-${USER_SLUG}.log"
+        # Issue #211: publish only a bounded tail. Copying the whole log on
+        # every heartbeat put ~865 MB of log history into a 32 MB repository.
+        # Without the helper we publish nothing rather than the whole file.
         if [ -f "$LOG_SRC" ]; then
-            mkdir -p "$LOG_DEST_DIR"
-            cp "$LOG_SRC" "$LOG_DEST_USER"
+            if declare -F grq_copy_log_tail >/dev/null 2>&1; then
+                mkdir -p "$LOG_DEST_DIR"
+                grq_copy_log_tail "$LOG_SRC" "$LOG_DEST_USER" \
+                    || echo "Warning: could not publish log tail for $LOG_SRC" >&2
+            else
+                echo "Warning: helpers/log-tail.sh missing — log not published" >&2
+            fi
         fi
         if [ "$NO_GIT" = false ]; then
             commit_and_push
