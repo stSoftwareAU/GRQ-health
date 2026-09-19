@@ -84,25 +84,38 @@ unchanged").
   exits 1 instead of printing "Updated health information" and pushing a stale
   document (observed: `exit=1`).
 
-### No screenshot
+### Screenshots
 
-No browser was available this run, so this is functional rather than visual
-evidence. The exact failures:
+Captured with the container's headless Chromium against
+`python3 -m http.server 8931 --bind 127.0.0.1 --directory docs`, after running
+`bash run.sh --no-git --force` so this host (`vibe-coder-13673`) had a real
+per-host document while every other host still came from the legacy
+`docs/index.json`.
 
-- `ToolSearch` for `browser_navigate` / `browser_take_screenshot` (and for
-  "playwright") returned **"No matching deferred tools found"** — the session's
-  MCP config registers only the `graft` server, so no Playwright MCP tool
-  exists here.
-- `npx playwright install --with-deps chromium` →
-  `sudo: a terminal is required to read the password … Failed to install
-  browsers / Error: Installation process exited with code: 1`.
-- `npx playwright install chromium` (no system deps) → killed at its 420 s cap
-  (exit 143) without populating `~/.cache/ms-playwright`.
+![Dashboard rendered from the manifest plus per-host documents](docs/evidence/issue-213-dashboard-per-host.png)
 
-The rendered surface is unchanged by this diff — no CSS, markup or card layout
-was touched; only where the same host objects are fetched from. The dashboard's
-consumption of that data is covered by `tests/test-host-status-load.sh`, which
-executes the real `docs/host-status.js`, and by the HTTP run above.
+The dashboard loads and renders normally — header, warning section and the four
+fleet stat cards — with **0 console errors** (1 unrelated warning). The network
+log shows the new read path in order, all `200`:
+
+```text
+GET /host-status/index.json?t=…            200   (manifest)
+GET /host-status/vibe-coder-13673.json?t=… 200   (per-host document)
+GET /index.json?t=…                        200   (legacy, merged underneath)
+```
+
+![Host cards showing v1.1.31 from a per-host document beside v1.1.30 from index.json](docs/evidence/issue-213-mixed-version-cards.png)
+
+This is the migration proof in one frame. `vibe-coder-13673` (top card) is
+rendered from its own `docs/host-status/vibe-coder-13673.json` and badges
+**v1.1.31**; directly beneath it GRQ-25, Mac-Ultra-M2 and GRQ-3 are rendered
+from the legacy `docs/index.json` and badge **v1.1.30** — an unmigrated host
+running an older `run.sh` is complete and current, not frozen or dropped. Every
+field a card shows (OS, uptime, disk, memory, CPU load, network, GPU, timezone,
+config, last seen, the per-user heartbeat table) is populated on both shapes.
+
+No CSS, markup or card layout was changed by this diff — only where the same
+host objects are fetched from — which is what the screenshots confirm.
 
 ## Acceptance Criteria
 
