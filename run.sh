@@ -1515,11 +1515,27 @@ copy_log_tail() {
             return 1
         fi
     else
-        # `tail -n +2` drops the (usually partial) first line produced by the
-        # byte-wise cut so the published log only ever contains whole lines.
+        # The byte-wise cut usually lands mid-line, so `tail -n +2` drops that
+        # leading fragment and the published log only ever contains whole lines.
+        # A tail with no newline in it at all (a single very long line) has no
+        # second line to keep, so dropping the fragment would publish a header
+        # over no content — fall back to the raw tail rather than silently
+        # losing it.
+        local body
+        body=$(tail -c "$max_bytes" "$src") || {
+            rm -f "$tmp"
+            echo "ERROR: copy_log_tail: failed to read the tail of ${src}" >&2
+            return 1
+        }
+        local whole_lines
+        whole_lines=$(printf '%s\n' "$body" | tail -n +2)
+        if [ -n "$whole_lines" ]; then
+            body="$whole_lines"
+        fi
+
         if ! {
             printf '%s\n' "=== log truncated: the full log is ${src_bytes} bytes and stays on the host; showing the whole lines within its last ${max_bytes} bytes ==="
-            tail -c "$max_bytes" "$src" | tail -n +2
+            printf '%s\n' "$body"
         } > "$tmp"; then
             rm -f "$tmp"
             echo "ERROR: copy_log_tail: failed to write log tail to ${dest}" >&2

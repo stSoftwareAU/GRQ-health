@@ -221,6 +221,33 @@ else
     pass_test "an empty cap is rejected and nothing is published"
 fi
 
+# --- Test 8: a tail containing no newline still publishes its content ------
+# Dropping the leading partial line is right when the cut lands mid-line, but a
+# log whose last GRQ_LOG_TAIL_BYTES hold no newline at all (one very long line)
+# has no second line to keep. Publishing only the truncation header there would
+# lose the content silently, which is the opposite of what the dashboard needs.
+echo "Test 8: a newline-free tail keeps its content..."
+NO_NEWLINE_SRC="$WORK_DIR/no-newline.log"
+NO_NEWLINE_DEST="$WORK_DIR/out/no-newline-dest.log"
+# 12000 bytes on a single line, no trailing newline, against a 4096-byte cap.
+awk 'BEGIN { while (i++ < 1000) printf "0123456789AB" }' > "$NO_NEWLINE_SRC"
+
+if copy_log_tail "$NO_NEWLINE_SRC" "$NO_NEWLINE_DEST" 4096 >/dev/null; then
+    NO_NEWLINE_BYTES=$(wc -c < "$NO_NEWLINE_DEST" | tr -d '[:space:]')
+    NO_NEWLINE_BODY=$(tail -n +2 "$NO_NEWLINE_DEST")
+    if [ -z "$NO_NEWLINE_BODY" ]; then
+        fail_test "the newline-free tail published a header over no content"
+    elif [ "${#NO_NEWLINE_BODY}" -gt 4096 ]; then
+        fail_test "the newline-free tail exceeded the cap (${#NO_NEWLINE_BODY} bytes)"
+    elif [ "${NO_NEWLINE_SRC:+x}" = "x" ] && ! grep -q "0123456789AB" "$NO_NEWLINE_DEST"; then
+        fail_test "the published tail does not contain the source content"
+    else
+        pass_test "newline-free tail published its last ${#NO_NEWLINE_BODY} bytes (file ${NO_NEWLINE_BYTES} bytes)"
+    fi
+else
+    fail_test "copy_log_tail returned non-zero for a newline-free log"
+fi
+
 echo ""
 echo "=============================================================="
 echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"
