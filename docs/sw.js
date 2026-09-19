@@ -37,6 +37,32 @@ function isHealthDataPath(pathname) {
   return pathname.endsWith('index.json') || pathname.includes('/host-status/');
 }
 
+// The legacy fleet-wide document — every host in one file. The offline snapshot
+// has the same shape, so it can stand in for this request but not for a single
+// host's document, which is only a slice of the fleet.
+function isLegacyFleetPath(pathname) {
+  return pathname.endsWith('index.json') && !pathname.includes('/host-status/');
+}
+
+function offlineHealthResponse() {
+  return new Response(
+    JSON.stringify({
+      error: 'Offline',
+      message: 'No network connection available. Health data cannot be loaded.',
+      timestamp: new Date().toISOString()
+    }),
+    {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Served-From-Cache': 'true',
+        'X-Validation-Warning': 'CACHED-DATA'
+      }
+    }
+  );
+}
+
 // Install event - cache static files
 self.addEventListener('install', (event) => {
   console.log('Service Worker: Installing...');
@@ -149,24 +175,29 @@ self.addEventListener('fetch', (event) => {
               return caches.match('./index.html');
             }
             
+            // Issue #213: offline, serve the merged fleet snapshot the
+            // background sync parked — it is what the dashboard would have
+            // built from the network, so the whole fleet still renders.
+            if (isLegacyFleetPath(url.pathname)) {
+              return caches.match(OFFLINE_SNAPSHOT_URL)
+                .then((snapshot) => {
+                  if (!snapshot) {
+                    return offlineHealthResponse();
+                  }
+                  return snapshot.text().then((body) => new Response(body, {
+                    status: 200,
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'X-Served-From-Cache': 'true',
+                      'X-Validation-Warning': 'CACHED-DATA'
+                    }
+                  }));
+                });
+            }
+
             // For other requests, return a basic offline response
             if (isHealthDataPath(url.pathname)) {
-              return new Response(
-                JSON.stringify({
-                  error: 'Offline',
-                  message: 'No network connection available. Health data cannot be loaded.',
-                  timestamp: new Date().toISOString()
-                }),
-                {
-                  status: 503,
-                  statusText: 'Service Unavailable',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-Served-From-Cache': 'true',
-                    'X-Validation-Warning': 'CACHED-DATA'
-                  }
-                }
-              );
+              return offlineHealthResponse();
             }
             
             throw error;

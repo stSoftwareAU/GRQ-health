@@ -36,6 +36,14 @@ JSON_FILE="${JSON_FILE:-docs/index.json}"
 HOST_STATUS_DIR="${HOST_STATUS_DIR:-docs/host-status}"
 HEALTH_STATE_DIR="${HEALTH_STATE_DIR:-.health-state}"
 
+# should_update reads these from the main script's option parsing and log scan.
+FORCE_UPDATE="${FORCE_UPDATE:-false}"
+HEARTBEAT_THRESHOLD_HOURS="${HEARTBEAT_THRESHOLD_HOURS:-4}"
+exception_count=0
+scan_log_errors() {
+    exception_count="${EXCEPTION_COUNT:-0}"
+}
+
 # Minimal get_system_info that returns valid JSON
 get_system_info() {
     cat << 'SYSINFO'
@@ -66,8 +74,15 @@ SYSINFO
 }
 
 HARNESS_EOF
-    # Extract update_json and the Issue #213 helpers that sit beside it.
-    sed -n '/^# Function to update JSON file/,/^# Function to commit/{ /^# Function to commit/d; p; }' "$RUN_SH" >> "${dir}/test_harness.sh"
+    # Extract the whole health-document writer between run.sh's sentinels, so
+    # renaming a comment cannot silently drop a function out of the harness.
+    if ! grep -q '^# --- BEGIN health-document writer' "$RUN_SH" ||
+        ! grep -q '^# --- END health-document writer' "$RUN_SH"; then
+        echo "ERROR: health-document writer sentinels missing from $RUN_SH" >&2
+        return 1
+    fi
+    sed -n '/^# --- BEGIN health-document writer/,/^# --- END health-document writer/{ /^# --- \(BEGIN\|END\) health-document writer/d; p; }' \
+        "$RUN_SH" >> "${dir}/test_harness.sh"
     echo "${2:-update_json}" >> "${dir}/test_harness.sh"
     chmod +x "${dir}/test_harness.sh"
 }
@@ -82,7 +97,7 @@ run_health_harness() {
     local output
     # `env` is required: assignments that arrive as expanded words are ordinary
     # arguments, not assignments.
-    output=$(cd "$dir" && env RUN_SH="$RUN_SH" "$@" bash test_harness.sh 2>&1) && \
+    output=$(cd "$dir" && env "$@" bash test_harness.sh 2>&1) && \
         LAST_HARNESS_STATUS=0 || LAST_HARNESS_STATUS=$?
     printf '%s\n' "$output"
     # Returned as well as recorded: a caller inside $( ) gets a subshell, so

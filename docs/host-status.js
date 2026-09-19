@@ -232,6 +232,12 @@
         if (legacyError && perHost.listed === 0) {
             throw new Error('No health data available: ' + legacyError.message + ' and the host-status manifest lists no hosts');
         }
+        if (!legacy && perHost.found && Object.keys(perHost.docs).length === 0) {
+            // The manifest listed hosts but every document failed to load. An
+            // empty fleet must fail loud rather than render as "no hosts".
+            throw new Error('No health data available: every host document listed in ' + MANIFEST_URL +
+                ' failed to load' + (errors.length ? ' (' + errors[0] + ')' : ''));
+        }
         if (legacyError && legacyError.status !== 404) {
             // The fleet file is still expected until the migration completes,
             // so a failure that is not "gone" means hosts may be missing.

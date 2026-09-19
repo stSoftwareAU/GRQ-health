@@ -1308,12 +1308,28 @@ update_json() {
     # Issue #65: never update on top of a corrupted document. Keep the
     # corrupted copy for diagnosis — outside docs/, so it is never committed —
     # and rebuild from the migration seed.
-    if [ -f "$host_file" ] && ! jq . "$host_file" > /dev/null 2>&1; then
+    #
+    # `jq .` is not the test to use here: zero inputs is not an error, so an
+    # empty file passes it, seeds an empty document and turns every later
+    # heartbeat into a silent no-op. Require a JSON object instead.
+    if [ -f "$host_file" ] && ! jq -e 'type == "object"' "$host_file" > /dev/null 2>&1; then
         echo "WARNING: $host_file is corrupted or invalid JSON — recovering" >&2
         # One copy, overwritten each time, so repeated corruption cannot fill
         # the disk. It lives outside docs/, so it is never committed.
         cp "$host_file" "${HEALTH_STATE_DIR}/${host_base}.corrupted"
         rm -f "$host_file"
+    fi
+
+    # Two hostnames can sanitise to the same filename (host_slug drops
+    # characters), and the loser would silently overwrite the winner's
+    # heartbeat. Refuse rather than publish one host's data under another's.
+    if [ -f "$host_file" ]; then
+        local recorded_host
+        recorded_host=$(jq -r '.host // empty' "$host_file" 2>/dev/null || printf '')
+        if [ -n "$recorded_host" ] && [ "$recorded_host" != "$HOSTNAME" ]; then
+            echo "ERROR: $host_file already belongs to '$recorded_host', but '$HOSTNAME' maps to the same filename — refusing to overwrite it" >&2
+            return 1
+        fi
     fi
 
     if [ -f "$host_file" ]; then
@@ -1373,8 +1389,9 @@ update_json() {
         return 1
     fi
 
-    # Issue #65: Post-write validation — ensure we never leave a corrupted file
-    if [ -f "$host_file" ] && ! jq . "$host_file" > /dev/null 2>&1; then
+    # Issue #65: Post-write validation — ensure we never leave a corrupted file.
+    # Same reasoning as the pre-check: an empty file is not valid JSON here.
+    if [ ! -f "$host_file" ] || ! jq -e 'type == "object"' "$host_file" > /dev/null 2>&1; then
         echo "ERROR: Post-write validation failed — $host_file is invalid" >&2
         if [ -f "$backup_file" ]; then
             echo "Restoring from backup" >&2
@@ -1398,12 +1415,14 @@ update_json() {
 # (SAFE_HOST_NAME in docs/host-status.js): it starts with an alphanumeric
 # character and is at most 64 characters long. A name this function can emit
 # but the dashboard would reject is a host that silently disappears.
+# LC_ALL=C on every tr: under a UTF-8 locale [:alnum:] matches accented letters,
+# which would survive into a filename the dashboard's validator then rejects.
 host_slug() {
     local slug
-    slug="$(printf '%s' "${1:-}" | tr ' ' '_' | tr -cd '[:alnum:]._-')"
+    slug="$(printf '%s' "${1:-}" | LC_ALL=C tr ' ' '_' | LC_ALL=C tr -cd '[:alnum:]._-')"
     slug="${slug//../_}"
     # Drop leading characters until the name starts with an alphanumeric one.
-    while [ -n "$slug" ] && [ -z "$(printf '%s' "${slug%"${slug#?}"}" | tr -cd '[:alnum:]')" ]; do
+    while [ -n "$slug" ] && [ -z "$(printf '%s' "${slug%"${slug#?}"}" | LC_ALL=C tr -cd '[:alnum:]')" ]; do
         slug="${slug#?}"
     done
     if [ -z "$slug" ]; then
@@ -1457,13 +1476,30 @@ update_host_manifest() {
         return 1
     fi
 
-    rendered=$(printf '%s\n' "${names[@]}" | LC_ALL=C sort | jq -R . | jq -s '{hosts: .}')
+    # Checked, not assumed: this function is called as `update_host_manifest ||
+    # return 1`, which disables errexit for the whole call, so a failing jq here
+    # would otherwise render an empty manifest and report success.
+    if ! rendered=$(printf '%s\n' "${names[@]}" | LC_ALL=C sort | jq -R . | jq -s '{hosts: .}'); then
+        echo "ERROR: could not render ${manifest} — leaving the existing manifest alone" >&2
+        return 1
+    fi
+    if ! printf '%s' "$rendered" | jq -e '(.hosts | type == "array") and (.hosts | length > 0)' > /dev/null 2>&1; then
+        echo "ERROR: refusing to write an empty host list to ${manifest}" >&2
+        return 1
+    fi
+
     if [ -f "$manifest" ] && [ "$(cat "$manifest")" = "$rendered" ]; then
         return 0  # Unchanged — do not touch the file, so nothing is committed
     fi
 
-    printf '%s\n' "$rendered" > "$manifest"
+    # Written through a temporary file: a half-written manifest is a dashboard
+    # that lists no hosts.
+    local manifest_tmp="${HEALTH_STATE_DIR}/host-manifest.tmp"
+    mkdir -p "$HEALTH_STATE_DIR"
+    printf '%s\n' "$rendered" > "$manifest_tmp"
+    mv "$manifest_tmp" "$manifest"
 }
+# --- END health-document writer ---
 
 # Function to commit and push changes
 #
