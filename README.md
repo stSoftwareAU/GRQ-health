@@ -63,7 +63,7 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
 - **Storage**: `docs/index.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
 - **Health logic**: The dashboard treats the host as unhealthy if **any discovered user** is stale (uses the *oldest* user heartbeat for host health classification).
-- **Logs**: `run.sh` writes only `docs/<HOST>/node-<user>.log` (one file per user). The generic `node.log` is no longer created.
+- **Logs**: `run.sh` writes only `docs/<HOST>/node-<user>.log` (one file per user), and only the last `GRQ_LOG_TAIL_BYTES` (default 64 KiB) of it — see [Repository Size and Log Retention](#repository-size-and-log-retention). The generic `node.log` is no longer created.
 
 #### Market Feed Repository Freshness:
 - **Manual updates**: Each background task updates `docs/repos.json` immediately after it finishes, recording its latest commit/publish timestamp.
@@ -118,7 +118,9 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 
 1. **Clone the repository**:
    ```bash
-   git clone <your-repo-url>
+   # Blobless clone: the tree is ~32 MB, the accumulated history is not.
+   # See "Repository Size and Log Retention" below.
+   git clone --filter=blob:none <your-repo-url>
    cd GRQ-health
    ```
 
@@ -164,7 +166,8 @@ The script performs the following operations:
 2. **Health Check Logic**:
    - Checks if the last heartbeat was more than 12 hours ago
    - Only updates if an update is needed (prevents unnecessary writes)
-   - Creates backup of existing JSON file before updates
+   - Creates a backup of the existing JSON file before updates, in
+     `.grq-health/` rather than in the published `docs/` tree (Issue #211)
 
 3. **Data Storage**:
    - Updates `docs/index.json` with current host information
@@ -665,6 +668,7 @@ You can modify the following variables in `run.sh`:
 - `HEARTBEAT_THRESHOLD_HOURS`: How often to update the heartbeat (default: 8 hours)
 - `USER_STALE_HOURS_DEFAULT`: How long before a user is marked as stale (default: 24 hours)
 - `JSON_FILE`: Path to the JSON data file (default: docs/index.json)
+- `GRQ_LOG_TAIL_BYTES_DEFAULT`: Bytes of host log published per heartbeat (default: 65536); override per host via the environment variable `GRQ_LOG_TAIL_BYTES`
 
 ### Heartbeat vs Stale Threshold
 
@@ -676,6 +680,95 @@ You can modify the following variables in `run.sh`:
 If processes run hourly but the heartbeat only updates every 8 hours, marking a user as stale after exactly 8 hours would cause false positives. The default stale threshold of 24 hours (3x the heartbeat threshold) provides adequate margin for timing variations.
 
 You can override the stale threshold per-host via the environment variable `GRQ_USER_STALE_HOURS`.
+
+## Repository Size and Log Retention
+
+Every host commits into this repository on every heartbeat, so what a heartbeat
+writes decides what every consumer downloads on every clone. Before Issue #211
+each heartbeat committed the whole host log (up to 7.9 MB), which grew the pack
+to 897 MB for a 32 MB working tree.
+
+### What a heartbeat publishes
+
+```mermaid
+flowchart LR
+    A["Host log<br/>~/logs/node-PID.log<br/>(unbounded)"] --> B{"copy_log_tail<br/>last GRQ_LOG_TAIL_BYTES"}
+    B -->|tail unchanged| C["No write<br/>no blob, no commit"]
+    B -->|tail changed| D["docs/HOST/node-USER.log<br/>(&lt;= 64 KiB)"]
+    D --> E["git add docs/ + push"]
+    E --> F["Dashboard log viewer"]
+```
+
+- **Only the tail is published.** `run.sh` copies the last
+  `GRQ_LOG_TAIL_BYTES` bytes (default 65536) into `docs/<HOST>/node-<user>.log`,
+  with a header line recording that the log was truncated. The log viewer
+  renders whatever it is given, so lines older than that tail are no longer
+  visible from the dashboard — they stay in the full log on the host.
+- **An unchanged tail is not rewritten.** An idle host adds no blob at all.
+- **A failed publish is loud.** `run.sh` still pushes the heartbeat (so the host
+  is not read as dead) and then exits non-zero, rather than reporting success.
+
+### What a heartbeat no longer publishes
+
+Recovery artefacts are host-local diagnostics, not dashboard content, so they
+are written **outside** the published tree and are never committed:
+
+| artefact | before | now |
+| --- | --- | --- |
+| backup taken before each `docs/index.json` update | `docs/index.json.bak`, committed every heartbeat (a second full-size JSON blob) | `.grq-health/index.json.bak`, ignored |
+| copy kept of a corrupted `docs/index.json` | `docs/index.json.corrupted.<ts>`, committed and never pruned | `.grq-health/index.json.corrupted.<ts>`, ignored |
+
+Override the directory with `GRQ_BACKUP_DIR`; it must stay outside `docs/`,
+because the heartbeat stages the whole `docs/` tree. A backup that cannot be
+written fails the heartbeat loudly rather than updating `docs/index.json` on
+the strength of a backup that does not exist.
+
+`.gitignore` also carries the old `docs/` artefact paths, so once they are
+untracked nothing can stage them again. The `docs/index.json.bak` committed
+before this change is deliberately left tracked: an ignore rule has no effect on
+an already-tracked file, and every host still on the older `run.sh` rewrites it,
+so deleting it here would conflict with `Develop` within minutes. It simply
+stops changing as the fleet picks up this `run.sh`, and the pending history
+compaction below removes it for good.
+
+### Cloning
+
+The accumulated history is far larger than the tree. Consumers that only need
+the current state should clone blobless:
+
+```bash
+git clone --filter=blob:none https://github.com/stSoftwareAU/GRQ-health.git
+```
+
+### Compacting the accumulated history
+
+`helpers/compact-history.sh` replaces the branch with a single snapshot commit
+holding the exact current tree. It is destructive and deliberately manual — it
+dry-runs unless told otherwise:
+
+```bash
+# Report the current pack size and what would change (nothing is modified)
+./helpers/compact-history.sh --repo . --branch Develop
+
+# Rewrite the branch locally
+./helpers/compact-history.sh --repo . --branch Develop --apply
+
+# Rewrite and force-push (--force-with-lease against the SHA it read)
+./helpers/compact-history.sh --repo . --branch Develop --push
+```
+
+The snapshot's tree is verified to match the original tree before anything
+moves, so the published dashboard is byte-identical afterwards. The local branch
+is rewritten first and the force-push runs last, so a refused push never leaves
+the remote ahead of a history the operator no longer has.
+
+Locally the pack only shrinks once nothing still points at the old commits —
+`refs/remotes/origin/<branch>` normally does until the rewrite is pushed and
+re-fetched, so the script says so rather than claiming a saving it cannot
+deliver. **Every host must re-clone after a push**: existing checkouts carry the
+old history and their next `pull --rebase` will fail against the rewritten
+branch. `run.sh` and the Vibe Coder hooks both treat their checkouts as
+disposable.
 
 ## Uptime Monitoring
 

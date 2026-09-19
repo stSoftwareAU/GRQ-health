@@ -25,6 +25,29 @@ JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
 VERSION="1.1.30"
 
+# Host-local recovery artefacts (Issue #211). The backup taken before each
+# index.json update — and any copy kept of a corrupted file — are diagnostics
+# for the host that wrote them, never dashboard content. They live outside the
+# published docs/ tree so `git add docs/` cannot pick them up: committing the
+# backup added a second full-size JSON blob to every heartbeat, and every
+# consumer paid for it on every clone. The directory is hidden, so the
+# repository's ignore rules cover it as well.
+JSON_BACKUP_DIR="${GRQ_BACKUP_DIR:-.grq-health}"
+JSON_BACKUP_FILE="${JSON_BACKUP_DIR}/index.json.bak"
+# Set when a recovery copy could not be written: the heartbeat still goes out,
+# but the run exits non-zero instead of reporting a clean result.
+JSON_ARTEFACT_FAILED=false
+
+# A backup directory inside docs/ would be staged by the heartbeat's
+# `git add docs/`, which is the bug this change removes — reject it loudly
+# rather than quietly re-creating it.
+case "$JSON_BACKUP_DIR" in
+    docs|docs/*|./docs|./docs/*|*/docs|*/docs/*)
+        echo "ERROR: GRQ_BACKUP_DIR must be outside the published docs/ tree (got '${JSON_BACKUP_DIR}')" >&2
+        exit 1
+        ;;
+esac
+
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
 # If processes run hourly and heartbeats update every X hours, marking as stale after exactly X hours
@@ -33,6 +56,16 @@ VERSION="1.1.30"
 # Override via env var: GRQ_USER_STALE_HOURS
 USER_STALE_HOURS_DEFAULT=24
 USER_STALE_HOURS="${GRQ_USER_STALE_HOURS:-$USER_STALE_HOURS_DEFAULT}"
+
+# Bytes of host log published on each heartbeat (Issue #211). Publishing whole
+# multi-megabyte logs on every heartbeat is what grew the repository to 897 MB
+# for a 32 MB tree; only the tail is committed and the full log stays on the
+# host. Override via env var: GRQ_LOG_TAIL_BYTES
+# `${VAR-default}` (not `${VAR:-default}`): an unset override takes the default,
+# but an explicitly empty one reaches copy_log_tail and is rejected there rather
+# than silently becoming the default.
+GRQ_LOG_TAIL_BYTES_DEFAULT=65536
+GRQ_LOG_TAIL_BYTES="${GRQ_LOG_TAIL_BYTES-$GRQ_LOG_TAIL_BYTES_DEFAULT}"
 
 # Parse command line arguments
 FORCE_UPDATE=false
@@ -1245,11 +1278,53 @@ should_update() {
     fi
 }
 
-# Function to update JSON file
+# Function to update JSON file, with its recovery-backup helper
+#
+# Keep a host-local recovery copy of the health JSON (Issue #211).
+#
+# The copy is written outside the published docs/ tree, so the heartbeat's
+# `git add docs/` cannot commit it. Committing the backup doubled the JSON
+# blob every heartbeat wrote, and the dashboard never reads it — only this
+# host does, when an update or a post-write validation fails.
+#
+# Usage: backup_health_json <src> <dest>
+# Returns non-zero (and says why) when the source is missing or the copy
+# cannot be written: a heartbeat must not update index.json believing it has
+# a backup it does not have.
+backup_health_json() {
+    local src="$1"
+    local dest="$2"
+
+    if [ ! -f "$src" ]; then
+        echo "ERROR: backup_health_json: source not found: ${src}" >&2
+        return 1
+    fi
+
+    local dest_dir
+    dest_dir=$(dirname "$dest")
+    if ! mkdir -p "$dest_dir"; then
+        echo "ERROR: backup_health_json: cannot create backup directory: ${dest_dir}" >&2
+        return 1
+    fi
+
+    if ! cp "$src" "$dest"; then
+        echo "ERROR: backup_health_json: failed to copy ${src} to ${dest}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 update_json() {
     local system_info
     system_info=$(get_system_info)
     local file_valid=false
+
+    # Recovery artefacts live outside the published docs/ tree (Issue #211).
+    # The defaults mirror the shipped configuration so the function stays
+    # usable when it is sourced on its own.
+    local backup_dir="${JSON_BACKUP_DIR:-.grq-health}"
+    local backup_file="${JSON_BACKUP_FILE:-${backup_dir}/index.json.bak}"
 
     # Issue #65: Validate existing JSON before updating
     # If the file exists but is corrupted, recover gracefully
@@ -1258,15 +1333,24 @@ update_json() {
             file_valid=true
         else
             echo "WARNING: $JSON_FILE is corrupted or invalid JSON — recovering"
-            # Preserve the corrupted file for diagnosis
-            cp "$JSON_FILE" "${JSON_FILE}.corrupted.$(date +%s)"
+            # Preserve the corrupted file for diagnosis, outside docs/ (Issue #211).
+            # The copy is a diagnostic: recovery goes ahead without it so the host
+            # keeps heart-beating, but the failure is recorded and the run exits
+            # non-zero rather than reporting a clean heartbeat.
+            if ! backup_health_json "$JSON_FILE" "${backup_dir}/index.json.corrupted.$(date +%s)"; then
+                echo "ERROR: could not preserve the corrupted $JSON_FILE for diagnosis — recovering anyway" >&2
+                JSON_ARTEFACT_FAILED=true
+            fi
             rm -f "$JSON_FILE"
         fi
     fi
 
-    # Create backup of the valid file before modifying
+    # Create backup of the valid file before modifying (Issue #211: outside docs/)
     if [ -f "$JSON_FILE" ] && [ "$file_valid" = true ]; then
-        cp "$JSON_FILE" "${JSON_FILE}.bak"
+        if ! backup_health_json "$JSON_FILE" "$backup_file"; then
+            echo "ERROR: could not back up $JSON_FILE before updating it" >&2
+            return 1
+        fi
     fi
 
     # Update or create JSON file
@@ -1312,8 +1396,8 @@ update_json() {
             mv "${JSON_FILE}.tmp2" "$JSON_FILE"
         else
             echo "WARNING: jq update failed — restoring from backup"
-            if [ -f "${JSON_FILE}.bak" ]; then
-                cp "${JSON_FILE}.bak" "$JSON_FILE"
+            if [ -f "$backup_file" ]; then
+                cp "$backup_file" "$JSON_FILE"
             fi
             rm -f "${JSON_FILE}.tmp2"
         fi
@@ -1339,22 +1423,123 @@ update_json() {
            > "$JSON_FILE"
     fi
 
-    # Issue #65: Post-write validation — ensure we never leave a corrupted file
+    # Issue #65: Post-write validation — ensure we never leave a corrupted file.
+    # Issue #211: a file that is still invalid after the restore attempt is a
+    # failure, not an update — say so and return non-zero rather than printing
+    # "Updated health information" over a known-invalid file.
     if [ -f "$JSON_FILE" ]; then
         if ! jq . "$JSON_FILE" > /dev/null 2>&1; then
-            echo "ERROR: Post-write validation failed — $JSON_FILE is invalid"
-            if [ -f "${JSON_FILE}.bak" ]; then
-                echo "Restoring from backup"
-                cp "${JSON_FILE}.bak" "$JSON_FILE"
+            echo "ERROR: Post-write validation failed — $JSON_FILE is invalid" >&2
+            if [ -f "$backup_file" ]; then
+                echo "Restoring from backup ${backup_file}"
+                cp "$backup_file" "$JSON_FILE"
+            else
+                echo "ERROR: no backup at ${backup_file} to restore from" >&2
             fi
+            if ! jq . "$JSON_FILE" > /dev/null 2>&1; then
+                echo "ERROR: $JSON_FILE is still invalid after the restore attempt" >&2
+                rm -f "${JSON_FILE}.tmp" "${JSON_FILE}.tmp2"
+                return 1
+            fi
+            echo "Restored the previous $JSON_FILE — this heartbeat was not recorded" >&2
+            rm -f "${JSON_FILE}.tmp" "${JSON_FILE}.tmp2"
+            return 1
         fi
     fi
 
-    # Clean up temporary files (keep .bak as last-resort recovery)
+    # Clean up temporary files (the recovery backup lives in $backup_dir)
     [ -f "${JSON_FILE}.tmp" ] && rm -f "${JSON_FILE}.tmp"
     [ -f "${JSON_FILE}.tmp2" ] && rm -f "${JSON_FILE}.tmp2"
 
     echo "Updated health information for $HOSTNAME"
+}
+
+# Copy the tail of a host log into the published tree (Issue #211).
+#
+# Committing the whole log on every heartbeat grew the repository to 897 MB
+# for a 32 MB tree, and every consumer paid for it on every clone. Two rules
+# bound that growth:
+#   1. Only the last GRQ_LOG_TAIL_BYTES bytes are published. The log viewer
+#      renders whatever it is given, so older lines are no longer visible from
+#      the dashboard — they stay in the full log on the host.
+#   2. An unchanged tail is left alone, so an idle host adds no blob at all.
+#
+# Usage: copy_log_tail <src> <dest> [max_bytes]
+# Returns non-zero (and says why) when the source is missing or the cap is not
+# a positive integer — a misconfigured cap must fail loud, never silently fall
+# back to publishing the whole log.
+copy_log_tail() {
+    local src="$1"
+    local dest="$2"
+    # `${3-…}` (not `${3:-…}`): an omitted cap takes the shipped default, but an
+    # explicitly empty one is a misconfiguration and is rejected below.
+    local max_bytes="${3-${GRQ_LOG_TAIL_BYTES:-${GRQ_LOG_TAIL_BYTES_DEFAULT:-65536}}}"
+
+    if [ ! -f "$src" ]; then
+        echo "ERROR: copy_log_tail: source log not found: ${src}" >&2
+        return 1
+    fi
+
+    case "$max_bytes" in
+        ''|*[!0-9]*)
+            echo "ERROR: copy_log_tail: tail size must be a positive integer (got '${max_bytes}')" >&2
+            return 1
+            ;;
+    esac
+    if [ "$max_bytes" -le 0 ]; then
+        echo "ERROR: copy_log_tail: tail size must be greater than zero (got '${max_bytes}')" >&2
+        return 1
+    fi
+
+    local dest_dir
+    dest_dir=$(dirname "$dest")
+    if ! mkdir -p "$dest_dir"; then
+        echo "ERROR: copy_log_tail: cannot create destination directory: ${dest_dir}" >&2
+        return 1
+    fi
+
+    local src_bytes
+    src_bytes=$(wc -c < "$src" | tr -d '[:space:]')
+
+    # Stage beside the destination so the publish is an atomic rename, but name
+    # the staging file hidden: the repository ignores dotfiles, so a crash
+    # between the write and the rename cannot strand a committable temp file in
+    # the published tree (Issue #211).
+    local dest_name
+    dest_name=$(basename "$dest")
+    local tmp="${dest_dir}/.${dest_name}.tmp.$$"
+    if [ "$src_bytes" -le "$max_bytes" ]; then
+        if ! cp "$src" "$tmp"; then
+            rm -f "$tmp"
+            echo "ERROR: copy_log_tail: failed to copy ${src} to ${dest}" >&2
+            return 1
+        fi
+    else
+        # `tail -n +2` drops the (usually partial) first line produced by the
+        # byte-wise cut so the published log only ever contains whole lines.
+        if ! {
+            printf '%s\n' "=== log truncated: the full log is ${src_bytes} bytes and stays on the host; showing the whole lines within its last ${max_bytes} bytes ==="
+            tail -c "$max_bytes" "$src" | tail -n +2
+        } > "$tmp"; then
+            rm -f "$tmp"
+            echo "ERROR: copy_log_tail: failed to write log tail to ${dest}" >&2
+            return 1
+        fi
+    fi
+
+    if [ -f "$dest" ] && cmp -s "$tmp" "$dest"; then
+        rm -f "$tmp"
+        echo "Log tail unchanged since the last heartbeat, leaving ${dest} alone"
+        return 0
+    fi
+
+    if ! mv -f "$tmp" "$dest"; then
+        rm -f "$tmp"
+        echo "ERROR: copy_log_tail: failed to publish log tail to ${dest}" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 # Function to commit and push changes
@@ -1491,12 +1676,22 @@ main() {
         # Issue #63: Only upload the per-user log file (e.g. node-score.log),
         # not a duplicate node.log. The dashboard links directly to per-user logs.
         LOG_DEST_USER="${LOG_DEST_DIR}/node-${USER_SLUG}.log"
+        # Issue #211: publish only the tail, and only when it changed.
+        LOG_COPY_FAILED=false
         if [ -f "$LOG_SRC" ]; then
-            mkdir -p "$LOG_DEST_DIR"
-            cp "$LOG_SRC" "$LOG_DEST_USER"
+            if ! copy_log_tail "$LOG_SRC" "$LOG_DEST_USER" "$GRQ_LOG_TAIL_BYTES"; then
+                echo "ERROR: failed to publish the log tail for ${HOSTNAME} from ${LOG_SRC}" >&2
+                LOG_COPY_FAILED=true
+            fi
         fi
         if [ "$NO_GIT" = false ]; then
             commit_and_push
+        fi
+        # The heartbeat itself still went out (so the host is not falsely read
+        # as dead), but a failed log publish or a recovery copy that could not
+        # be written must not exit 0.
+        if [ "$LOG_COPY_FAILED" = true ] || [ "$JSON_ARTEFACT_FAILED" = true ]; then
+            exit 1
         fi
     else
         exit 0

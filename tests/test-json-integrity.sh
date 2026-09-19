@@ -224,6 +224,33 @@ else
     fail_test "No corruption warning in output: $OUTPUT"
 fi
 
+# Test 7: recovery artefacts are kept outside the published docs/ tree (Issue #211)
+echo "Test 7: recovery artefacts are written outside docs/..."
+TEST_DIR="${WORK_DIR}/test7"
+mkdir -p "$TEST_DIR/docs"
+build_harness "$TEST_DIR"
+
+cd "$TEST_DIR"
+# First run over a corrupted file (exercises the .corrupted copy), then a
+# second run over the now-valid file (exercises the pre-update backup).
+echo 'NOT VALID JSON AT ALL' > docs/index.json
+RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
+    CURRENT_TS="$(date +%s)" bash test_harness.sh > /dev/null 2>&1 || true
+RUN_SH="$RUN_SH" JSON_FILE="docs/index.json" HOSTNAME="TEST-HOST" USER_KEY="testuser" \
+    CURRENT_TS="$(date +%s)" bash test_harness.sh > /dev/null 2>&1 || true
+
+STRAY_ARTEFACTS=$(find docs -name '*.bak' -o -name '*.corrupted.*' | sort | tr '\n' ' ')
+BACKUP_COUNT=$(find .grq-health -name 'index.json.bak' 2>/dev/null | wc -l | tr -d '[:space:]')
+CORRUPTED_COUNT=$(find .grq-health -name 'index.json.corrupted.*' 2>/dev/null | wc -l | tr -d '[:space:]')
+
+if [ -n "$STRAY_ARTEFACTS" ]; then
+    fail_test "recovery artefacts written into docs/: ${STRAY_ARTEFACTS}"
+elif [ "$BACKUP_COUNT" -lt 1 ] || [ "$CORRUPTED_COUNT" -lt 1 ]; then
+    fail_test "recovery artefacts missing from .grq-health/ (backup=${BACKUP_COUNT}, corrupted=${CORRUPTED_COUNT})"
+else
+    pass_test "backup and corrupted copies written to .grq-health/, none in docs/"
+fi
+
 # Summary
 echo ""
 echo "Results: $PASS_COUNT passed, $FAIL_COUNT failed"
