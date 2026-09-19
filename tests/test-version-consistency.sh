@@ -88,6 +88,15 @@ for asset in "styles.css" "dashboard.js" "host-status.js" "sw.js"; do
     fi
 done
 
+# simple.html — host-status.js is the shared per-host loader (Issue #213);
+# it must stay in step with run.sh on the mobile view too, not just index.html.
+SIMPLE_HOST_STATUS_VER=$(grep "host-status\.js?v=" "$ROOT_DIR/docs/simple.html" | head -1 | sed "s/.*host-status\.js?v=\([0-9.]*\).*/\1/")
+if [ "$SIMPLE_HOST_STATUS_VER" = "$VERSION_RUN_SH" ]; then
+    pass_test "simple.html host-status.js?v= matches run.sh ($SIMPLE_HOST_STATUS_VER)"
+else
+    fail_test "simple.html host-status.js?v= ($SIMPLE_HOST_STATUS_VER) != run.sh ($VERSION_RUN_SH) — clients will load stale host-status.js"
+fi
+
 echo ""
 echo "==========================================================="
 echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"

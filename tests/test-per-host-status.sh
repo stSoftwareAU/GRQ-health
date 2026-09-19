@@ -199,7 +199,7 @@ else
 fi
 
 if echo "$OUTPUT" | grep -qi "corrupt"; then
-    pass_test "corruption reported on stdout (fails loud)"
+    pass_test "corruption reported (fails loud; captured output combines stdout and stderr)"
 else
     fail_test "corruption was recovered silently"
 fi
