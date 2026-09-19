@@ -2,10 +2,10 @@
 
 ## Summary
 
-A heartbeat rewrote the whole fleet-wide `docs/index.json` (33,721 bytes) to
+A heartbeat rewrote the whole fleet-wide `docs/index.json` (33,718 bytes) to
 change a few fields of one host — roughly 250 commits a day across the fleet.
 `run.sh` now writes only this host's own document, `docs/host-status/<HOST>.json`
-(~1.2–2.1 KB measured), plus `docs/host-status/index.json`, a manifest that is
+(~1.5–2.6 KB measured), plus `docs/host-status/index.json`, a manifest that is
 rebuilt from the directory and written **only when the host list changes**.
 
 `docs/index.json` becomes read-only: it seeds a host's first per-host document
@@ -49,9 +49,9 @@ flowchart LR
 
 | File | Bytes |
 | --- | --- |
-| `docs/index.json` (rewritten by every heartbeat before this change) | 33,721 |
-| `docs/host-status/GRQ-10.json` (seeded from that file's GRQ-10 entry) | 2,139 |
-| `docs/host-status/<HOST>.json` written by a real `run.sh` run | 1,235 |
+| `docs/index.json` (rewritten by every heartbeat before this change) | 33,718 |
+| `docs/host-status/GRQ-10.json` (seeded from that file's GRQ-10 entry) | 2,627 |
+| `docs/host-status/<HOST>.json` written by a real `run.sh` run | 1,496 |
 
 A second heartbeat with an unchanged host list rewrites the host document only —
 the manifest is byte-identical and is not touched
@@ -112,7 +112,11 @@ rendered from its own `docs/host-status/vibe-coder-13673.json` and badges
 from the legacy `docs/index.json` and badge **v1.1.30** — an unmigrated host
 running an older `run.sh` is complete and current, not frozen or dropped. Every
 field a card shows (OS, uptime, disk, memory, CPU load, network, GPU, timezone,
-config, last seen, the per-user heartbeat table) is populated on both shapes.
+config, last seen) is populated on both shapes. The per-user heartbeat table is
+shown only on hosts with 2 or more expected users (`showUserTable` in
+`docs/dashboard.js`) — a pre-existing, shape-agnostic rule, not a migration gap
+— which is why `vibe-coder-13673`, a single-user host, correctly shows no
+table in the screenshot above.
 
 No CSS, markup or card layout was changed by this diff — only where the same
 host objects are fetched from — which is what the screenshots confirm.
@@ -125,15 +129,15 @@ host objects are fetched from — which is what the screenshots confirm.
 - **met** — the naming question settled before the split (`docs/hosts/` holds per-service documents) — evidence: new `docs/host-status/` directory, `docs/hosts/` untouched; README "Per-Host Status Documents (Issue #213)" — reviewer: met
 - **met** — `docs/dashboard.js` fetches the manifest and then the per-host documents instead of one `index.json` — evidence: `docs/dashboard.js` `loadData`/`loadDataIncremental` via `GRQHostStatus.loadHostStatus`; `tests/test-host-status-load.sh` — reviewer: met
 - **met** — `docs/simple.html` does the same — evidence: `docs/simple.html` `checkHealth` — reviewer: met
-- **met** — `docs/sw.js` caching follows the new data paths — evidence: `docs/sw.js` `isHealthDataPath`, versioned `importScripts`, background sync via the shared loader — reviewer: partial — reason: the reviewer found the offline snapshot stored under a key nothing reads and health responses cached unboundedly behind the `?t=` buster; both were fixed after the review (snapshot moved to `OFFLINE_SNAPSHOT_URL`, cache-busted health responses are no longer written through)
-- **met** — migration period: the dashboard reads both sources — evidence: `docs/host-status.js` `mergeHostStatus`; `tests/host-status-load-check.js::legacy-only-fallback, per-host-only, merge-both-sources` — reviewer: partial — reason: the reviewer showed the first implementation merged whole hosts, so on a multi-user host a user still writing `index.json` was shown frozen or dropped; the merge is now per user with the roll-ups recomputed, covered by `tests/host-status-load-check.js::legacy-user-heartbeat-kept, legacy-only-user-not-dropped, aggregates-recomputed`
+- **met** — `docs/sw.js` caching follows the new data paths — evidence: `docs/sw.js` `isHealthDataPath`, versioned `importScripts`, background sync via the shared loader — reviewer: met — reason: the reviewer's original finding (offline snapshot stored under a key nothing reads; health responses cached unboundedly behind the `?t=` buster) is fixed — snapshot moved to `OFFLINE_SNAPSHOT_URL`, cache-busted health responses are no longer written through
+- **met** — migration period: the dashboard reads both sources — evidence: `docs/host-status.js` `mergeHostStatus`; `tests/host-status-load-check.js::legacy-only-fallback, per-host-only, merge-both-sources` — reviewer: met — reason: the reviewer's original finding (the first implementation merged whole hosts, so on a multi-user host a user still writing `index.json` was shown frozen or dropped) is fixed — the merge is now per user with the roll-ups recomputed, covered by `tests/host-status-load-check.js::legacy-user-heartbeat-kept, legacy-only-user-not-dropped, aggregates-recomputed`
 - **partial** — an exit for the migration period — evidence: README "Finishing the migration" — reviewer: missing — reason: it is a documented manual procedure (check every host has a document, then delete `docs/index.json`), not code; nothing automatically retires the legacy file, because deciding a host is migrated rather than dead is a human call
 - **met** — the per-host documents have a JSON syntax gate — evidence: `quality.sh` "Checking JSON syntax in docs/host-status/" — reviewer: missing — reason: the reviewer was right that the gate still only covered the now-unwritten `docs/index.json`; added after the review
 - **unrequested** — hostname sanitisation (`host_slug`) and manifest-entry validation (`SAFE_HOST_NAME`) — reviewer: unrequested — reason: `uname -n` now names a file and a URL path, so it is untrusted input; the two grammars are pinned to each other by `tests/test-per-host-status.sh::Test 7`
 - **unrequested** — recovery copies moved from `docs/` to `.health-state/` — reviewer: unrequested — reason: the old `.bak`/`.corrupted` writes landed inside `docs/` and were committed by `git add docs/`; keeping that for the new document would have re-added the churn this issue removes
 - **unrequested** — a `host` field inside each document — reviewer: unrequested — reason: the filename is a slug, so the document has to name its real hostname for the dashboard to key on
 - **unrequested** — `read_recorded_user_field` (heartbeat cadence read from the per-host document, falling back to the legacy file) — reviewer: unrequested — reason: without it every migrating host would force an update on every run
-- **unrequested** — version bump 1.1.28 → 1.1.29 and `update_version.sh` / `tests/test-version-consistency.sh` extended for the new asset — reviewer: unrequested — reason: repository convention; a cached old `dashboard.js` would not know about the new data source
+- **unrequested** — version bump 1.1.30 → 1.1.31 and `update_version.sh` / `tests/test-version-consistency.sh` extended for the new asset — reviewer: unrequested — reason: repository convention; a cached old `dashboard.js` would not know about the new data source
 - **unrequested** — `tests/health-harness.sh` shared between the two shell suites — reviewer: unrequested — reason: the harness was duplicated across `test-json-integrity.sh` and the new suite; extracted rather than copied
 
 ## Standards Review
@@ -188,4 +192,4 @@ one of them rather than corrupt both.
   disabled.
 - **Modified** `tests/test-version-consistency.sh` — two assertions added for
   the new `host-status.js` cache buster in `index.html` and `sw.js`.
-- **Gate**: `./quality.sh` — 76 tests, 76 passed, 0 failed.
+- **Gate**: `./quality.sh` — 80 tests, 80 passed, 0 failed.
