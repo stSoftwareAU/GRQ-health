@@ -15,6 +15,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_JS="$SCRIPT_DIR/../docs/dashboard.js"
+# Issue #213: index.html loads host-status.js before dashboard.js, so the
+# sandbox has to provide the same loader the page does.
+HOST_STATUS_JS="$SCRIPT_DIR/../docs/host-status.js"
 # shellcheck source=tests/find-deno.sh
 source "$SCRIPT_DIR/find-deno.sh"
 
@@ -31,7 +34,7 @@ fail_test() { echo "  FAIL: $1"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 run_case() {
     local test_name="$1" js_code="$2"
     local output result detail
-    output=$(printf '%s' "$js_code" | "$DENO" run --allow-read="$DASHBOARD_JS" - "$DASHBOARD_JS" 2>&1) || true
+    output=$(printf '%s' "$js_code" | "$DENO" run --allow-read="$DASHBOARD_JS,$HOST_STATUS_JS" - "$DASHBOARD_JS" "$HOST_STATUS_JS" 2>&1) || true
     result=$(echo "$output" | grep "^TEST_RESULT:${test_name}:" | head -1)
     detail=$(echo "$result" | cut -d: -f4-)
     if [[ "$result" == *":PASS:"* ]]; then
@@ -47,6 +50,27 @@ run_case() {
 # renderer so each test can observe what it was given.
 HARNESS=$(cat <<'HARNESS_EOF'
 const source = await Deno.readTextFile(Deno.args[0]);
+const loaderSource = await Deno.readTextFile(Deno.args[1]);
+
+// Issue #213: the dashboard reads its health data through the global that
+// host-status.js publishes. Build that global from the real loader rather than
+// stubbing it, so this test still exercises the shipped read path.
+function hostStatusGlobal() {
+    const scope = {};
+    new Function('self', loaderSource)(scope);
+    return scope.GRQHostStatus;
+}
+
+const notFound = () => Promise.resolve({
+    ok: false, status: 404, json: () => Promise.resolve(null)
+});
+
+// These #212 fixtures describe a fleet that has not migrated yet: no per-host
+// documents published, everything still in the fleet-wide index.json. A 404 on
+// the manifest is exactly what such a fleet serves.
+function legacyOnly(fetchStub) {
+    return (url) => (String(url).startsWith('./host-status/') ? notFound() : fetchStub(url));
+}
 
 const element = {
     innerHTML: '', textContent: '', style: {}, classList: { add() {}, remove() {} },
@@ -62,6 +86,7 @@ const documentStub = {
 function loadDashboard(fetchStub) {
     const factory = new Function(
         'document', 'window', 'fetch', 'setInterval', 'setTimeout', 'console', 'navigator',
+        'GRQHostStatus',
         `${source}
         return {
             loadData, loadDataIncremental, getRepoStatusWithDiagnosis,
@@ -72,11 +97,12 @@ function loadDashboard(fetchStub) {
     return factory(
         documentStub,
         { addEventListener() {}, location: { href: '' } },
-        fetchStub,
+        legacyOnly(fetchStub),
         () => 0,
         () => 0,
         { log() {}, warn() {}, error() {} },
-        { serviceWorker: undefined, onLine: true }
+        { serviceWorker: undefined, onLine: true },
+        hostStatusGlobal()
     );
 }
 
