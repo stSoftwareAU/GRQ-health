@@ -1200,6 +1200,11 @@ scan_log_errors() {
     fi
 }
 
+# --- BEGIN health-document writer (extracted by tests/health-harness.sh) ---
+# Everything between these two markers is lifted verbatim into the test harness,
+# so the tests drive the real code. Move a function out of the block and it
+# stops being exercised — keep the markers around the whole writer.
+
 # Read a value recorded for this user (Issue #213).
 #
 # This host's own document is authoritative. The fleet-wide file is consulted
@@ -1219,8 +1224,11 @@ read_recorded_user_field() {
         fi
     fi
     if [ -z "$value" ] && [ -f "$JSON_FILE" ]; then
-        value=$(jq -r --arg host "$HOSTNAME" --arg user "$USER_KEY" --arg field "$field" \
-            '.[$host].users[$user][$field] // empty' "$JSON_FILE" 2>/dev/null || echo "")
+        if ! value=$(jq -r --arg host "$HOSTNAME" --arg user "$USER_KEY" --arg field "$field" \
+            '.[$host].users[$user][$field] // empty' "$JSON_FILE" 2>/dev/null); then
+            echo "WARNING: could not read $field from $JSON_FILE — treating it as unrecorded" >&2
+            value=""
+        fi
     fi
     printf '%s' "$value"
 }
