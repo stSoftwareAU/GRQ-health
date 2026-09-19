@@ -33,7 +33,7 @@ HOST_STATUS_DIR="docs/host-status"
 # `git add docs/` in commit_and_push.
 HEALTH_STATE_DIR="${BASE_DIR}/.health-state"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.29"
+VERSION="1.1.31"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -222,6 +222,178 @@ collect_gpu_info() {
             fi
         fi
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Issue #212: report the Vibe Coder worker's own state from the host.
+#
+# The "Vibe Coder:<host>" dashboard row is fed only by a heartbeat hook that
+# runs inside the worker's container after a successful issue. When that hook
+# breaks, the row goes red and looks exactly like a dead worker — which is how
+# a GRQ-25 worker completed ~50 issues while the board called it dead. run.sh
+# runs on the same host as the worker and can read what the worker says about
+# itself, so the board can show "hooks failing" or "idle" instead of "dead".
+#
+# Everything below reads the worker's log directory only. Override it with
+# VIBE_LOG_DIR (used by the tests).
+# ---------------------------------------------------------------------------
+
+# Convert a worker/launcher log timestamp to a Unix epoch, or 0 when it cannot
+# be parsed. Accepts both shapes the logs use:
+#   worker.log    "2026-09-16 08:58:34Z"
+#   run_core.log  "2026-09-16T08:58:34Z"
+# Handles GNU date (-d) and BSD/macOS date (-j -f) — never guesses a value.
+vibe_ts_to_epoch() {
+    local stamp="${1:-}"
+    # Normalise to "YYYY-MM-DD HH:MM:SS" in UTC.
+    stamp="${stamp//T/ }"
+    stamp="${stamp%Z}"
+    stamp="${stamp%% }"
+    if [[ ! "$stamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+        echo "0"
+        return 0
+    fi
+    local epoch=""
+    if epoch=$(date -u -d "${stamp}Z" +%s 2>/dev/null); then
+        : # GNU date
+    elif epoch=$(date -u -j -f "%Y-%m-%d %H:%M:%S" "$stamp" +%s 2>/dev/null); then
+        : # BSD date (macOS)
+    else
+        epoch=""
+    fi
+    if [[ "$epoch" =~ ^[0-9]+$ ]]; then
+        echo "$epoch"
+    else
+        echo "0"
+    fi
+}
+
+# Read a "name=<digits>" field out of a single log line, or 0 when absent.
+vibe_log_field() {
+    local line="${1:-}" name="${2:-}"
+    local value
+    value=$(echo "$line" | sed -nE "s/.*(^|[[:space:]])${name}=([0-9]+).*/\2/p" | head -1)
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+        echo "$value"
+    else
+        echo "0"
+    fi
+}
+
+# Count matching lines as a bare JSON integer. grep -c exits 1 on "no match",
+# which under `set -o pipefail` would otherwise append a second zero and emit
+# "00" — not a number any JSON parser accepts.
+vibe_count_matches() {
+    local pattern="${1:-}" file="${2:-}"
+    local count=""
+    [ -r "$file" ] && count=$(grep -cE "$pattern" "$file" 2>/dev/null) || count=""
+    count="${count//[^0-9]/}"
+    echo "$(( 10#${count:-0} ))"
+}
+
+# The stderr of the most recent failing heartbeat hook. A failing callback logs
+#   [<ts>] ERROR: [...] callback success (<path>) failed — exit 1, 189.1s
+# followed by unprefixed stdout:/stderr: continuation lines, so the first
+# stderr: line after the newest failing callback header is the actionable text.
+vibe_hook_last_stderr() {
+    local worker_log="${1:-}"
+    [ -r "$worker_log" ] || return 0
+    awk '
+        /^\[[0-9][0-9][0-9][0-9]-/ {
+            capture = ($0 ~ /callback (success|failure) \([^)]*\) failed/) ? 1 : 0
+            next
+        }
+        capture && /^stderr: / { last = substr($0, 9); capture = 0 }
+        END { if (last != "") print last }
+    ' "$worker_log" 2>/dev/null || true
+}
+
+# Emit the worker state as a JSON object on stdout, or nothing at all when no
+# worker is installed on this host (so non-worker hosts keep a clean record).
+collect_vibe_coder_state() {
+    local log_dir="${VIBE_LOG_DIR:-$HOME/logs}"
+    local worker_log="$log_dir/worker.log"
+    local pid_file="$log_dir/.run.pid"
+    local core_log="$log_dir/run_core.log"
+    local streaks_file="$log_dir/callback-failure-streaks.json"
+
+    if [ ! -e "$worker_log" ] && [ ! -e "$pid_file" ]; then
+        return 0
+    fi
+
+    # --- what the worker says about its own liveness -----------------------
+    local worker_live_ts=0 last_success_ts=0 last_claim_ts=0
+    if [ -r "$worker_log" ]; then
+        local liveness_line
+        liveness_line=$(grep '\[liveness\]' "$worker_log" 2>/dev/null | tail -1 || true)
+        if [ -n "$liveness_line" ]; then
+            worker_live_ts=$(vibe_log_field "$liveness_line" "live_epoch")
+            last_success_ts=$(vibe_log_field "$liveness_line" "last_productive")
+            last_claim_ts=$(vibe_log_field "$liveness_line" "last_idle_claimed")
+        fi
+    fi
+
+    # --- is the launcher still running? ------------------------------------
+    local run_pid_alive="false"
+    if [ -r "$pid_file" ]; then
+        local run_pid
+        run_pid=$(tr -cd '0-9' < "$pid_file" 2>/dev/null || true)
+        if [ -n "$run_pid" ] && kill -0 "$run_pid" 2>/dev/null; then
+            run_pid_alive="true"
+        fi
+    fi
+
+    # --- failing heartbeat hooks -------------------------------------------
+    local hook_success=0 hook_failure=0 hook_since_ts=0 hook_stderr=""
+    if [ -r "$worker_log" ]; then
+        hook_success=$(vibe_count_matches 'callback success \([^)]*\) failed' "$worker_log")
+        hook_failure=$(vibe_count_matches 'callback failure \([^)]*\) failed' "$worker_log")
+
+        local first_failure_line
+        first_failure_line=$(grep -m1 -E 'callback (success|failure) \([^)]*\) failed' "$worker_log" 2>/dev/null || true)
+        if [ -n "$first_failure_line" ]; then
+            local first_stamp
+            first_stamp=$(echo "$first_failure_line" | sed -nE 's/^\[([^]]+)\].*/\1/p')
+            hook_since_ts=$(vibe_ts_to_epoch "$first_stamp")
+        fi
+        hook_stderr=$(vibe_hook_last_stderr "$worker_log")
+    fi
+
+    # The worker publishes its own consecutive callback-failure streak
+    # (stSoftwareAU/VibeCoder#2297). It is authoritative where it exists: it
+    # survives worker-log rotation, which the log scan above does not.
+    if [ -r "$streaks_file" ] && command -v jq >/dev/null 2>&1; then
+        local streak_success streak_failure
+        streak_success=$(jq -r '.events.success.streak // empty' "$streaks_file" 2>/dev/null || true)
+        streak_failure=$(jq -r '.events.failure.streak // empty' "$streaks_file" 2>/dev/null || true)
+        [[ "$streak_success" =~ ^[0-9]+$ ]] && hook_success="$streak_success"
+        [[ "$streak_failure" =~ ^[0-9]+$ ]] && hook_failure="$streak_failure"
+    fi
+
+    # --- when the launcher last reset the work volume ----------------------
+    # A reset wipes the hooks' GRQ-health checkout, which is what broke the
+    # heartbeat on GRQ-25 (GRQ-VibeCoder #31) — so it explains a hook failure.
+    local volume_reset_ts=0
+    if [ -r "$core_log" ]; then
+        local reset_line
+        reset_line=$(grep 'work-volume: recreating ' "$core_log" 2>/dev/null | tail -1 || true)
+        if [ -n "$reset_line" ]; then
+            volume_reset_ts=$(vibe_ts_to_epoch "${reset_line%% *}")
+        fi
+    fi
+
+    # --- emit --------------------------------------------------------------
+    # Bound the stderr excerpt: it is a dashboard hint, not a log viewer.
+    if [ ${#hook_stderr} -gt 300 ]; then
+        hook_stderr="${hook_stderr:0:300}"
+    fi
+    local hook_stderr_escaped
+    hook_stderr_escaped=$(printf '%s' "$hook_stderr" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g')
+
+    printf '{"worker_live_ts": %s, "last_success_ts": %s, "last_claim_ts": %s, "run_pid_alive": %s, "hook_failures": {"success": %s, "failure": %s, "since_ts": %s, "last_stderr": "%s"}, "volume_reset_ts": %s}' \
+        "$worker_live_ts" "$last_success_ts" "$last_claim_ts" "$run_pid_alive" \
+        "$hook_success" "$hook_failure" "$hook_since_ts" "$hook_stderr_escaped" \
+        "$volume_reset_ts"
 }
 
 # Function to get system information
@@ -609,13 +781,16 @@ get_system_info() {
         fi
     fi
     
-    # Check if bc is available for calculations
+    # Check if bc is available for calculations.
+    # Issue #214: this function's stdout is captured by update_json and fed to
+    # `jq --argjson`, so every diagnostic must go to stderr — a warning on
+    # stdout corrupts the health document and the update fails.
     if ! command -v bc >/dev/null 2>&1; then
-        echo "Warning: bc not found. Some calculations may be simplified."
-        echo "Installation:"
-        echo "  macOS: brew install bc"
-        echo "  Ubuntu/Debian: sudo apt-get install bc"
-        echo "  Amazon Linux: sudo yum install bc"
+        echo "Warning: bc not found. Some calculations may be simplified." >&2
+        echo "Installation:" >&2
+        echo "  macOS: brew install bc" >&2
+        echo "  Ubuntu/Debian: sudo apt-get install bc" >&2
+        echo "  Amazon Linux: sudo yum install bc" >&2
     fi
     
     # Get load averages (1, 5, 15 minute averages) for detailed breakdown
@@ -865,7 +1040,20 @@ get_system_info() {
         reporting_warning_count=0
     fi
 
-    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space_escaped\", \"used_disk_percent\": \"$used_disk_percent_escaped\", \"total_disk_gb\": \"$total_disk_gb_escaped\", \"mem_usage_percent\": \"$mem_usage_percent_escaped\", \"total_mem_gb\": \"$total_mem_gb_escaped\", \"cpu_load\": \"$cpu_load_escaped\", \"cpu_cores\": \"$cpu_cores_escaped\", \"cpu_model\": \"$cpu_speed_escaped\", \"machine_type\": \"$machine_type_escaped\", \"cpu_breakdown\": \"$cpu_breakdown_escaped\", \"gpu_load\": \"$gpu_load_escaped\", \"gpu_model\": \"$gpu_model_escaped\", \"gpu_cores\": \"$gpu_cores_escaped\", \"gpu_memory\": \"$gpu_memory_escaped\", \"gpu_breakdown\": \"$gpu_breakdown_escaped\", \"load_averages\": \"$load_averages_escaped\", \"timezone\": \"$timezone_escaped\", \"os_info\": \"$os_info_escaped\", \"os_version\": \"$os_version_escaped\", \"network_status\": \"$network_status_escaped\", \"ip_addresses\": \"$ip_addresses_escaped\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary_escaped\", \"reporting_warning_count\": $reporting_warning_count, \"config_warning\": \"$config_warning_escaped\"}"
+    # Issue #212: publish the Vibe Coder worker's own state when a worker is
+    # installed on this host. A malformed block would poison the whole host
+    # record, so it is validated here and dropped loudly rather than silently.
+    local vibe_coder_json vibe_coder_field=""
+    vibe_coder_json=$(collect_vibe_coder_state)
+    if [ -n "$vibe_coder_json" ]; then
+        if command -v jq >/dev/null 2>&1 && ! echo "$vibe_coder_json" | jq . >/dev/null 2>&1; then
+            echo "WARNING: collect_vibe_coder_state produced invalid JSON — omitting vibe_coder from $HOSTNAME" >&2
+        else
+            vibe_coder_field=", \"vibe_coder\": $vibe_coder_json"
+        fi
+    fi
+
+    echo "{\"uptime\": $uptime_sec, \"free_disk_space\": \"$free_disk_space_escaped\", \"used_disk_percent\": \"$used_disk_percent_escaped\", \"total_disk_gb\": \"$total_disk_gb_escaped\", \"mem_usage_percent\": \"$mem_usage_percent_escaped\", \"total_mem_gb\": \"$total_mem_gb_escaped\", \"cpu_load\": \"$cpu_load_escaped\", \"cpu_cores\": \"$cpu_cores_escaped\", \"cpu_model\": \"$cpu_speed_escaped\", \"machine_type\": \"$machine_type_escaped\", \"cpu_breakdown\": \"$cpu_breakdown_escaped\", \"gpu_load\": \"$gpu_load_escaped\", \"gpu_model\": \"$gpu_model_escaped\", \"gpu_cores\": \"$gpu_cores_escaped\", \"gpu_memory\": \"$gpu_memory_escaped\", \"gpu_breakdown\": \"$gpu_breakdown_escaped\", \"load_averages\": \"$load_averages_escaped\", \"timezone\": \"$timezone_escaped\", \"os_info\": \"$os_info_escaped\", \"os_version\": \"$os_version_escaped\", \"network_status\": \"$network_status_escaped\", \"ip_addresses\": \"$ip_addresses_escaped\", \"exception_count\": $exception_count, \"exception_summary\": \"$exception_summary_escaped\", \"reporting_warning_count\": $reporting_warning_count, \"config_warning\": \"$config_warning_escaped\"${vibe_coder_field}}"
 }
 
 # Function to scan log file for errors and return count

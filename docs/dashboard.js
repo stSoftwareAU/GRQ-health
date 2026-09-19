@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.29";
+const VERSION = "1.1.31";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -475,6 +475,127 @@ function buildWorkerSilentWarning(hostname, repos, nowTs) {
     return `Worker silent: ${info.repoName} ${when} (${info.repoStatus})`;
 }
 
+// ---------------------------------------------------------------------------
+// Issue #212: diagnose a dead-looking "Vibe Coder:<host>" row.
+//
+// The row is fed only by a heartbeat hook that runs inside the worker's
+// container, so it goes red for four unrelated reasons — host down, nothing
+// claimable, hooks broken, or every issue failing — and the board showed the
+// same "error" for all four. run.sh now publishes what the worker says about
+// itself into the host record (see collect_vibe_coder_state in run.sh), so a
+// red row can be reinterpreted:
+//
+//   hooks failing  the worker succeeded after the row went stale and its
+//                  heartbeat hooks are failing — fix the hooks, nobody is dead
+//   idle           the worker is alive but has claimed nothing all window —
+//                  nothing to do
+//
+// Anything we cannot explain stays 'error' — an unexplained silence must stay
+// loud rather than be quietly downgraded.
+// ---------------------------------------------------------------------------
+const VIBE_CODER_ROW_PREFIX = 'Vibe Coder:';
+const VIBE_CODER_DETAIL_MAX_CHARS = 200;
+
+// "Vibe Coder:GRQ-25" -> "GRQ-25". Any other row name yields ''.
+function getVibeCoderHostname(repoName) {
+    if (typeof repoName !== 'string' || !repoName.startsWith(VIBE_CODER_ROW_PREFIX)) {
+        return '';
+    }
+    return repoName.slice(VIBE_CODER_ROW_PREFIX.length).trim();
+}
+
+// Read the vibe_coder block out of the index.json host entries
+// ([[hostname, hostData], ...] as produced by Object.entries).
+function findVibeCoderState(hosts, hostname) {
+    if (!Array.isArray(hosts) || !hostname) return null;
+    const entry = hosts.find((h) => Array.isArray(h) && h[0] === hostname);
+    const state = entry && entry[1] ? entry[1].vibe_coder : null;
+    return state && typeof state === 'object' ? state : null;
+}
+
+// The hour budget the row itself uses before it is called dead.
+function getVibeCoderErrorHours(repo) {
+    if (repo && repo.error_hours !== undefined) return Number(repo.error_hours);
+    if (repo && repo.error_days !== undefined) return Number(repo.error_days) * 24;
+    return 48;
+}
+
+// The worker counts as alive when the host saw it alive inside the same window
+// that declared the row dead, and no earlier than the row's own last report.
+function isVibeCoderWorkerLive(state, repo, nowTs) {
+    if (!state) return false;
+    const liveTs = Number(state.worker_live_ts || 0);
+    if (!Number.isFinite(liveTs) || liveTs <= 0) return false;
+    const now = nowTs || Math.floor(Date.now() / 1000);
+    const errorSeconds = getVibeCoderErrorHours(repo) * 3600;
+    if ((now - liveTs) > errorSeconds) return false;
+    return liveTs >= Number(repo?.last_commit_ts || 0);
+}
+
+// Keep a hook's stderr excerpt to a board-sized hint.
+function truncateDetail(text) {
+    const clean = String(text || '').trim();
+    if (clean.length <= VIBE_CODER_DETAIL_MAX_CHARS) return clean;
+    return `${clean.slice(0, VIBE_CODER_DETAIL_MAX_CHARS - 1)}…`;
+}
+
+// Diagnose one stale row against the worker state, or null to leave it alone.
+function diagnoseVibeCoderRow(repo, state, nowTs) {
+    if (!repo || !state) return null;
+    const now = nowTs || Math.floor(Date.now() / 1000);
+    // Only a row the board already calls dead is reinterpreted.
+    if (getRepoStatus(repo, now) !== 'error') return null;
+    if (!isVibeCoderWorkerLive(state, repo, now)) return null;
+
+    const rowTs = Number(repo.last_commit_ts || 0);
+    const hookFailures = state.hook_failures || {};
+    const failedSuccessHooks = Number(hookFailures.success || 0);
+    const lastSuccessTs = Number(state.last_success_ts || 0);
+
+    // The worker finished issues after the row last updated, and the hook that
+    // reports them is failing — the reporting path is broken, not the worker.
+    if (failedSuccessHooks > 0 && lastSuccessTs > rowTs) {
+        const stderrText = truncateDetail(hookFailures.last_stderr);
+        const reason = `Worker succeeded ${formatTimestamp(lastSuccessTs)} but ${failedSuccessHooks} heartbeat hook run(s) failed`;
+        return {
+            state: 'hooks-failing',
+            status: 'warning',
+            label: 'Hooks failing',
+            detail: stderrText ? `${reason}: ${stderrText}` : reason
+        };
+    }
+
+    // Alive, but nothing has been claimable for the whole error window.
+    const lastClaimTs = Number(state.last_claim_ts || 0);
+    if (lastClaimTs > 0 && lastClaimTs < (now - getVibeCoderErrorHours(repo) * 3600)) {
+        return {
+            state: 'idle',
+            status: 'healthy',
+            label: 'Idle',
+            detail: `Worker alive ${formatTimestamp(Number(state.worker_live_ts || 0))}, nothing claimed since ${formatTimestamp(lastClaimTs)}`
+        };
+    }
+
+    return null;
+}
+
+// Diagnosis for a row, looked up against the host records.
+function getVibeCoderRowDiagnosis(repo, hosts, nowTs) {
+    const hostname = getVibeCoderHostname(repo && repo.name);
+    if (!hostname) return null;
+    return diagnoseVibeCoderRow(repo, findVibeCoderState(hosts, hostname), nowTs);
+}
+
+// The status a row should render with, plus the diagnosis behind it (if any).
+function getRepoStatusWithDiagnosis(repo, hosts, nowTs) {
+    const status = getRepoStatus(repo, nowTs) || 'error';
+    if (status !== 'error') return { status, diagnosis: null };
+    const diagnosis = getVibeCoderRowDiagnosis(repo, hosts, nowTs);
+    return diagnosis
+        ? { status: diagnosis.status, diagnosis }
+        : { status, diagnosis: null };
+}
+
 // Issue #77: Build a safe URL to view the captured failure log. The stored
 // `last_failure_log` path is relative to the docs/ directory (e.g.
 // "logs/Quality/20260417-025717.log"), matching the repo layout produced by
@@ -488,7 +609,7 @@ function getRepoFailureLogUrl(repo) {
     return buildLogViewerUrl(repo.last_failure_log);
 }
 
-function getRepoStats(reposOverride) {
+function getRepoStats(reposOverride, hostsOverride, nowTs) {
     // Accepts an optional array of repos (used by tests). Falls back to the
     // module-scope repoHealthData populated by fetchRepoHealth at runtime.
     let repos = reposOverride;
@@ -501,9 +622,15 @@ function getRepoStats(reposOverride) {
             return { total: 0, healthy: 0, warning: 0, error: 0, failed: 0 };
         }
     }
+    // Issue #212: the counters must agree with the rows, so a row rendered as
+    // "hooks failing" or "idle" is counted the same way here.
+    let hosts = hostsOverride;
+    if (!Array.isArray(hosts)) {
+        hosts = (typeof allHosts !== 'undefined' && Array.isArray(allHosts)) ? allHosts : [];
+    }
     return repos.reduce((acc, repo) => {
         acc.total += 1;
-        const status = getRepoStatus(repo);
+        const status = getRepoStatusWithDiagnosis(repo, hosts, nowTs).status;
         if (status === 'failed') acc.failed += 1;
         else if (status === 'warning') acc.warning += 1;
         else if (status === 'error') acc.error += 1;
@@ -743,10 +870,20 @@ function renderRepoHealth(errorMessage = null) {
     };
 
     const repoItemsHtml = repos.map((repo) => {
-        // Calculate status from last_commit_ts and last_failure_ts (Issue #77)
-        const status = getRepoStatus(repo) || 'error';
+        // Calculate status from last_commit_ts and last_failure_ts (Issue #77),
+        // then let the worker's own state explain a dead Vibe Coder row
+        // (Issue #212) — "hooks failing" and "idle" need different responses
+        // from "dead", so the board must not call all three the same thing.
+        const resolved = getRepoStatusWithDiagnosis(repo, allHosts);
+        const status = resolved.status;
+        const diagnosis = resolved.diagnosis;
         const repoName = escapeHtml(repo.name || 'Unknown');
-        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+        const statusLabel = diagnosis
+            ? diagnosis.label
+            : status.charAt(0).toUpperCase() + status.slice(1);
+        const diagnosisHtml = diagnosis
+            ? `<div class="repo-diagnosis text-muted repo-diagnosis-${escapeHtml(diagnosis.state)}"><small>${escapeHtml(diagnosis.detail)}</small></div>`
+            : '';
 
         // Issue #77: For failed repos render a "View log" link with tooltip.
         let failureHtml = '';
@@ -779,6 +916,7 @@ function renderRepoHealth(errorMessage = null) {
             <div class="text-end">
                 <span class="${statusBadge(status)} repo-status-badge">${statusLabel}</span>
                 <div class="repo-time">${repo.last_commit_ts > 0 ? `Last commit ${formatTimestamp(repo.last_commit_ts)}` : 'Commit time unavailable'}</div>
+                ${diagnosisHtml}
                 ${repo.error_message ? `<div class="repo-error text-danger"><small>${escapeHtml(repo.error_message)}</small></div>` : ''}
                 ${failureHtml}
             </div>
@@ -1884,18 +2022,22 @@ async function loadData() {
         const health = await GRQHostStatus.loadHostStatus(fetch, timestamp);
         health.errors.forEach(message => console.error('Health data:', message));
         const data = health.data;
-        await fetchRepoHealth(timestamp, true);
-        await fetchFeedCompletion(timestamp, true);
 
-        // Convert to array of [hostname, data] pairs
+        // Convert to array of [hostname, data] pairs.
+        // Issue #212: this must happen before the repo rows render — a stale
+        // "Vibe Coder:<host>" row is diagnosed from the worker state in the
+        // host record, so rendering first leaves every row as plain "Error".
         allHosts = Object.entries(data);
-        
+
         // Store current data for future comparisons
         previousHosts.clear();
         allHosts.forEach(([hostname, hostData]) => {
             previousHosts.set(hostname, JSON.stringify(hostData));
         });
-        
+
+        await fetchRepoHealth(timestamp, true);
+        await fetchFeedCompletion(timestamp, true);
+
         // Reset the full refresh timer
         lastFullRefresh = Date.now();
 
@@ -1993,6 +2135,12 @@ async function loadDataIncremental() {
             refreshHealthStatuses(allHosts);
             // Update stats
             updateStats(allHosts);
+
+            // Issue #212: the rows carry a diagnosis read from the host
+            // records, so new worker state has to reach them too — a hook that
+            // starts failing must change the row on this refresh, not the next
+            // full reload.
+            renderRepoHealth();
 
             // Update individual changed cards if they're currently visible
             changedHosts.forEach(([hostname, hostData]) => {

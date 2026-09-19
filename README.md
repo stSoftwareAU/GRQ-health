@@ -53,6 +53,12 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 - **All exceptions trigger health updates** regardless of heartbeat timing
 - **Excluded**: Lines containing `[MemoryMonitor]` are filtered out before scanning — these are operational cache-clearing messages, not real errors
 
+#### get_system_info stdout contract (Issue #214):
+- **Rule**: `get_system_info()` writes **only** the host JSON document to stdout. Every diagnostic it emits — the "bc not found" dependency warning included — goes to **stderr**.
+- **Why**: `update_json` captures the function with `system_info=$(get_system_info)` and passes the result to `jq --argjson`. Anything else on stdout is prepended to the JSON, `jq` rejects it, and the host's health document is never updated.
+- **Applies to**: every helper `get_system_info` calls (`collect_gpu_info`, `scan_log_errors`, `collect_vibe_coder_state`) — their stdout is captured with the caller's.
+- **Test**: `tests/test-system-info-stdout-json.sh` runs `get_system_info` with `bc` masked off the PATH and asserts stdout still parses as JSON while the warning lands on stderr.
+
 #### Multi-user Hosts (per-user heartbeats):
 - **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
 - **Storage**: `docs/host-status/<HOST>.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
@@ -358,6 +364,44 @@ flowchart LR
 ```
 
 **Vibe Coder 8-hour dead threshold (Issue #112)**: Vibe Coders call `helpers/repos.sh` frequently while alive; the rate limit in `repos.sh` keeps the heartbeat to at most one update per hour. So if the heartbeat is more than 8 hours old, the worker is dead and the dashboard flags it as `error`. The default Vibe Coder configuration is `warning_hours: 4`, `error_hours: 8`.
+
+**Vibe Coder worker state (Issue #212)**: An 8-hour-old heartbeat means the row is *not reporting* — it does not say the worker is dead. `run.sh` runs on the same host as the worker, so it reads the worker's own log directory (`~/logs`, override with `VIBE_LOG_DIR`) and publishes what it finds into the host record in `docs/index.json`:
+
+```json
+"vibe_coder": {
+  "worker_live_ts": 1789682384,
+  "last_success_ts": 1789661507,
+  "last_claim_ts": 1789661107,
+  "run_pid_alive": true,
+  "hook_failures": { "success": 12, "failure": 2, "since_ts": 1789520314,
+                     "last_stderr": "could not fetch https://github.com/stSoftwareAU/GRQ-health.git …" },
+  "volume_reset_ts": 1789538554
+}
+```
+
+| Field | Source on the host |
+| --- | --- |
+| `worker_live_ts`, `last_success_ts`, `last_claim_ts` | the newest `[liveness] … live_epoch= last_productive= last_idle_claimed=` line in `~/logs/worker.log` |
+| `run_pid_alive` | `kill -0` on the PID in `~/logs/.run.pid` |
+| `hook_failures` | `~/logs/callback-failure-streaks.json` when the worker publishes it (stSoftwareAU/VibeCoder#2297), otherwise the `callback … failed` lines in `~/logs/worker.log`; `last_stderr` is always the newest hook stderr |
+| `volume_reset_ts` | the newest `work-volume: recreating` line in `~/logs/run_core.log` — a reset wipes the hooks' checkout, so it explains a hook failure |
+
+The block is omitted entirely on hosts with no worker installed.
+
+The dashboard then reinterprets a **red** `Vibe Coder:<host>` row — and only a red one — when the host saw the worker alive inside the same window that declared the row dead:
+
+```mermaid
+flowchart TD
+    A["Vibe Coder:host row is 'error'"] --> B{"worker_live_ts fresh<br/>within error_hours?"}
+    B -- No --> D["error — the worker really is dead"]
+    B -- Yes --> C{"success hooks failing AND<br/>last_success_ts newer than the row?"}
+    C -- Yes --> E["Hooks failing (warning)<br/>+ the hook's stderr — fix the hooks"]
+    C -- No --> F{"last_claim_ts older than<br/>the error window?"}
+    F -- Yes --> G["Idle (healthy) — nothing to do"]
+    F -- No --> D
+```
+
+Anything that cannot be explained stays `error`: an unexplained silence must stay loud. The counters above the repo list follow the same diagnosis, so the rows and the totals agree.
 
 **Task failure tracking (Issue #76)**: Each repo entry can optionally include failure fields to record the most recent failed run:
 - `last_failure_ts` — Unix timestamp of the last failure

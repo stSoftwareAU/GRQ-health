@@ -1,13 +1,13 @@
 // GRQ Health Dashboard Service Worker
-// Version: 1.1.29
+// Version: 1.1.31
 
 // Issue #213: the health data loader is shared with the dashboard so the
 // service worker syncs the same per-host documents the page reads. Versioned
 // like every other asset, so an updated worker cannot execute a stale loader.
-importScripts('./host-status.js?v=1.1.29');
+importScripts('./host-status.js?v=1.1.31');
 
-const CACHE_NAME = 'grq-health-v1.1.29';
-const STATIC_CACHE_NAME = 'grq-health-static-v1.1.29';
+const CACHE_NAME = 'grq-health-v1.1.31';
+const STATIC_CACHE_NAME = 'grq-health-static-v1.1.31';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
@@ -16,8 +16,8 @@ const STATIC_FILES = [
   './styles.css',
   './theme.css?v=1.1.19',
   './theme.js?v=1.1.19',
-  './host-status.js?v=1.1.29',
-  './dashboard.js?v=1.1.29',
+  './host-status.js?v=1.1.31',
+  './dashboard.js?v=1.1.31',
   './medical-check.png',
   './unhealthy.png',
   './manifest.json',
