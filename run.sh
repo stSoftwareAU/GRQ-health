@@ -30,7 +30,7 @@ fi
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.31"
+VERSION="1.1.32"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -1261,7 +1261,9 @@ update_json() {
     # Issue #65: Validate existing JSON before updating
     # If the file exists but is corrupted, recover gracefully
     if [ -f "$JSON_FILE" ]; then
-        if jq . "$JSON_FILE" > /dev/null 2>&1; then
+        # -e with a type check: a plain `jq .` exits 0 on an empty file, which
+        # then "updated" to another empty file forever.
+        if jq -e 'type == "object"' "$JSON_FILE" > /dev/null 2>&1; then
             file_valid=true
         else
             echo "WARNING: $JSON_FILE is corrupted or invalid JSON — recovering"
@@ -1325,8 +1327,10 @@ update_json() {
             rm -f "${JSON_FILE}.tmp2"
         fi
     else
-        # Create new file
-        jq --arg host "$HOSTNAME" \
+        # Create new file. -n is required: there is no input document, so
+        # without it jq reads stdin — it hangs on a terminal and, with stdin
+        # closed (cron), runs the filter zero times and writes an empty file.
+        jq -n --arg host "$HOSTNAME" \
            --arg user "$USER_KEY" \
            --arg ts "$CURRENT_TS" \
            --arg version "$VERSION" \
@@ -1348,7 +1352,8 @@ update_json() {
 
     # Issue #65: Post-write validation — ensure we never leave a corrupted file
     if [ -f "$JSON_FILE" ]; then
-        if ! jq . "$JSON_FILE" > /dev/null 2>&1; then
+        # -e with a type check: a plain `jq .` exits 0 on an empty file.
+        if ! jq -e 'type == "object"' "$JSON_FILE" > /dev/null 2>&1; then
             echo "ERROR: Post-write validation failed — $JSON_FILE is invalid"
             if [ -f "${JSON_FILE}.bak" ]; then
                 echo "Restoring from backup"
