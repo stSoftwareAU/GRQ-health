@@ -248,6 +248,36 @@ else
     fail_test "copy_log_tail returned non-zero for a newline-free log"
 fi
 
+# --- Test 9: a cut landing exactly on a line boundary keeps every line -----
+# Dropping the leading fragment is right when the cut lands mid-line. When the
+# window starts exactly after a newline every line in it is already whole, so
+# dropping one would throw away a complete, intact line for no reason.
+echo "Test 9: an exact line-boundary cut keeps every whole line..."
+BOUNDARY_SRC="$WORK_DIR/boundary.log"
+BOUNDARY_DEST="$WORK_DIR/out/boundary-dest.log"
+# 100 lines of exactly 48 bytes each (47 characters + newline).
+awk 'BEGIN { for (i = 1; i <= 100; i++) printf "%s%03d\n", "line-padded-to-exactly-fortyseven-chars-x", i }' \
+    > "$BOUNDARY_SRC"
+BOUNDARY_LINE_BYTES=$(head -n 1 "$BOUNDARY_SRC" | wc -c | tr -d '[:space:]')
+# A cap that is an exact multiple of the line length makes the cut land on a
+# line boundary, so the window holds exactly 10 complete lines.
+BOUNDARY_CAP=$((BOUNDARY_LINE_BYTES * 10))
+
+if copy_log_tail "$BOUNDARY_SRC" "$BOUNDARY_DEST" "$BOUNDARY_CAP" >/dev/null; then
+    BOUNDARY_BODY_LINES=$(tail -n +2 "$BOUNDARY_DEST" | wc -l | tr -d '[:space:]')
+    if [ "$BOUNDARY_BODY_LINES" -ne 10 ]; then
+        fail_test "expected 10 whole lines from an exact-boundary cut, got ${BOUNDARY_BODY_LINES}"
+    elif ! tail -n +2 "$BOUNDARY_DEST" | head -n 1 | grep -q '091$'; then
+        fail_test "the oldest whole line in the window was dropped: $(tail -n +2 "$BOUNDARY_DEST" | head -n 1)"
+    elif ! tail -n 1 "$BOUNDARY_DEST" | grep -q '100$'; then
+        fail_test "the newest line is missing: $(tail -n 1 "$BOUNDARY_DEST")"
+    else
+        pass_test "all 10 whole lines kept (line-091 through line-100)"
+    fi
+else
+    fail_test "copy_log_tail returned non-zero for an exact-boundary cut"
+fi
+
 echo ""
 echo "=============================================================="
 echo "Passed: $PASS_COUNT  Failed: $FAIL_COUNT"

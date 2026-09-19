@@ -1515,22 +1515,29 @@ copy_log_tail() {
             return 1
         fi
     else
-        # The byte-wise cut usually lands mid-line, so `tail -n +2` drops that
-        # leading fragment and the published log only ever contains whole lines.
-        # A tail with no newline in it at all (a single very long line) has no
-        # second line to keep, so dropping the fragment would publish a header
-        # over no content — fall back to the raw tail rather than silently
-        # losing it.
         local body
         body=$(tail -c "$max_bytes" "$src") || {
             rm -f "$tmp"
             echo "ERROR: copy_log_tail: failed to read the tail of ${src}" >&2
             return 1
         }
-        local whole_lines
-        whole_lines=$(printf '%s\n' "$body" | tail -n +2)
-        if [ -n "$whole_lines" ]; then
-            body="$whole_lines"
+
+        # The byte-wise cut usually lands mid-line, and that leading fragment is
+        # dropped so the published log only ever contains whole lines. Two cases
+        # must not lose content to that rule:
+        #   - the cut landing exactly on a line boundary, where the first line is
+        #     already whole. Peek at the byte before the window: 10 is a newline.
+        #   - a window holding no newline at all (one very long line), which has
+        #     no second line to keep, so dropping the fragment would publish the
+        #     header over no content.
+        local boundary_byte
+        boundary_byte=$(tail -c "$((max_bytes + 1))" "$src" | od -An -N1 -tu1 | tr -d '[:space:]')
+        if [ "$boundary_byte" != "10" ]; then
+            local whole_lines
+            whole_lines=$(printf '%s\n' "$body" | tail -n +2)
+            if [ -n "$whole_lines" ]; then
+                body="$whole_lines"
+            fi
         fi
 
         if ! {
