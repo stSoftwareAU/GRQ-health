@@ -7,9 +7,15 @@ coverage/
 !.github
 
 # Host-local recovery artefacts (Issue #211). run.sh now writes these outside
-# docs/, but a host still running an older run.sh writes them here — and the
+# docs/, but a host still on an older run.sh writes them here — and the
 # heartbeat stages the whole docs/ tree, so ignore them explicitly.
+# Note: an ignore rule has no effect on an already-tracked path, so the
+# docs/index.json.bak committed before this change stays in the tree until the
+# history compaction removes it. This stops it being re-added once it is gone.
 docs/index.json.bak
 docs/index.json.corrupted.*
-# Staging files stranded in docs/ by an interrupted older run.sh
+# Belt and braces for log staging files. copy_log_tail stages at
+# docs/<HOST>/.node-<user>.log.tmp.<pid>, which the `.*` rule above already
+# covers; this catches an un-hidden staging name should that ever change, so a
+# crash between the write and the rename cannot strand a committable file.
 *.log.tmp.*

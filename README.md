@@ -669,6 +669,9 @@ You can modify the following variables in `run.sh`:
 - `USER_STALE_HOURS_DEFAULT`: How long before a user is marked as stale (default: 24 hours)
 - `JSON_FILE`: Path to the JSON data file (default: docs/index.json)
 - `GRQ_LOG_TAIL_BYTES_DEFAULT`: Bytes of host log published per heartbeat (default: 65536); override per host via the environment variable `GRQ_LOG_TAIL_BYTES`
+- `JSON_BACKUP_DIR`: Where host-local recovery artefacts are written (default: `.grq-health`, outside the published `docs/` tree); override per host via the environment variable `GRQ_BACKUP_DIR`
+
+Both are validated at startup, so a misconfigured host fails immediately rather than on some later heartbeat.
 
 ### Heartbeat vs Stale Threshold
 
@@ -701,12 +704,25 @@ flowchart LR
 
 - **Only the tail is published.** `run.sh` copies the last
   `GRQ_LOG_TAIL_BYTES` bytes (default 65536) into `docs/<HOST>/node-<user>.log`,
-  with a header line recording that the log was truncated. The log viewer
-  renders whatever it is given, so lines older than that tail are no longer
-  visible from the dashboard — they stay in the full log on the host.
+  preceded by a one-line header recording that the log was truncated — so the
+  published file is the cap plus roughly 130 bytes. Only whole lines are kept:
+  the fragment the byte-wise cut leaves at the front is dropped, unless doing so
+  would discard the only content there is. The log viewer renders whatever it is
+  given, so lines older than that tail are no longer visible from the dashboard
+  — they stay in the full log on the host.
 - **An unchanged tail is not rewritten.** An idle host adds no blob at all.
-- **A failed publish is loud.** `run.sh` still pushes the heartbeat (so the host
-  is not read as dead) and then exits non-zero, rather than reporting success.
+- **A failed log publish is loud but not fatal.** The heartbeat is still pushed
+  (so the host is not read as dead) and `run.sh` then exits non-zero, rather
+  than reporting success.
+- **A failed `index.json` write stops the run.** If the backup cannot be taken,
+  or the file is still invalid after a restore, `update_json` returns non-zero
+  and `set -e` aborts before `commit_and_push`. Nothing is pushed, because there
+  is no valid heartbeat to record — the host will go stale, which is the
+  accurate signal.
+
+Error scanning is unaffected: `scan_log_errors` reads the full log under
+`$HOME/logs/`, not the published tail, so truncation cannot hide an exception
+from the dashboard.
 
 ### What a heartbeat no longer publishes
 

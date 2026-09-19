@@ -43,6 +43,12 @@ VERSION="1.0.90"
 USER_STALE_HOURS="${USER_STALE_HOURS:-24}"
 JSON_FILE="${JSON_FILE:-docs/index.json}"
 
+# Issue #211: load the shipped recovery-artefact configuration from run.sh
+# rather than restating it, so the harness exercises the real paths.
+eval "$(grep '^JSON_BACKUP_DIR=' "$RUN_SH")"
+eval "$(grep '^JSON_BACKUP_FILE=' "$RUN_SH")"
+JSON_ARTEFACT_FAILED=false
+
 # Minimal get_system_info that returns valid JSON
 get_system_info() {
     cat << 'SYSINFO'

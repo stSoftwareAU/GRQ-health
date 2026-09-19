@@ -23,7 +23,7 @@ fi
 # Configuration
 JSON_FILE="docs/index.json"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.30"
+VERSION="1.1.31"
 
 # Host-local recovery artefacts (Issue #211). The backup taken before each
 # index.json update — and any copy kept of a corrupted file — are diagnostics
@@ -37,16 +37,6 @@ JSON_BACKUP_FILE="${JSON_BACKUP_DIR}/index.json.bak"
 # Set when a recovery copy could not be written: the heartbeat still goes out,
 # but the run exits non-zero instead of reporting a clean result.
 JSON_ARTEFACT_FAILED=false
-
-# A backup directory inside docs/ would be staged by the heartbeat's
-# `git add docs/`, which is the bug this change removes — reject it loudly
-# rather than quietly re-creating it.
-case "$JSON_BACKUP_DIR" in
-    docs|docs/*|./docs|./docs/*|*/docs|*/docs/*)
-        echo "ERROR: GRQ_BACKUP_DIR must be outside the published docs/ tree (got '${JSON_BACKUP_DIR}')" >&2
-        exit 1
-        ;;
-esac
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
@@ -108,6 +98,35 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Validate the Issue #211 tunables now that --help and --version have had their
+# chance to run. Both are checked on every invocation, not at the point of use:
+# a host with a misconfigured cap and no log file yet would otherwise report a
+# clean heartbeat and only fail on some later run.
+#
+# A backup directory inside the published docs/ tree would be staged by the
+# heartbeat's `git add docs/`, which is the bug this change removes. The script
+# cd's to BASE_DIR, so relative paths resolve there; an unrelated directory that
+# merely happens to be called "docs" (say /var/lib/docs) is fine.
+case "$JSON_BACKUP_DIR" in
+    docs|./docs|docs/*|./docs/*|"${BASE_DIR}/docs"|"${BASE_DIR}/docs/"*)
+        echo "ERROR: GRQ_BACKUP_DIR must be outside the published docs/ tree (got '${JSON_BACKUP_DIR}')" >&2
+        exit 1
+        ;;
+esac
+
+# The cap must be a positive integer. copy_log_tail re-checks it, but it is only
+# reached when a log file exists, so a misconfigured host must fail here too.
+case "$GRQ_LOG_TAIL_BYTES" in
+    ''|*[!0-9]*)
+        echo "ERROR: GRQ_LOG_TAIL_BYTES must be a positive integer (got '${GRQ_LOG_TAIL_BYTES}')" >&2
+        exit 1
+        ;;
+esac
+if [ "$GRQ_LOG_TAIL_BYTES" -le 0 ]; then
+    echo "ERROR: GRQ_LOG_TAIL_BYTES must be greater than zero (got '${GRQ_LOG_TAIL_BYTES}')" >&2
+    exit 1
+fi
 
 # Get current timestamp
 CURRENT_TS=$(date +%s)
@@ -1321,10 +1340,11 @@ update_json() {
     local file_valid=false
 
     # Recovery artefacts live outside the published docs/ tree (Issue #211).
-    # The defaults mirror the shipped configuration so the function stays
-    # usable when it is sourced on its own.
-    local backup_dir="${JSON_BACKUP_DIR:-.grq-health}"
-    local backup_file="${JSON_BACKUP_FILE:-${backup_dir}/index.json.bak}"
+    # Read the shipped configuration rather than re-defaulting it: under
+    # `set -u` an unset JSON_BACKUP_DIR fails here instead of quietly writing
+    # to a second location the startup guard never validated.
+    local backup_dir="$JSON_BACKUP_DIR"
+    local backup_file="$JSON_BACKUP_FILE"
 
     # Issue #65: Validate existing JSON before updating
     # If the file exists but is corrupted, recover gracefully
@@ -1471,9 +1491,10 @@ update_json() {
 copy_log_tail() {
     local src="$1"
     local dest="$2"
-    # `${3-…}` (not `${3:-…}`): an omitted cap takes the shipped default, but an
-    # explicitly empty one is a misconfiguration and is rejected below.
-    local max_bytes="${3-${GRQ_LOG_TAIL_BYTES:-${GRQ_LOG_TAIL_BYTES_DEFAULT:-65536}}}"
+    # `${3-…}` / `${GRQ_LOG_TAIL_BYTES-…}` (not `${…:-…}`) at every level: an
+    # omitted cap takes the shipped default, but an explicitly empty one stays
+    # empty and is rejected below rather than silently becoming the default.
+    local max_bytes="${3-${GRQ_LOG_TAIL_BYTES-$GRQ_LOG_TAIL_BYTES_DEFAULT}}"
 
     if [ ! -f "$src" ]; then
         echo "ERROR: copy_log_tail: source log not found: ${src}" >&2

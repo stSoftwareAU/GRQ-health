@@ -33,8 +33,19 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 # Load the shipped configuration and implementation from run.sh (same pattern
 # as the other run.sh function tests) so the test exercises real code.
-eval "$(grep '^JSON_BACKUP_DIR=' "$RUN_SH" || true)"
-eval "$(grep '^JSON_BACKUP_FILE=' "$RUN_SH" || true)"
+# GRQ_BACKUP_DIR is cleared first: the shipped assignment honours it, so an
+# override in the runner's environment would silently change what is asserted.
+# A missing assignment fails the test rather than falling through to a
+# hardcoded default that would keep passing after the variable was renamed.
+unset GRQ_BACKUP_DIR
+for shipped_var in JSON_BACKUP_DIR JSON_BACKUP_FILE; do
+    shipped_line=$(grep "^${shipped_var}=" "$RUN_SH" || true)
+    if [ -z "$shipped_line" ]; then
+        echo "  FAIL: run.sh no longer defines ${shipped_var}"
+        exit 1
+    fi
+    eval "$shipped_line"
+done
 eval "$(sed -n '/^backup_health_json()/,/^}/p' "$RUN_SH")"
 
 if ! type backup_health_json >/dev/null 2>&1; then
@@ -132,13 +143,32 @@ else
     fail_test "${JSON_BACKUP_DIR:-.grq-health}/ is not ignored — heartbeats would commit it"
 fi
 
-# --- Test 6: a backup directory inside docs/ is refused --------------------
+# --- Test 6: run.sh validates the Issue #211 tunables at startup -----------
 # A backup directory under docs/ would be staged by the heartbeat's
 # `git add docs/`, which is the bug this change removes. run.sh must refuse it
 # before doing any work rather than quietly re-creating the bug.
-echo "Test 6: a GRQ_BACKUP_DIR inside docs/ is refused..."
-REJECT_OUTPUT=$(cd "$REPO_ROOT" && GRQ_BACKUP_DIR="docs/state" bash run.sh --no-git 2>&1 </dev/null || true)
-REJECT_STATUS=$(cd "$REPO_ROOT" && GRQ_BACKUP_DIR="docs/state" bash run.sh --no-git >/dev/null 2>&1 </dev/null; echo $?)
+#
+# run.sh is copied into a sandbox rather than invoked in $REPO_ROOT: these cases
+# exist precisely to catch a regression in the guards, and a regressed guard
+# would let the script run a real heartbeat against the developer's checkout.
+echo "Test 6: run.sh validates the Issue #211 tunables at startup..."
+SANDBOX="$WORK_DIR/sandbox"
+mkdir -p "$SANDBOX/docs" "$SANDBOX/helpers"
+cp "$RUN_SH" "$SANDBOX/run.sh"
+printf '{}\n' > "$SANDBOX/docs/index.json"
+
+# Usage: run_sandboxed <VAR=value> ... — prints the status then the output.
+run_sandboxed() {
+    local status=0
+    local output
+    output=$(cd "$SANDBOX" && env "$@" bash run.sh --no-git 2>&1 </dev/null) || status=$?
+    printf '%s\n' "$status"
+    printf '%s\n' "$output"
+}
+
+REJECT=$(run_sandboxed GRQ_BACKUP_DIR="docs/state")
+REJECT_STATUS=$(printf '%s' "$REJECT" | head -n 1)
+REJECT_OUTPUT=$(printf '%s' "$REJECT" | tail -n +2)
 
 if [ "$REJECT_STATUS" -eq 0 ]; then
     fail_test "run.sh accepted a backup directory inside docs/"
@@ -146,6 +176,39 @@ elif printf '%s' "$REJECT_OUTPUT" | grep -q "GRQ_BACKUP_DIR must be outside"; th
     pass_test "a backup directory inside docs/ is refused with a clear error"
 else
     fail_test "run.sh exited ${REJECT_STATUS} but did not say why: ${REJECT_OUTPUT}"
+fi
+
+# An unrelated directory that merely happens to be called "docs" is legitimate:
+# the guard must reject the published tree, not every path with that name.
+OUTSIDE=$(run_sandboxed GRQ_BACKUP_DIR="/tmp/var-lib-docs-$$")
+OUTSIDE_OUTPUT=$(printf '%s' "$OUTSIDE" | tail -n +2)
+if printf '%s' "$OUTSIDE_OUTPUT" | grep -q "GRQ_BACKUP_DIR must be outside"; then
+    fail_test "an out-of-repo directory named docs was wrongly refused"
+else
+    pass_test "an out-of-repo path containing 'docs' is accepted"
+fi
+
+# A misconfigured cap must fail at startup, not on some later heartbeat that
+# happens to find a log file (the validation inside copy_log_tail is only
+# reached when one exists).
+CAP=$(run_sandboxed GRQ_LOG_TAIL_BYTES="abc")
+CAP_STATUS=$(printf '%s' "$CAP" | head -n 1)
+CAP_OUTPUT=$(printf '%s' "$CAP" | tail -n +2)
+if [ "$CAP_STATUS" -eq 0 ]; then
+    fail_test "run.sh accepted a non-numeric GRQ_LOG_TAIL_BYTES"
+elif printf '%s' "$CAP_OUTPUT" | grep -q "GRQ_LOG_TAIL_BYTES must be a positive integer"; then
+    pass_test "a non-numeric cap is refused at startup, before any heartbeat"
+else
+    fail_test "run.sh exited ${CAP_STATUS} but did not say why: ${CAP_OUTPUT}"
+fi
+
+# --help must still work: the guards run after argument parsing, so a
+# misconfigured tunable must not stop the script explaining itself.
+HELP_STATUS=$(cd "$SANDBOX" && GRQ_BACKUP_DIR="docs/state" bash run.sh --help >/dev/null 2>&1 </dev/null; echo $?)
+if [ "$HELP_STATUS" -ne 0 ]; then
+    fail_test "run.sh --help exited ${HELP_STATUS} with a misconfigured tunable"
+else
+    pass_test "run.sh --help still works with a misconfigured tunable"
 fi
 
 echo ""

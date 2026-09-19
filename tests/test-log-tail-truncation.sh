@@ -28,8 +28,14 @@ fail_test() {
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-# Load the real implementation from run.sh (same pattern as the other
-# run.sh function tests) so the test exercises shipped code.
+# Load the real implementation and its shipped configuration from run.sh (same
+# pattern as the other run.sh function tests) so the test exercises shipped
+# code with the shipped defaults rather than a copy that can drift.
+# GRQ_LOG_TAIL_BYTES is cleared first: the shipped assignment honours it, so an
+# override in the runner's environment would change what is asserted.
+unset GRQ_LOG_TAIL_BYTES
+eval "$(grep '^GRQ_LOG_TAIL_BYTES_DEFAULT=' "$RUN_SH")"
+eval "$(grep '^GRQ_LOG_TAIL_BYTES=' "$RUN_SH")"
 eval "$(sed -n '/^copy_log_tail()/,/^}/p' "$RUN_SH")"
 
 if ! type copy_log_tail >/dev/null 2>&1; then
@@ -124,17 +130,20 @@ STABLE_DEST="$WORK_DIR/out/stable-dest.log"
 printf 'alpha\nbravo\n' > "$STABLE_SRC"
 copy_log_tail "$STABLE_SRC" "$STABLE_DEST" 65536 >/dev/null
 
-# Age the destination so a rewrite is detectable without sleeping.
+# Age the destination so a rewrite is detectable without sleeping, and mark a
+# reference file with the same old timestamp. `find -newer` compares the two
+# mtimes directly, which is portable across BSD and GNU and immune to the
+# locale-dependent column layout of `ls -l`.
+MTIME_REFERENCE="$WORK_DIR/mtime-reference"
 touch -t 200001010000 "$STABLE_DEST"
-BEFORE_MTIME=$(ls -l "$STABLE_DEST" | awk '{print $6, $7, $8}')
+touch -r "$STABLE_DEST" "$MTIME_REFERENCE"
 
 OUTPUT=$(copy_log_tail "$STABLE_SRC" "$STABLE_DEST" 65536)
-AFTER_MTIME=$(ls -l "$STABLE_DEST" | awk '{print $6, $7, $8}')
 
-if [ "$BEFORE_MTIME" = "$AFTER_MTIME" ]; then
-    pass_test "unchanged tail was not rewritten"
+if [ -n "$(find "$STABLE_DEST" -newer "$MTIME_REFERENCE" 2>/dev/null)" ]; then
+    fail_test "unchanged tail was rewritten (mtime moved forward)"
 else
-    fail_test "unchanged tail was rewritten (mtime changed)"
+    pass_test "unchanged tail was not rewritten"
 fi
 
 if echo "$OUTPUT" | grep -qi 'unchanged'; then
