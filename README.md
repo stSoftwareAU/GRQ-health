@@ -38,7 +38,7 @@ A distributed health monitoring system that tracks the status of multiple hosts 
     summary names `firstStage`, `firstExitCode`, `firstHitLine`.
 - **Reporting warnings (Issue #127)**: `[reporting-warning] …` lines are
   counted into a separate `reporting_warning_count` field on the per-user
-  and per-host JSON, surfaced in `docs/index.json` so operators can
+  and per-host JSON, surfaced in `docs/host-status/<HOST>.json` so operators can
   distinguish three states:
   1. Healthy — `exception_count=0`, `reporting_warning_count=0`.
   2. Healthy with transient reporting issues — `exception_count=0`,
@@ -61,7 +61,7 @@ A distributed health monitoring system that tracks the status of multiple hosts 
 
 #### Multi-user Hosts (per-user heartbeats):
 - **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
-- **Storage**: `docs/index.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
+- **Storage**: `docs/host-status/<HOST>.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
 - **Health logic**: The dashboard treats the host as unhealthy if **any discovered user** is stale (uses the *oldest* user heartbeat for host health classification).
 - **Logs**: `run.sh` writes only `docs/<HOST>/node-<user>.log` (one file per user). The generic `node.log` is no longer created.
 
@@ -187,11 +187,14 @@ The script performs the following operations:
 2. **Health Check Logic**:
    - Checks if the last heartbeat was more than 12 hours ago
    - Only updates if an update is needed (prevents unnecessary writes)
-   - Creates backup of existing JSON file before updates
+   - Creates a backup of the existing document before updates, in
+     `.health-state/` at the repository root (outside `docs/`, so recovery
+     copies are never committed)
 
 3. **Data Storage**:
-   - Updates `docs/index.json` with current host information
-   - Uses hostname as the key for each host's data
+   - Updates `docs/host-status/<HOST>.json` with current host information
+   - Writes only this host's document, so a heartbeat commits ~2 KB, not the whole fleet
+   - Refreshes `docs/host-status/index.json` (the manifest) only when the host list changes
    - Maintains timestamp of last heartbeat
 
 4. **Git Integration**:
@@ -242,6 +245,75 @@ The system uses a simple structure where each hostname is a key:
   }
 }
 ```
+
+### Per-Host Status Documents (Issue #213)
+
+A heartbeat used to rewrite the whole fleet-wide `docs/index.json` (~34 KB) to
+change a few fields of one host — roughly 250 commits a day across the fleet.
+`run.sh` now writes only this host's own document:
+
+- `docs/host-status/<HOST>.json` — one host, ~2 KB, the same fields the host's
+  entry in `docs/index.json` used to hold, plus a `host` field naming it.
+- `docs/host-status/index.json` — the manifest, `{"hosts": ["GRQ-3", …]}`,
+  rebuilt from the directory and written **only when the host list changes**.
+
+`docs/index.json` is no longer written by `run.sh`. It is read twice: to seed a
+host's first per-host document (so hand-edited `location`/`emoji` and other
+users' heartbeats survive), and by the dashboard, which merges it underneath the
+per-host documents. Hosts run their own checkout of `run.sh`, so the fleet
+migrates one host at a time and both sources stay live until every host has
+updated.
+
+```mermaid
+flowchart LR
+    subgraph Host["Host running run.sh"]
+        RUN[run.sh heartbeat]
+    end
+    LEGACY[("docs/index.json<br/>legacy, read-only")]
+    DOC[("docs/host-status/HOST.json<br/>~2 KB, written")]
+    MAN[("docs/host-status/index.json<br/>manifest, rarely written")]
+    DASH[dashboard.js / simple.html]
+
+    LEGACY -- "seed on first write" --> RUN
+    RUN --> DOC
+    RUN -- "only when the host list changes" --> MAN
+    MAN -- "which hosts?" --> DASH
+    DOC -- "wins for that host" --> DASH
+    LEGACY -- "hosts not migrated yet" --> DASH
+```
+
+Both pages load the data through `docs/host-status.js`, which fetches the
+manifest, then each listed document, and merges the legacy file underneath.
+Manifest entries are validated as untrusted input — an entry that is not a bare
+filename component is rejected and reported, never fetched. When nothing loads
+at all the loader throws rather than rendering an empty fleet.
+
+The merge is **per user**, not per host. On a multi-user host each unix account
+runs its own checkout, so one user can be writing the per-host document while
+another still writes `docs/index.json`; the `users` maps are merged and the
+newer `heart_beat_ts` wins for a user present in both. The host-level roll-ups
+(`user_count`, `worst_user_heart_beat_ts`, `best_user_heart_beat_ts`,
+`heart_beat_ts`, `exception_count`, `reporting_warning_count`,
+`exception_summary`) are then recomputed from the merged map, so a user who has
+not migrated is never shown as stuck and never silently disappears.
+
+#### Finishing the migration
+
+The legacy file is retired by hand once every host has moved, so the dashboard
+never has to guess:
+
+1. Check that every host in `docs/index.json` also has a document in
+   `docs/host-status/` — compare the manifest's `hosts` array with the keys of
+   `docs/index.json`.
+2. Confirm each of those documents has a recent `heart_beat_ts` (a host that
+   stopped reporting is not migrated, it is dead — mark it dead in the usual
+   way first).
+3. Delete `docs/index.json` and the orphaned `docs/index.json.bak`. The loader
+   treats a missing legacy file as normal: `sources.legacy` becomes `false` and
+   nothing is reported as an error.
+
+Until step 3 happens, `docs/index.json` stays frozen at the moment each host
+migrated — old hosts still rewrite it, migrated ones do not.
 
 ### Repo Freshness JSON (`docs/repos.json`)
 
@@ -583,7 +655,14 @@ measure the rendered line boxes of a `Tinas-MacBook-Air` card.
 
 ## Manual Host Management
 
-You can manually edit `docs/index.json` to add or modify hosts:
+You can manually edit a host's document — `docs/host-status/<HOST>.json` for a
+host that has already reported under Issue #213, or its entry in the legacy
+`docs/index.json` for one that has not. A new host only needs the file; the
+manifest is rebuilt from the directory on the next heartbeat.
+
+The examples below show the entry **as it appears in `docs/index.json`**, keyed
+by hostname. In `docs/host-status/<HOST>.json` the file holds just the inner
+object, with a `"host": "<HOST>"` field added — no hostname key wrapping it.
 
 ### Adding a New Active Host
 ```json
@@ -687,7 +766,8 @@ You can modify the following variables in `run.sh`:
 
 - `HEARTBEAT_THRESHOLD_HOURS`: How often to update the heartbeat (default: 8 hours)
 - `USER_STALE_HOURS_DEFAULT`: How long before a user is marked as stale (default: 24 hours)
-- `JSON_FILE`: Path to the JSON data file (default: docs/index.json)
+- `JSON_FILE`: Path to the legacy fleet-wide JSON file, read-only since Issue #213 (default: docs/index.json)
+- `HOST_STATUS_DIR`: Directory of per-host documents (default: docs/host-status)
 
 ### Heartbeat vs Stale Threshold
 
@@ -719,7 +799,7 @@ This allows uptime monitoring services to check the page title for system health
 
 2. **JSON parsing errors**:
    - Install `jq`: The script will work without it but with limited functionality
-   - Check JSON syntax: `jq . docs/index.json`
+   - Check JSON syntax: `jq . docs/host-status/<HOST>.json`
 
 3. **Git push fails**:
    - Ensure you have write access to the repository

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Health monitoring script for GRQ-health
-# This script checks system health and updates docs/index.json
+# This script checks system health and updates docs/host-status/<HOST>.json
 # Compatible with macOS, Ubuntu, and AWS Linux
 # Automatically skips execution on AWS instances to avoid dead entries
 # All AWS instances in this context are spot/temporary and would create dead entries
@@ -28,7 +28,17 @@ if [ -f "${BASE_DIR}/helpers/log-tail.sh" ]; then
 fi
 
 # Configuration
+#
+# Issue #213: a heartbeat writes this host's own document under
+# docs/host-status/ (~2 KB) instead of rewriting the fleet-wide
+# docs/index.json (~34 KB). The fleet-wide file is now read-only here: it is
+# the migration seed for a host's first per-host write, and the dashboard keeps
+# reading it for hosts still running an older checkout of run.sh.
 JSON_FILE="docs/index.json"
+HOST_STATUS_DIR="docs/host-status"
+# Recovery copies live outside docs/ so they are never committed by the
+# `git add docs/` in commit_and_push.
+HEALTH_STATE_DIR="${BASE_DIR}/.health-state"
 HEARTBEAT_THRESHOLD_HOURS=8
 VERSION="1.1.32"
 
@@ -1197,12 +1207,45 @@ scan_log_errors() {
     fi
 }
 
+# --- BEGIN health-document writer (extracted by tests/health-harness.sh) ---
+# Everything between these two markers is lifted verbatim into the test harness,
+# so the tests drive the real code. Move a function out of the block and it
+# stops being exercised — keep the markers around the whole writer.
+
+# Read a value recorded for this user (Issue #213).
+#
+# This host's own document is authoritative. The fleet-wide file is consulted
+# only as a fallback, for a host whose first per-host write has not happened
+# yet — that is what keeps the heartbeat cadence stable across the migration
+# instead of forcing an update on every run.
+read_recorded_user_field() {
+    local field="$1"
+    local host_file value=""
+    host_file="$(host_status_file)"
+
+    if [ -f "$host_file" ]; then
+        if ! value=$(jq -r --arg user "$USER_KEY" --arg field "$field" \
+            '.users[$user][$field] // empty' "$host_file" 2>/dev/null); then
+            echo "WARNING: could not read $field from $host_file — treating it as unrecorded" >&2
+            value=""
+        fi
+    fi
+    if [ -z "$value" ] && [ -f "$JSON_FILE" ]; then
+        if ! value=$(jq -r --arg host "$HOSTNAME" --arg user "$USER_KEY" --arg field "$field" \
+            '.[$host].users[$user][$field] // empty' "$JSON_FILE" 2>/dev/null); then
+            echo "WARNING: could not read $field from $JSON_FILE — treating it as unrecorded" >&2
+            value=""
+        fi
+    fi
+    printf '%s' "$value"
+}
+
 # Function to check if we need to update
 should_update() {
-    if [ ! -f "$JSON_FILE" ]; then
-        return 0  # File doesn't exist, need to create
+    if [ ! -f "$(host_status_file)" ] && [ ! -f "$JSON_FILE" ]; then
+        return 0  # Nothing recorded anywhere yet, need to create
     fi
-    
+
     if ! command -v jq >/dev/null 2>&1; then
         echo "Error: jq is required but not found. Please install jq to continue."
         echo "Installation:"
@@ -1229,7 +1272,7 @@ should_update() {
     # If this user is not present yet, we MUST update now to create their entry
     # (otherwise a recently updated host heartbeat could mask a stuck/missing user).
     local last_user_heartbeat
-    last_user_heartbeat=$(jq -r ".\"$HOSTNAME\".users.\"$USER_KEY\".heart_beat_ts // empty" "$JSON_FILE" 2>/dev/null || echo "")
+    last_user_heartbeat=$(read_recorded_user_field "heart_beat_ts")
     if [[ -z "$last_user_heartbeat" ]] || [[ "$last_user_heartbeat" == "null" ]]; then
         echo "User '$USER_KEY' not recorded for $HOSTNAME yet - updating to record per-user heartbeat"
         return 0
@@ -1238,7 +1281,7 @@ should_update() {
     # If the user's recorded script version doesn't match current VERSION, update immediately.
     # (Keeps users in sync when code changes roll out.)
     local recorded_user_version
-    recorded_user_version=$(jq -r ".\"$HOSTNAME\".users.\"$USER_KEY\".version // \"\"" "$JSON_FILE" 2>/dev/null || echo "")
+    recorded_user_version=$(read_recorded_user_field "version")
     if [ "$recorded_user_version" != "$VERSION" ]; then
         echo "Version mismatch for $HOSTNAME/$USER_KEY (found '$recorded_user_version', current '$VERSION') - updating"
         return 0
@@ -1253,121 +1296,217 @@ should_update() {
 }
 
 # Function to update JSON file
+#
+# Issue #213: a heartbeat writes this host's own ~2 KB document,
+# docs/host-status/<HOST>.json, instead of rewriting the ~34 KB fleet-wide
+# docs/index.json to change a few fields. The fleet-wide file is never written
+# here — it is only read, to seed this host's first per-host document.
 update_json() {
     local system_info
     system_info=$(get_system_info)
-    local file_valid=false
 
-    # Issue #65: Validate existing JSON before updating
-    # If the file exists but is corrupted, recover gracefully
-    if [ -f "$JSON_FILE" ]; then
-        # -e with a type check: a plain `jq .` exits 0 on an empty file, which
-        # then "updated" to another empty file forever.
-        if jq -e 'type == "object"' "$JSON_FILE" > /dev/null 2>&1; then
-            file_valid=true
-        else
-            echo "WARNING: $JSON_FILE is corrupted or invalid JSON — recovering"
-            # Preserve the corrupted file for diagnosis
-            cp "$JSON_FILE" "${JSON_FILE}.corrupted.$(date +%s)"
-            rm -f "$JSON_FILE"
+    local host_file host_base backup_file seed
+    host_file="$(host_status_file)"
+    host_base="$(basename "$host_file")"
+    mkdir -p "$(dirname "$host_file")" "$HEALTH_STATE_DIR"
+    backup_file="${HEALTH_STATE_DIR}/${host_base}.bak"
+    local tmp_file="${HEALTH_STATE_DIR}/${host_base}.tmp"
+
+    # Issue #65: never update on top of a corrupted document. Keep the
+    # corrupted copy for diagnosis — outside docs/, so it is never committed —
+    # and rebuild from the migration seed.
+    #
+    # `jq .` is not the test to use here: zero inputs is not an error, so an
+    # empty file passes it, seeds an empty document and turns every later
+    # heartbeat into a silent no-op. Require a JSON object instead.
+    if [ -f "$host_file" ] && ! jq -e 'type == "object"' "$host_file" > /dev/null 2>&1; then
+        echo "WARNING: $host_file is corrupted or invalid JSON — recovering" >&2
+        # One copy, overwritten each time, so repeated corruption cannot fill
+        # the disk. It lives outside docs/, so it is never committed.
+        cp "$host_file" "${HEALTH_STATE_DIR}/${host_base}.corrupted"
+        rm -f "$host_file"
+    fi
+
+    # Two hostnames can sanitise to the same filename (host_slug drops
+    # characters), and the loser would silently overwrite the winner's
+    # heartbeat. Refuse rather than publish one host's data under another's.
+    if [ -f "$host_file" ]; then
+        local recorded_host
+        recorded_host=$(jq -r '.host // empty' "$host_file" 2>/dev/null || printf '')
+        if [ -n "$recorded_host" ] && [ "$recorded_host" != "$HOSTNAME" ]; then
+            echo "ERROR: $host_file already belongs to '$recorded_host', but '$HOSTNAME' maps to the same filename — refusing to overwrite it" >&2
+            return 1
         fi
     fi
 
-    # Create backup of the valid file before modifying
-    if [ -f "$JSON_FILE" ] && [ "$file_valid" = true ]; then
-        cp "$JSON_FILE" "${JSON_FILE}.bak"
-    fi
-
-    # Update or create JSON file
-    if [ -f "$JSON_FILE" ] && [ "$file_valid" = true ]; then
-        # Update existing file - preserve existing attributes
-        if jq --arg host "$HOSTNAME" \
-           --arg user "$USER_KEY" \
-           --arg ts "$CURRENT_TS" \
-           --arg version "$VERSION" \
-           --arg user_stale_hours "$USER_STALE_HOURS" \
-           --argjson info "$system_info" \
-           '
-           # Host-level info (shared machine info), preserve existing manual fields like location/emoji
-           .[$host] = ((.[$host] // {}) + $info)
-           | .[$host].user_stale_hours = ($user_stale_hours | tonumber)
-           # Ensure users map exists and update this user entry
-           | .[$host].users = (.[$host].users // {})
-           | .[$host].users[$user] = ((.[$host].users[$user] // {})
-               + ($info | {exception_count, exception_summary, reporting_warning_count, config_warning})
-               | .heart_beat_ts = ($ts | tonumber)
-               | .version = $version)
-           # Aggregate across users so dashboard can flag a stuck user
-           | .[$host].user_count = (.[$host].users | length)
-           | .[$host].worst_user_heart_beat_ts = ([.[$host].users[]? | (.heart_beat_ts // 0)] | min // 0)
-           | .[$host].best_user_heart_beat_ts  = ([.[$host].users[]? | (.heart_beat_ts // 0)] | max // 0)
-           | .[$host].heart_beat_ts = (.[$host].best_user_heart_beat_ts // ($ts | tonumber))
-           | .[$host].version = $version
-           | .[$host].exception_count = ([.[$host].users[]? | (.exception_count // 0)] | add // 0)
-           | .[$host].reporting_warning_count = ([.[$host].users[]? | (.reporting_warning_count // 0)] | add // 0)
-           | .[$host].exception_summary =
-               (if (.[$host].exception_count // 0) > 0 then
-                   ( .[$host].users
-                     | to_entries
-                     | map(select((.value.exception_count // 0) > 0) | "\(.key): \(.value.exception_summary // empty)")
-                     | join("; ")
-                   ) as $details
-                   | "\(.[$host].exception_count) errors across \(.[$host].user_count) user(s)" + (if ($details | length) > 0 then " (" + $details + ")" else "" end)
-                else
-                   "No errors found"
-                end)
-           ' \
-           "$JSON_FILE" > "${JSON_FILE}.tmp2"; then
-            mv "${JSON_FILE}.tmp2" "$JSON_FILE"
-        else
-            echo "WARNING: jq update failed — restoring from backup"
-            if [ -f "${JSON_FILE}.bak" ]; then
-                cp "${JSON_FILE}.bak" "$JSON_FILE"
-            fi
-            rm -f "${JSON_FILE}.tmp2"
-        fi
+    if [ -f "$host_file" ]; then
+        cp "$host_file" "$backup_file"
+        seed=$(cat "$host_file")
     else
-        # Create new file. -n is required: there is no input document, so
-        # without it jq reads stdin — it hangs on a terminal and, with stdin
-        # closed (cron), runs the filter zero times and writes an empty file.
-        jq -n --arg host "$HOSTNAME" \
-           --arg user "$USER_KEY" \
-           --arg ts "$CURRENT_TS" \
-           --arg version "$VERSION" \
-           --arg user_stale_hours "$USER_STALE_HOURS" \
-           --argjson info "$system_info" \
-           '{($host): ($info + {
-               "heart_beat_ts": ($ts | tonumber),
-               "version": $version,
-               "user_stale_hours": ($user_stale_hours | tonumber),
-               "users": {
-                   ($user): (($info | {exception_count, exception_summary, reporting_warning_count, config_warning}) + {"heart_beat_ts": ($ts | tonumber), "version": $version})
-               },
-               "user_count": 1,
-               "worst_user_heart_beat_ts": ($ts | tonumber),
-               "best_user_heart_beat_ts": ($ts | tonumber)
-           })}' \
-           > "$JSON_FILE"
+        seed=$(seed_host_status)
     fi
 
-    # Issue #65: Post-write validation — ensure we never leave a corrupted file
-    if [ -f "$JSON_FILE" ]; then
-        # -e with a type check: a plain `jq .` exits 0 on an empty file.
-        if ! jq -e 'type == "object"' "$JSON_FILE" > /dev/null 2>&1; then
-            echo "ERROR: Post-write validation failed — $JSON_FILE is invalid"
-            if [ -f "${JSON_FILE}.bak" ]; then
-                echo "Restoring from backup"
-                cp "${JSON_FILE}.bak" "$JSON_FILE"
-            fi
+    if printf '%s' "$seed" | jq --arg host "$HOSTNAME" \
+       --arg user "$USER_KEY" \
+       --arg ts "$CURRENT_TS" \
+       --arg version "$VERSION" \
+       --arg user_stale_hours "$USER_STALE_HOURS" \
+       --argjson info "$system_info" \
+       '
+       # Host-level info (shared machine info), preserving manual fields like
+       # location/emoji that are only ever edited by hand.
+       (. + $info)
+       | .host = $host
+       | .user_stale_hours = ($user_stale_hours | tonumber)
+       # Ensure users map exists and update this user entry
+       | .users = (.users // {})
+       | .users[$user] = ((.users[$user] // {})
+           + ($info | {exception_count, exception_summary, reporting_warning_count, config_warning})
+           | .heart_beat_ts = ($ts | tonumber)
+           | .version = $version)
+       # Aggregate across users so dashboard can flag a stuck user
+       | .user_count = (.users | length)
+       | .worst_user_heart_beat_ts = ([.users[]? | (.heart_beat_ts // 0)] | min // 0)
+       | .best_user_heart_beat_ts  = ([.users[]? | (.heart_beat_ts // 0)] | max // 0)
+       | .heart_beat_ts = (.best_user_heart_beat_ts // ($ts | tonumber))
+       | .version = $version
+       | .exception_count = ([.users[]? | (.exception_count // 0)] | add // 0)
+       | .reporting_warning_count = ([.users[]? | (.reporting_warning_count // 0)] | add // 0)
+       | .exception_summary =
+           (if (.exception_count // 0) > 0 then
+               ( .users
+                 | to_entries
+                 | map(select((.value.exception_count // 0) > 0) | "\(.key): \(.value.exception_summary // empty)")
+                 | join("; ")
+               ) as $details
+               | "\(.exception_count) errors across \(.user_count) user(s)" + (if ($details | length) > 0 then " (" + $details + ")" else "" end)
+            else
+               "No errors found"
+            end)
+       ' > "$tmp_file"; then
+        mv "$tmp_file" "$host_file"
+    else
+        # The heartbeat did not record anything. Restore the last good document
+        # and fail: a stale document must never be committed as a fresh one.
+        echo "ERROR: jq update failed — restoring from backup, no heartbeat recorded" >&2
+        rm -f "$tmp_file"
+        if [ -f "$backup_file" ]; then
+            cp "$backup_file" "$host_file"
         fi
+        return 1
     fi
 
-    # Clean up temporary files (keep .bak as last-resort recovery)
-    [ -f "${JSON_FILE}.tmp" ] && rm -f "${JSON_FILE}.tmp"
-    [ -f "${JSON_FILE}.tmp2" ] && rm -f "${JSON_FILE}.tmp2"
+    # Issue #65: Post-write validation — ensure we never leave a corrupted file.
+    # Same reasoning as the pre-check: an empty file is not valid JSON here.
+    if [ ! -f "$host_file" ] || ! jq -e 'type == "object"' "$host_file" > /dev/null 2>&1; then
+        echo "ERROR: Post-write validation failed — $host_file is invalid" >&2
+        if [ -f "$backup_file" ]; then
+            echo "Restoring from backup" >&2
+            cp "$backup_file" "$host_file"
+        fi
+        return 1
+    fi
+
+    update_host_manifest || return 1
 
     echo "Updated health information for $HOSTNAME"
 }
+
+# Filename-safe form of a hostname (Issue #213).
+#
+# The hostname comes from `uname -n`, so it is machine-supplied input that now
+# names a file under docs/host-status/ — sanitise it to a bare, visible
+# filename component that cannot climb out of that directory.
+#
+# The result must satisfy the dashboard's manifest validator
+# (SAFE_HOST_NAME in docs/host-status.js): it starts with an alphanumeric
+# character and is at most 64 characters long. A name this function can emit
+# but the dashboard would reject is a host that silently disappears.
+# LC_ALL=C on every tr: under a UTF-8 locale [:alnum:] matches accented letters,
+# which would survive into a filename the dashboard's validator then rejects.
+host_slug() {
+    local slug
+    slug="$(printf '%s' "${1:-}" | LC_ALL=C tr ' ' '_' | LC_ALL=C tr -cd '[:alnum:]._-')"
+    slug="${slug//../_}"
+    # Drop leading characters until the name starts with an alphanumeric one.
+    while [ -n "$slug" ] && [ -z "$(printf '%s' "${slug%"${slug#?}"}" | LC_ALL=C tr -cd '[:alnum:]')" ]; do
+        slug="${slug#?}"
+    done
+    if [ -z "$slug" ]; then
+        slug="unknown"
+    fi
+    printf '%s' "${slug:0:64}"
+}
+
+# Path of this host's status document (Issue #213).
+host_status_file() {
+    printf '%s/%s.json' "$HOST_STATUS_DIR" "$(host_slug "$HOSTNAME")"
+}
+
+# Resolve the seed for this host's first per-host document (Issue #213).
+#
+# The fleet-wide docs/index.json holds hand-curated fields (location, emoji)
+# and the heartbeats of users who have not run the new script yet, so the first
+# per-host write inherits that entry instead of starting empty.
+seed_host_status() {
+    if [ -f "$JSON_FILE" ] && jq -e --arg host "$HOSTNAME" 'has($host)' "$JSON_FILE" > /dev/null 2>&1; then
+        echo "Seeding $(host_status_file) from the $JSON_FILE entry for $HOSTNAME" >&2
+        jq --arg host "$HOSTNAME" '.[$host]' "$JSON_FILE"
+        return 0
+    fi
+    printf '%s' '{}'
+}
+
+# Rewrite the per-host manifest when the host list changed (Issue #213).
+#
+# The manifest is how the dashboard discovers the documents. It is derived from
+# the directory, so a document removed by hand disappears from it, and it is
+# only written when its contents actually change — an ordinary heartbeat must
+# not add a second changed file to the commit.
+update_host_manifest() {
+    local manifest="${HOST_STATUS_DIR}/index.json"
+    local names=()
+    local file base rendered
+
+    for file in "${HOST_STATUS_DIR}"/*.json; do
+        [ -f "$file" ] || continue
+        base="$(basename "$file" .json)"
+        [ "$base" = "index" ] && continue
+        names+=("$base")
+    done
+
+    if [ ${#names[@]} -eq 0 ]; then
+        # Unreachable unless this host's own document failed to appear, so the
+        # heartbeat is broken: say so and fail rather than write an empty
+        # manifest that would empty the dashboard.
+        echo "ERROR: no host documents found in ${HOST_STATUS_DIR} — the heartbeat wrote nothing" >&2
+        return 1
+    fi
+
+    # Checked, not assumed: this function is called as `update_host_manifest ||
+    # return 1`, which disables errexit for the whole call, so a failing jq here
+    # would otherwise render an empty manifest and report success.
+    if ! rendered=$(printf '%s\n' "${names[@]}" | LC_ALL=C sort | jq -R . | jq -s '{hosts: .}'); then
+        echo "ERROR: could not render ${manifest} — leaving the existing manifest alone" >&2
+        return 1
+    fi
+    if ! printf '%s' "$rendered" | jq -e '(.hosts | type == "array") and (.hosts | length > 0)' > /dev/null 2>&1; then
+        echo "ERROR: refusing to write an empty host list to ${manifest}" >&2
+        return 1
+    fi
+
+    if [ -f "$manifest" ] && [ "$(cat "$manifest")" = "$rendered" ]; then
+        return 0  # Unchanged — do not touch the file, so nothing is committed
+    fi
+
+    # Written through a temporary file: a half-written manifest is a dashboard
+    # that lists no hosts.
+    local manifest_tmp="${HEALTH_STATE_DIR}/host-manifest.tmp"
+    mkdir -p "$HEALTH_STATE_DIR"
+    printf '%s\n' "$rendered" > "$manifest_tmp"
+    mv "$manifest_tmp" "$manifest"
+}
+# --- END health-document writer ---
 
 # Function to commit and push changes
 #

@@ -76,6 +76,8 @@
     <div class="timestamp" id="timestamp"></div>
     <div class="repo-summary" id="repoSummary"></div>
 
+    <!-- Issue #213: shared per-host health data loader -->
+    <script src="./host-status.js?v=1.1.31"></script>
     <script>
         // Escape HTML special characters to prevent XSS when interpolating into innerHTML
         function escapeHtml(str) {
@@ -92,14 +94,14 @@
             try {
                 // Add timestamp to force fresh fetch and bypass cache
                 const timestamp = new Date().getTime();
-                const [hostsResponse, repoResponse] = await Promise.all([
-                    fetch(`./index.json?t=${timestamp}`),
+                // Issue #213: per-host documents, with the legacy fleet-wide
+                // index.json merged underneath for hosts still on an older run.sh.
+                const [health, repoResponse] = await Promise.all([
+                    GRQHostStatus.loadHostStatus(fetch, timestamp),
                     fetch(`./repos.json?t=${timestamp}`)
                 ]);
-                if (!hostsResponse.ok) {
-                    throw new Error(`HTTP error! status: ${hostsResponse.status}`);
-                }
-                const data = await hostsResponse.json();
+                health.errors.forEach(message => console.error('Health data:', message));
+                const data = health.data;
                 let repoData = { repos: [] };
                 if (repoResponse.ok) {
                     repoData = await repoResponse.json();

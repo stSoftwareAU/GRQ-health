@@ -1084,7 +1084,9 @@ function initializeOfflineIndicator() {
   const originalFetch = window.fetch;
   window.fetch = function(...args) {
     const url = args[0];
-    const isDataFile = typeof url === 'string' && url.includes('index.json');
+    // Issue #213: health data now arrives as per-host documents too.
+    const isDataFile = typeof url === 'string' &&
+      (url.includes('index.json') || url.includes('host-status/'));
     
     return originalFetch.apply(this, args)
       .then(response => {
@@ -2015,11 +2017,11 @@ async function loadData() {
     try {
         // Add timestamp to force fresh fetch
         const timestamp = new Date().getTime();
-        const response = await fetch(`./index.json?t=${timestamp}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
+        // Issue #213: per-host documents, with the legacy fleet-wide
+        // index.json merged underneath for hosts still on an older run.sh.
+        const health = await GRQHostStatus.loadHostStatus(fetch, timestamp);
+        health.errors.forEach(message => console.error('Health data:', message));
+        const data = health.data;
 
         // Convert to array of [hostname, data] pairs.
         // Issue #212: this must happen before the repo rows render — a stale
@@ -2047,11 +2049,11 @@ async function loadData() {
     } catch (error) {
         console.error('Error loading data:', error);
         // Issue #65: Provide specific guidance for different failure modes
-        let advice = 'Make sure the index.json file exists and is accessible.';
+        let advice = 'Make sure the host-status documents or index.json are present and accessible.';
         if (error instanceof SyntaxError) {
-            advice = 'The index.json file appears to be corrupted. A health check from any host will automatically recover it.';
+            advice = 'The health data appears to be corrupted. A health check from any host will automatically recover it.';
         } else if (error.message && error.message.includes('404')) {
-            advice = 'The index.json file is missing. A health check from any host will recreate it.';
+            advice = 'The health data is missing. A health check from any host will recreate it.';
         }
         content.innerHTML = `
             <div class="error">
@@ -2067,11 +2069,10 @@ async function loadDataIncremental() {
     try {
         // Add timestamp to force fresh fetch
         const timestamp = new Date().getTime();
-        const response = await fetch(`./index.json?t=${timestamp}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
+        // Issue #213: same merged per-host + legacy source as the full load.
+        const health = await GRQHostStatus.loadHostStatus(fetch, timestamp);
+        health.errors.forEach(message => console.error('Health data:', message));
+        const data = health.data;
         await fetchRepoHealth(timestamp);
         await fetchFeedCompletion(timestamp);
 

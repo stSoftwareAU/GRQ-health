@@ -1,6 +1,11 @@
 // GRQ Health Dashboard Service Worker
 // Version: 1.1.32
 
+// Issue #213: the health data loader is shared with the dashboard so the
+// service worker syncs the same per-host documents the page reads. Versioned
+// like every other asset, so an updated worker cannot execute a stale loader.
+importScripts('./host-status.js?v=1.1.32');
+
 const CACHE_NAME = 'grq-health-v1.1.32';
 const STATIC_CACHE_NAME = 'grq-health-static-v1.1.32';
 
@@ -11,6 +16,7 @@ const STATIC_FILES = [
   './styles.css',
   './theme.css?v=1.1.19',
   './theme.js?v=1.1.19',
+  './host-status.js?v=1.1.32',
   './dashboard.js?v=1.1.32',
   './medical-check.png',
   './unhealthy.png',
@@ -21,6 +27,41 @@ const STATIC_FILES = [
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js',
   'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css'
 ];
+
+// Issue #213: where the background sync parks the merged fleet snapshot.
+const OFFLINE_SNAPSHOT_URL = './host-status/offline-snapshot.json';
+
+// Issue #213: health data is the fleet-wide index.json plus the per-host
+// documents under host-status/. Both are treated as data, not static assets.
+function isHealthDataPath(pathname) {
+  return pathname.endsWith('index.json') || pathname.includes('/host-status/');
+}
+
+// The legacy fleet-wide document — every host in one file. The offline snapshot
+// has the same shape, so it can stand in for this request but not for a single
+// host's document, which is only a slice of the fleet.
+function isLegacyFleetPath(pathname) {
+  return pathname.endsWith('index.json') && !pathname.includes('/host-status/');
+}
+
+function offlineHealthResponse() {
+  return new Response(
+    JSON.stringify({
+      error: 'Offline',
+      message: 'No network connection available. Health data cannot be loaded.',
+      timestamp: new Date().toISOString()
+    }),
+    {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Served-From-Cache': 'true',
+        'X-Validation-Warning': 'CACHED-DATA'
+      }
+    }
+  );
+}
 
 // Install event - cache static files
 self.addEventListener('install', (event) => {
@@ -88,8 +129,8 @@ self.addEventListener('fetch', (event) => {
         if (cachedResponse) {
           console.log('Service Worker: Serving from cache', request.url);
           
-          // For data requests (index.json), add cache indicator header
-          if (url.pathname.endsWith('index.json')) {
+          // For data requests, add cache indicator header
+          if (isHealthDataPath(url.pathname)) {
             const response = cachedResponse.clone();
             response.headers.set('X-Served-From-Cache', 'true');
             response.headers.set('X-Validation-Warning', 'CACHED-DATA');
@@ -104,6 +145,14 @@ self.addEventListener('fetch', (event) => {
           .then((response) => {
             // Don't cache non-successful responses
             if (!response || response.status !== 200 || response.type !== 'basic') {
+              return response;
+            }
+
+            // Issue #213: health data is requested with a unique ?t= cache
+            // buster, so a cached copy can never be matched again. Caching it
+            // would grow the cache without bound — one dead entry per host per
+            // refresh. The background sync keeps the offline snapshot instead.
+            if (isHealthDataPath(url.pathname)) {
               return response;
             }
             
@@ -126,24 +175,29 @@ self.addEventListener('fetch', (event) => {
               return caches.match('./index.html');
             }
             
-            // For other requests, return a basic offline response
-            if (url.pathname.endsWith('index.json')) {
-              return new Response(
-                JSON.stringify({
-                  error: 'Offline',
-                  message: 'No network connection available. Health data cannot be loaded.',
-                  timestamp: new Date().toISOString()
-                }),
-                {
-                  status: 503,
-                  statusText: 'Service Unavailable',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-Served-From-Cache': 'true',
-                    'X-Validation-Warning': 'CACHED-DATA'
+            // Issue #213: offline, serve the merged fleet snapshot the
+            // background sync parked — it is what the dashboard would have
+            // built from the network, so the whole fleet still renders.
+            if (isLegacyFleetPath(url.pathname)) {
+              return caches.match(OFFLINE_SNAPSHOT_URL)
+                .then((snapshot) => {
+                  if (!snapshot) {
+                    return offlineHealthResponse();
                   }
-                }
-              );
+                  return snapshot.text().then((body) => new Response(body, {
+                    status: 200,
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'X-Served-From-Cache': 'true',
+                      'X-Validation-Warning': 'CACHED-DATA'
+                    }
+                  }));
+                });
+            }
+
+            // For other requests, return a basic offline response
+            if (isHealthDataPath(url.pathname)) {
+              return offlineHealthResponse();
             }
             
             throw error;
@@ -157,19 +211,16 @@ self.addEventListener('sync', (event) => {
   if (event.tag === 'health-data-sync') {
     console.log('Service Worker: Background sync triggered');
     event.waitUntil(
-      // Try to fetch fresh health data
-      fetch('./index.json')
-        .then((response) => {
-          if (response.ok) {
-            return response.json();
-          }
-          throw new Error('Failed to fetch health data');
-        })
-        .then((data) => {
-          // Cache the fresh data
+      // Try to fetch fresh health data (per-host documents merged with the
+      // legacy fleet-wide index.json, exactly as the dashboard reads it).
+      self.GRQHostStatus.loadHostStatus(fetch, Date.now())
+        .then((health) => {
+          health.errors.forEach((message) => console.warn('Service Worker: health data:', message));
+          // Cache the merged snapshot for offline use, under its own key —
+          // it is a merge of every source, not a copy of the legacy file.
           return caches.open(CACHE_NAME)
             .then((cache) => {
-              return cache.put('./index.json', new Response(JSON.stringify(data)));
+              return cache.put(OFFLINE_SNAPSHOT_URL, new Response(JSON.stringify(health.data)));
             });
         })
         .then(() => {
