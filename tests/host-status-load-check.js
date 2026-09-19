@@ -352,3 +352,37 @@ const legacyIndex = {
         `hosts=${Object.keys(result.data).join(",")}`,
     );
 }
+
+// --- manifest lists hosts, every document 404s, legacy 404s too: fail loud -
+{
+    const fetchFn = (url) => {
+        const path = String(url).split("?")[0];
+        if (path === "./host-status/index.json") {
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ hosts: ["GRQ-3", "GRQ-9"] }),
+                headers: { get: () => null },
+            });
+        }
+        return Promise.resolve({
+            ok: false,
+            status: 404,
+            json: () => Promise.reject(new Error("not found")),
+            headers: { get: () => null },
+        });
+    };
+    let threw = false;
+    let message = "";
+    try {
+        await api.loadHostStatus(fetchFn, 1);
+    } catch (error) {
+        threw = true;
+        message = error.message;
+    }
+    report(
+        "every-host-document-failing-throws",
+        threw && message.includes("every host document listed in"),
+        `threw=${threw} message=${message}`,
+    );
+}
