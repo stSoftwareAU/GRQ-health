@@ -10,7 +10,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUN_SH="$SCRIPT_DIR/../run.sh"
+# Consumed by health-harness.sh (sourced below), so export it: shellcheck is
+# run without --external-sources in CI and cannot see that cross-file use.
+export RUN_SH="$SCRIPT_DIR/../run.sh"
 
 echo "Testing Issue #213: per-host status documents"
 echo "============================================="
