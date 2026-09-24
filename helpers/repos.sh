@@ -6,12 +6,17 @@ set -euo pipefail
 #
 # Usage:
 #   ./helpers/repos.sh <repo_name>                                    # record success
+#   ./helpers/repos.sh <repo_name> --message "<text>"                 # record success + what landed
 #   ./helpers/repos.sh <repo_name> --failed --log /path/to/run.log    # record failure with log file
 #   ./helpers/repos.sh <repo_name> --failed --log - < run.log         # record failure with log from stdin
 #
-# Optional failure flags:
-#   --exit-code <N>     Record the non-zero exit status
-#   --message <text>    Record a one-line summary
+# Optional flags:
+#   --exit-code <N>     Record the non-zero exit status (failure mode)
+#   --message <text>    Record a one-line summary. In --failed mode it is
+#                       written as last_failure_message; in success mode it is
+#                       written as last_commit_message (GRQ#4851), which is how
+#                       a row says WHICH run landed and not just when. A success
+#                       with no --message clears any previous message.
 #
 # Testing flags:
 #   --validate <name>   Validate repo name without side effects
@@ -194,7 +199,7 @@ SKIP_RATE_LIMIT=false
 FAILED_MODE=false
 LOG_PATH=""
 FAILURE_EXIT_CODE=""
-FAILURE_MESSAGE=""
+RUN_MESSAGE=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -223,7 +228,7 @@ while [ $# -gt 0 ]; do
             shift 2
             ;;
         --message)
-            FAILURE_MESSAGE="$2"
+            RUN_MESSAGE="$2"
             shift 2
             ;;
         *)
@@ -347,21 +352,36 @@ update_repos_json_success() {
         fi
     fi
 
+    # GRQ#4851: --message in success mode records WHICH run landed (the run id),
+    # beside the timestamp that says when. Without a message the field is
+    # removed rather than left alone — a fresh timestamp next to the previous
+    # run's id answers "which run" wrongly, which is worse than not answering.
+    local message_filter='.last_commit_message = $message'
+    if [ -z "$RUN_MESSAGE" ]; then
+        message_filter='del(.last_commit_message)'
+    fi
+
     # Proceed with update (either new repo or last update was more than 1 hour ago)
     if [ -n "$EXISTING_REPO" ]; then
         # Update existing repo
         jq --arg name "$REPO_NAME" \
            --arg ts "$CURRENT_TS" \
-           '.repos |= map(if .name == $name then .last_commit_ts = ($ts | tonumber) else . end)' \
+           --arg message "$RUN_MESSAGE" \
+           ".repos |= map(if .name == \$name then .last_commit_ts = (\$ts | tonumber) | ${message_filter} else . end)" \
            "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
         echo "Updated repo '${REPO_NAME}' with timestamp ${CURRENT_TS}"
         RUN_STATUS="updated"
         RUN_REASON="success"
     else
         # Add new repo
-        NEW_REPO="{\"name\": \"${REPO_NAME}\", \"last_commit_ts\": ${CURRENT_TS}}"
+        local new_repo
+        new_repo=$(jq -n --arg name "$REPO_NAME" --arg ts "$CURRENT_TS" \
+            '{name: $name, last_commit_ts: ($ts | tonumber)}')
+        if [ -n "$RUN_MESSAGE" ]; then
+            new_repo=$(echo "$new_repo" | jq --arg msg "$RUN_MESSAGE" '. + {last_commit_message: $msg}')
+        fi
 
-        jq --argjson new_repo "$NEW_REPO" \
+        jq --argjson new_repo "$new_repo" \
            '.repos += [$new_repo]' \
            "$REPOS_JSON" > "${REPOS_JSON}.tmp" && mv "${REPOS_JSON}.tmp" "$REPOS_JSON"
         echo "Added repo '${REPO_NAME}' with timestamp ${CURRENT_TS}"
@@ -406,9 +426,9 @@ update_repos_json_failure() {
             jq_args+=(--arg exit_code "$FAILURE_EXIT_CODE")
         fi
 
-        if [ -n "$FAILURE_MESSAGE" ]; then
+        if [ -n "$RUN_MESSAGE" ]; then
             jq_filter="$jq_filter"' | .last_failure_message = $message'
-            jq_args+=(--arg message "$FAILURE_MESSAGE")
+            jq_args+=(--arg message "$RUN_MESSAGE")
         fi
 
         jq_filter="$jq_filter"' else . end)'
@@ -424,8 +444,8 @@ update_repos_json_failure() {
         if [ -n "$FAILURE_EXIT_CODE" ]; then
             new_entry=$(echo "$new_entry" | jq --arg ec "$FAILURE_EXIT_CODE" '. + {last_failure_exit_code: ($ec | tonumber)}')
         fi
-        if [ -n "$FAILURE_MESSAGE" ]; then
-            new_entry=$(echo "$new_entry" | jq --arg msg "$FAILURE_MESSAGE" '. + {last_failure_message: $msg}')
+        if [ -n "$RUN_MESSAGE" ]; then
+            new_entry=$(echo "$new_entry" | jq --arg msg "$RUN_MESSAGE" '. + {last_failure_message: $msg}')
         fi
 
         jq --argjson new_repo "$new_entry" '.repos += [$new_repo]' \

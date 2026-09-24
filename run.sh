@@ -40,7 +40,7 @@ HOST_STATUS_DIR="docs/host-status"
 # `git add docs/` in commit_and_push.
 HEALTH_STATE_DIR="${BASE_DIR}/.health-state"
 HEARTBEAT_THRESHOLD_HOURS=8
-VERSION="1.1.32"
+VERSION="1.1.33"
 
 # Per-user stale threshold (in hours) used by the dashboard to flag hosts when an expected user is missing/stuck.
 # IMPORTANT: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.

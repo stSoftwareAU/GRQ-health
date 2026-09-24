@@ -1,5 +1,5 @@
 // Version constant - this will be updated by the git hook
-const VERSION = "1.1.32";
+const VERSION = "1.1.33";
 
 // Set page title with version
 document.title = `GRQ Health Dashboard v${VERSION}`;
@@ -812,6 +812,23 @@ function buildFailureTooltip(repo) {
     return parts.join(' — ');
 }
 
+// GRQ#4851: the success side of a row. The timestamp says WHEN the last run
+// landed; last_commit_message — the run id repos.sh --message recorded — says
+// WHICH one, so an operator no longer has to grep the host's phase log.
+function buildLastCommitHtml(repo) {
+    const ts = Number(repo?.last_commit_ts || 0);
+    const timeText = Number.isFinite(ts) && ts > 0
+        ? `Last commit ${formatTimestamp(ts)}`
+        : 'Commit time unavailable';
+    const message = repo?.last_commit_message ? String(repo.last_commit_message) : '';
+    // Reuses .repo-time so the message inherits the row's light and dark
+    // styling; .repo-commit-message is the hook for anything row-specific.
+    const messageHtml = message
+        ? `<div class="repo-time repo-commit-message"><small>${escapeHtml(message)}</small></div>`
+        : '';
+    return `<div class="repo-time">${escapeHtml(timeText)}</div>${messageHtml}`;
+}
+
 function renderRepoHealth(errorMessage = null) {
     const section = document.getElementById('repoHealthSection');
     if (!section) {
@@ -915,7 +932,7 @@ function renderRepoHealth(errorMessage = null) {
             </div>
             <div class="text-end">
                 <span class="${statusBadge(status)} repo-status-badge">${statusLabel}</span>
-                <div class="repo-time">${repo.last_commit_ts > 0 ? `Last commit ${formatTimestamp(repo.last_commit_ts)}` : 'Commit time unavailable'}</div>
+                ${buildLastCommitHtml(repo)}
                 ${diagnosisHtml}
                 ${repo.error_message ? `<div class="repo-error text-danger"><small>${escapeHtml(repo.error_message)}</small></div>` : ''}
                 ${failureHtml}
