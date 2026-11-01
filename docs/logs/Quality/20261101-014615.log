@@ -1,13 +1,11 @@
-Check test/unit/train/DefensiveValidation.ts
-Check test/unit/train/DistributedVerifier_test.ts
-Check test/unit/train/EffectiveExtension.ts
-Check test/unit/train/HeapSnapshotOnPanic.ts
+Check test/unit/train/HeapSnapshotRetainers.ts
 Check test/unit/train/HeapSnapshotWriter.ts
 Check test/unit/train/LatestYearDeferral.ts
 Check test/unit/train/MemoryAccountant_test.ts
 Check test/unit/train/MemoryPressureSnapshot.ts
 Check test/unit/train/MemoryWatchdog.ts
 Check test/unit/train/MemoryWatchdogPanic.ts
+Check test/unit/train/NearHeapLimitSnapshot.ts
 Check test/unit/train/OomSnapshotInspect.ts
 Check test/unit/train/ParallelTrainDataPrefixRetry.ts
 Check test/unit/train/ParallelTrainDataTimeout.ts
@@ -464,6 +462,7 @@ Check test/worker/McmcReadoutProcedure.ts
 Check test/worker/MemoryBrake.ts
 Check test/worker/MemoryCalcHeapSize.ts
 Check test/worker/MemoryCalcHostFloor.ts
+Check test/worker/MemoryCalcLinuxMemTotal.ts
 Check test/worker/MemoryCalcMacOSAvailable.ts
 Check test/worker/MemoryCalcStableBudget.ts
 Check test/worker/MemoryPanicExitCode.ts
@@ -511,6 +510,7 @@ Check test/worker/NodeGhPathResolution.ts
 Check test/worker/NodeLogRunawayGuard.ts
 Check test/worker/NodeLogRunawayKillReason.ts
 Check test/worker/NodeLogTestIsolation_test.ts
+Check test/worker/NodeLogsPublishStatus.ts
 Check test/worker/NodeShDiskReportOnStart.ts
 Check test/worker/NodeShMaxTaskLogPush.ts
 Check test/worker/NodeShOptionRotation.ts
@@ -528,6 +528,7 @@ Check test/worker/OckhamLearnings.ts
 Check test/worker/OckhamSchedulerWeights.ts
 Check test/worker/OomGuardClassification.ts
 Check test/worker/OomGuardContinuesBatch.ts
+Check test/worker/OomGuardHeapSnapshot.ts
 Check test/worker/PartialClonePolicy.ts
 Check test/worker/PerformanceCsvOnModelChange.ts
 Check test/worker/PhaseTimer.ts
@@ -805,7 +806,7 @@ Check test/worker/memoryStartupLog.ts
 Check test/worker/shared/SparseRatio.ts
 Check test/worker/shared/TrainingSampleRate.ts
 Running bash -n on all shell scripts...
-bash -n: checked 595 script(s)
+bash -n: checked 594 script(s)
 ✅ All bash scripts passed syntax check (bash -n)
 ✅ [no-legacy-creature-json] no retired network.json references (#4153)
 ✅ [portability] no GNU-only idioms outside their platform branches (#4555)
@@ -814,25 +815,24 @@ source-chain: checked 336 worker script(s)
 ✅ every worker script sources the helpers it calls
 ⚠️  sibling-runlib: gh unavailable or not authenticated — the origin/Develop probe is SKIPPED; only local checkouts can be checked (#4792)
 🔎 sibling-runlib: checking 8 NEAT-AI siblings for an executable scripts/runlib.sh (#4792)
-✅ scorer (NEAT-AI-scorer): local /Volumes/GRQ/Elephant/NEAT-AI-scorer/scripts/runlib.sh is executable
-✅ backprop (NEAT-AI-Backpropagation): local /Volumes/GRQ/Elephant/NEAT-AI-Backpropagation/scripts/runlib.sh is executable
-✅ refinery (NEAT-AI-Refinery): local /Volumes/GRQ/Elephant/NEAT-AI-Refinery/scripts/runlib.sh is executable
-✅ lamarck (NEAT-AI-Lamarck): local /Volumes/GRQ/Elephant/NEAT-AI-Lamarck/scripts/runlib.sh is executable
-✅ forests (NEAT-AI-Forests): local /Volumes/GRQ/Elephant/NEAT-AI-Forests/scripts/runlib.sh is executable
-✅ ockham (NEAT-AI-Ockham): local /Volumes/GRQ/Elephant/NEAT-AI-Ockham/scripts/runlib.sh is executable
-✅ rebase (NEAT-AI-Rebase): local /Volumes/GRQ/Elephant/NEAT-AI-Rebase/scripts/runlib.sh is executable
-✅ discovery (NEAT-AI-Discovery): local /Volumes/GRQ/Elephant/NEAT-AI-Discovery/scripts/runlib.sh is executable
+✅ scorer (NEAT-AI-scorer): local /Users/elephant/NEAT-AI-scorer/scripts/runlib.sh is executable
+✅ backprop (NEAT-AI-Backpropagation): local /Users/elephant/NEAT-AI-Backpropagation/scripts/runlib.sh is executable
+✅ refinery (NEAT-AI-Refinery): local /Users/elephant/NEAT-AI-Refinery/scripts/runlib.sh is executable
+✅ lamarck (NEAT-AI-Lamarck): local /Users/elephant/NEAT-AI-Lamarck/scripts/runlib.sh is executable
+✅ forests (NEAT-AI-Forests): local /Users/elephant/NEAT-AI-Forests/scripts/runlib.sh is executable
+✅ ockham (NEAT-AI-Ockham): local /Users/elephant/NEAT-AI-Ockham/scripts/runlib.sh is executable
+✅ rebase (NEAT-AI-Rebase): local /Users/elephant/NEAT-AI-Rebase/scripts/runlib.sh is executable
+✅ discovery (NEAT-AI-Discovery): local /Users/elephant/NEAT-AI-Discovery/scripts/runlib.sh is executable
 ✅ sibling-runlib: every invoked NEAT-AI sibling ships an executable scripts/runlib.sh
 Running shellcheck on all bash scripts...
 ✅ shellcheck passed
 ✅ Version-bump gate: no commits ahead of origin/Develop — nothing to gate
 ✅ dead-code gate passed
-🧮 deno test memory plan: DENO_JOBS=4, --max-old-space-size=12288 MB per worker (aggregate ceiling 49152 MB, host 64 GB total / 60948 MB available)
-💾 disk gate: 1436 GB free, 100 GB required
+🧮 deno test memory plan: DENO_JOBS=1, --max-old-space-size=12288 MB per worker (aggregate ceiling 12288 MB, host 24 GB total / 17940 MB available)
+💾 disk gate: 120 GB free, 100 GB required
 ....................................................................................................
-................................................!...................................................
-..............................................................................!.....................
 ....................................................................................................
+.............................................................................!......................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
@@ -877,31 +877,33 @@ Running shellcheck on all bash scripts...
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
-..........................................................................,..,,,,,..................
 ....................................................................................................
+..................................................................................................,.
+.,,,,,..............................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
+.................................................!..................................................
 ....................................................................................................
 ....................................................................................................
+....................................................................................!...............
 ....................................................................................................
-...............................................................................!....................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
-.......................................................................................,............
+...............,....................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
-........................................................................!...........................
+.........................................................!..........................................
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
@@ -916,25 +918,23 @@ Running shellcheck on all bash scripts...
 ....................................................................................................
 ....................................................................................................
 ....................................................................................................
-.........................................................................
+......................................
 
  ERRORS 
-
-All valid industries => ./test/Industry/AllValidIndustries.ts:7:6
-error: Error: ⚠️  UNKNOWN INDUSTRY: "COMMUNICATION SERVICES" -> "COMMUNICATION-SERVICES" (not in industry-mapping.json)
-  throw new Error(
-        ^
-    at makeAggregateName (file:///Volumes/GRQ/Elephant/GRQ/src/industry/IndustryUtil.ts:82:9)
-    at file:///Volumes/GRQ/Elephant/GRQ/test/Industry/AllValidIndustries.ts:17:31
-    at Array.forEach (<anonymous>)
-    at file:///Volumes/GRQ/Elephant/GRQ/test/Industry/AllValidIndustries.ts:16:13
 
 all sectors valid => ./test/Sector.ts:6:6
 error: AssertionError: Failed assertion: Invalid sectors: 1
   throw new AssertionError(`Failed assertion${msgSuffix}`);
         ^
     at fail (https://jsr.io/@std/assert/1.0.19/fail.ts:20:9)
-    at file:///Volumes/GRQ/Elephant/GRQ/test/Sector.ts:23:5
+    at file:///Users/elephant/GRQ/test/Sector.ts:23:5
+
+VALE => ./test/v74.ts:291:6
+error: AssertionError: Expected actual: "3.0325530855254224e-1" to be close to "2.940471368641403e-1": delta "9.208171688401934e-3" is greater than "1e-3": Tax Rate: 0.3033
+  throw new AssertionError(
+        ^
+    at assertAlmostEquals (https://jsr.io/@std/assert/1.0.19/almost_equals.ts:52:9)
+    at file:///Users/elephant/GRQ/test/v74.ts:305:3
 
 a push rejection recovered by rebase leaves no [stage] FAIL marker (#4011) => ./test/worker/ClusterPushErrTrapQuiet.ts:316:6
 error: AssertionError: Values are not equal: recovered rejection wrote a stage-fail marker:
@@ -942,30 +942,30 @@ error: AssertionError: Values are not equal: recovered rejection wrote a stage-f
 
 stdout:
 📊 Sampler stats row: test-host
-[main d77f560] 📊 Sampler stats row: test-host
+[main c2e5f23] 📊 Sampler stats row: test-host
  1 file changed, 1 insertion(+)
 🧩 [cluster] enforced .gitattributes / .gitignore
 🔄 [cluster] Push rejected (attempt 1/12) - fetching and rebasing
-Created autostash: 9521753
+Created autostash: 9ff9a1f
 Rebasing (1/1)Applied autostash.
 Successfully rebased and updated refs/heads/main.
-⏳ [cluster] Retrying push in 10s...
+⏳ [cluster] Retrying push in 22s...
 GIT-OP: [sampler-stats] git push ok in 0s (attempt 1/3, timeout=600s)
-To /var/folders/c1/l92vbl9x2gl03mxbvkl_v30h0000gq/T/cluster_push_errtrap_1bdb3b5874f1836a/GRQ-sampler-bare
-   9f3f2c6..e8c1cb9  main -> main
+To /var/folders/wq/z3gg11zn3318tp4x24l49stc0000gr/T/cluster_push_errtrap_175e876967f51ad9/GRQ-sampler-bare
+   7af3c47..d129370  main -> main
 PUBLISH_DONE
 [training-outcomes] tasks=0 scheduled=0 completed=0 timedOut=0 abandoned=0 aborted=0 rejected=0 inFlight=0 maxConsecutiveTimeouts=0 maxConsecutiveRegressions=0 maxConsecutiveNoProgress=0 threshold=3 regressionThreshold=3 improved=0 regressed=0 noChange=0 unknownImprovement=0 skipped=0 populationSkipped=0 skipSource=none populationGate=unlogged
-[training-hang] WARNING no log file at '/var/folders/c1/l92vbl9x2gl03mxbvkl_v30h0000gq/T/cluster_push_errtrap_1bdb3b5874f1836a/logs/node.log' — cannot tell whether any training task hung this run (#4289)
+[training-hang] WARNING no log file at '/var/folders/wq/z3gg11zn3318tp4x24l49stc0000gr/T/cluster_push_errtrap_175e876967f51ad9/logs/node.log' — cannot tell whether any training task hung this run (#4289)
 [scorer-engine-split] splits=0 firstReason=none
 
 stderr:
 ! [rejected]        main -> main (fetch first)
-error: failed to push some refs to '/var/folders/c1/l92vbl9x2gl03mxbvkl_v30h0000gq/T/cluster_push_errtrap_1bdb3b5874f1836a/GRQ-sampler-bare'
-From /var/folders/c1/l92vbl9x2gl03mxbvkl_v30h0000gq/T/cluster_push_errtrap_1bdb3b5874f1836a/GRQ-sampler-bare
-   7ee1c1d..9f3f2c6  main       -> origin/main
-❌ sampler.sh: command failed at line 431 with exit code 1
+error: failed to push some refs to '/var/folders/wq/z3gg11zn3318tp4x24l49stc0000gr/T/cluster_push_errtrap_175e876967f51ad9/GRQ-sampler-bare'
+From /var/folders/wq/z3gg11zn3318tp4x24l49stc0000gr/T/cluster_push_errtrap_175e876967f51ad9/GRQ-sampler-bare
+   d098004..7af3c47  main       -> origin/main
+❌ sampler.sh: command failed at line 570 with exit code 1
 ❌ failing command: [[ ${#dirs[@]} -eq 0 ]]
-❌ working directory: /Volumes/GRQ/Elephant/GRQ
+❌ working directory: /Users/elephant/GRQ
 ⚠️ [err-trap] no log file to report for sampler — the failure is not filed in GitHub (#4244)
 
 
@@ -979,22 +979,22 @@ From /var/folders/c1/l92vbl9x2gl03mxbvkl_v30h0000gq/T/cluster_push_errtrap_1bdb3
   throw new AssertionError(message);
         ^
     at assertEquals (https://jsr.io/@std/assert/1.0.19/equals.ts:67:9)
-    at file:///Volumes/GRQ/Elephant/GRQ/test/worker/ClusterPushErrTrapQuiet.ts:355:7
+    at file:///Users/elephant/GRQ/test/worker/ClusterPushErrTrapQuiet.ts:355:7
 
 worker/shared/reader_transient_retry.sh — re-runs a transient Sheets failure, never a permission error (#5318) => ./test/worker/ReaderTransientRetry.ts:11:6
 error: Error: test_reader_transient_retry.sh exited with code 1
       throw new Error(
             ^
-    at file:///Volumes/GRQ/Elephant/GRQ/test/worker/ReaderTransientRetry.ts:28:13
+    at file:///Users/elephant/GRQ/test/worker/ReaderTransientRetry.ts:28:13
 
  FAILURES 
 
-All valid industries => ./test/Industry/AllValidIndustries.ts:7:6
 all sectors valid => ./test/Sector.ts:6:6
+VALE => ./test/v74.ts:291:6
 a push rejection recovered by rebase leaves no [stage] FAIL marker (#4011) => ./test/worker/ClusterPushErrTrapQuiet.ts:316:6
 worker/shared/reader_transient_retry.sh — re-runs a transient Sheets failure, never a permission error (#5318) => ./test/worker/ReaderTransientRetry.ts:11:6
 
-FAILED | 8511 passed (251 steps) | 4 failed | 7 ignored (23m37s)
+FAILED | 8576 passed (251 steps) | 4 failed | 7 ignored (115m8s)
 
 error: Test failed
 ❌ deno test failed (exit 1)
