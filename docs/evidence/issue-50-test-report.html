@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Issue #50 - Fix idle detection threshold constant</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+h1 { color: #1a1a2e; border-bottom: 2px solid #16213e; padding-bottom: 10px; }
+h2 { color: #16213e; }
+.code-block { background: #1a1a2e; color: #e8e8e8; padding: 16px; border-radius: 8px; font-family: monospace; overflow-x: auto; }
+.highlight-old { color: #ff6b6b; text-decoration: line-through; }
+.highlight-new { color: #51cf66; font-weight: bold; }
+.test-pass { background: #d4edda; border: 1px solid #c3e6cb; padding: 8px 12px; border-radius: 4px; margin: 4px 0; }
+.test-name { font-weight: bold; }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+th, td { border: 1px solid #dee2e6; padding: 8px 12px; text-align: left; }
+th { background: #16213e; color: white; }
+.summary { background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #51cf66; margin: 20px 0; }
+</style>
+</head>
+<body>
+<h1>Issue #50: Fix idle detection threshold constant</h1>
+
+<div class="summary">
+<strong>Summary:</strong> Fixed copy-paste bug where the "recently stopped work" exemption in idle detection
+used <code>THRESHOLDS.IDLE_LOAD_15M</code> (20%) instead of <code>THRESHOLDS.IDLE_LOAD_5M</code> (15%) for the
+5-minute load comparison.
+</div>
+
+<h2>Bug Location</h2>
+<p><code>docs/dashboard.js</code>, line 224:</p>
+<div class="code-block">
+// Check for recently stopped work - 15m is higher than current (1m/5m)<br>
+<span class="highlight-old">if (load15m > THRESHOLDS.IDLE_HIGH_LOAD && load1m < THRESHOLDS.IDLE_LOAD_1M && load5m < THRESHOLDS.IDLE_LOAD_15M) {</span><br>
+<span class="highlight-new">if (load15m > THRESHOLDS.IDLE_HIGH_LOAD && load1m < THRESHOLDS.IDLE_LOAD_1M && load5m < THRESHOLDS.IDLE_LOAD_5M) {</span>
+</div>
+
+<h2>Threshold Values</h2>
+<table>
+<tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
+<tr><td>IDLE_LOAD_1M</td><td>15%</td><td>1-minute load threshold</td></tr>
+<tr><td>IDLE_LOAD_5M</td><td>15%</td><td>5-minute load threshold</td></tr>
+<tr><td>IDLE_LOAD_15M</td><td>20%</td><td>15-minute load threshold</td></tr>
+<tr><td>IDLE_HIGH_LOAD</td><td>50%</td><td>Active work indicator</td></tr>
+</table>
+
+<h2>Test Results (11/11 passing)</h2>
+<div class="test-pass"><span class="test-name">all-low-idle</span> — correctly flagged as idle</div>
+<div class="test-pass"><span class="test-name">all-high-not-idle</span> — correctly not flagged as idle</div>
+<div class="test-pass"><span class="test-name">work-finished</span> — correctly not flagged as idle</div>
+<div class="test-pass"><span class="test-name">work-started</span> — correctly not flagged as idle</div>
+<div class="test-pass"><span class="test-name">small-system</span> — correctly skipped for small system</div>
+<div class="test-pass"><span class="test-name">missing-data</span> — correctly returns not idle for missing data</div>
+<div class="test-pass"><span class="test-name">warning-text</span> — warning message includes idle reason</div>
+<div class="test-pass"><span class="test-name">no-warning-busy</span> — no warning for busy host</div>
+<div class="test-pass"><span class="test-name">recently-stopped-below-5m</span> — not idle, recently stopped exemption applies</div>
+<div class="test-pass"><span class="test-name">recently-stopped-above-5m</span> — not idle, 5m above threshold, no exemption needed</div>
+<div class="test-pass"><span class="test-name">parsed-values</span> — load values parsed correctly</div>
+</body>
+</html>

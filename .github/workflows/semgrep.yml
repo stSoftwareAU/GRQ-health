@@ -1,0 +1,67 @@
+name: Semgrep
+
+on:
+  # No branches: filter — a bare pull_request trigger runs on every PR target.
+  # `branches: ["*"]` skipped nested targets such as milestone/<slug>, because
+  # the `*` glob matches zero or more characters excluding `/` (issue #192).
+  pull_request:
+  # Trusted post-merge path for the authenticated upload (issue #190).
+  # Scheduled and dispatched runs check out the default branch, never a PR
+  # head, so SEMGREP_APP_TOKEN is only ever exposed to merged code. A daily
+  # scan rather than one per push: the health monitor pushes docs/** to
+  # Develop every few minutes, and each push would queue another full scan.
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+# Cancel a superseded run when a new commit is pushed to the same PR
+# branch (issue #187). Keying the group on github.ref keeps each branch in
+# its own group, so concurrent PRs never cancel each other's runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # PR gate. This job checks out and scans PR-controlled code, so no secret is
+  # present in its environment: whatever that code causes semgrep (or its
+  # rules, or a dependency) to execute has nothing to exfiltrate (issue #190).
+  # Findings are reported in the job log and block the PR; they are not
+  # uploaded to the Semgrep dashboard.
+  semgrep:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    # Semgrep runs in its own container and pulls the p/default ruleset, so it
+    # gets slightly more headroom than the other scans — still far below
+    # GitHub's 360-minute default (issue #188).
+    timeout-minutes: 15
+    container:
+      # Pinned to a release tag plus its immutable digest (issue #191). A bare
+      # `semgrep/semgrep` resolves to the mutable `:latest`, so the code running
+      # inside the scan could change with no commit here; the digest fixes the
+      # content, and the tag alongside it keeps version-bump tooling working.
+      image: semgrep/semgrep:1.176.1@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823
+    steps:
+      # actions/checkout v4 — pinned to commit SHA per supply-chain policy
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: semgrep ci --config p/default
+
+  # Authenticated upload, on trusted content only. The `if` guard is defence in
+  # depth on top of the trigger list: even if a pull_request path were added
+  # later, this job — the only one holding SEMGREP_APP_TOKEN — will not run for
+  # it (issue #190).
+  semgrep-upload:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      # Same pinned image as the PR gate above (issue #191).
+      image: semgrep/semgrep:1.176.1@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823
+    steps:
+      # actions/checkout v4 — pinned to commit SHA per supply-chain policy
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: semgrep ci --config p/default
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}

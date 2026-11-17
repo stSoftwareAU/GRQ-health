@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRQ Health Dashboard</title>
+
+    <!-- Issue #161: apply the remembered theme before first paint to avoid a flash -->
+    <script data-theme-init>
+        (function () {
+            try {
+                var m = localStorage.getItem('grq-theme') || 'auto';
+                if (['light', 'dark', 'auto'].indexOf(m) === -1) { m = 'auto'; }
+                var dark = m === 'dark' || (m === 'auto' && window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme-mode', m);
+            } catch (e) { /* storage unavailable — fall back to light */ }
+        })();
+    </script>
+
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Monitor system health status across all hosts">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="GRQ Health">
+    <meta name="msapplication-TileColor" content="#667eea">
+    <meta name="msapplication-config" content="./browserconfig.xml">
+    
+    <!-- Icons and Manifest -->
+    <link rel="icon" type="image/png" href="./medical-check.png">
+    <link rel="apple-touch-icon" href="./icons/icon-192x192.png">
+    <link rel="manifest" href="./manifest.json">
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" integrity="sha384-Ay26V7L8bsJTsX9Sxclnvsn+hkdiwRnrjZJXqKmkIDobPgIIWBOVguEcQQLDuhfN" crossorigin="anonymous">
+    <link href="./styles.css?v=1.1.32" rel="stylesheet">
+    <link href="./theme.css?v=1.1.20" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="header">
+            <div id="theme-toggle" class="theme-toggle"></div>
+            <div class="text-center mb-2">
+                <h1><i class="bi bi-display"></i> GRQ Health Dashboard</h1>
+                <p>System health status across all hosts</p>
+            </div>
+        </div>
+
+        <div id="criticalSection" class="critical-section" style="display: none;">
+            <h3 class="mb-3"><i class="bi bi-exclamation-triangle"></i> Critical Hosts - Action Required</h3>
+            <div id="criticalHostsList"></div>
+        </div>
+
+        <div id="miaSection" class="mia-section" style="display: none;">
+            <h3 class="mb-3"><i class="bi bi-globe"></i> Off the Grid - Mobile Devices (Not Critical)</h3>
+            <div id="miaHostsList"></div>
+        </div>
+
+        <div id="warningSection" class="warning-section" style="display: none;">
+            <h3 class="mb-3"><i class="bi bi-exclamation-circle"></i> Warning Hosts - Attention Needed</h3>
+            <div id="warningHostsList"></div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stat-card active" onclick="filterHosts('all', event)" title="Click to filter">
+                    <div class="stat-number healthy" id="totalHosts">-</div>
+                    <div class="stat-label">Total Hosts</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card" onclick="filterHosts('healthy', event)" title="Click to filter">
+                    <div class="stat-number healthy" id="healthyHosts">-</div>
+                    <div class="stat-label">Healthy</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card" onclick="filterHosts('warning', event)" title="Click to filter">
+                    <div class="stat-number warning" id="warningHosts">-</div>
+                    <div class="stat-label">Warning</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card" onclick="filterHosts('critical', event)" title="Click to filter">
+                    <div class="stat-number critical" id="criticalHosts">-</div>
+                    <div class="stat-label">Critical</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="repoHealthSection" class="card repo-health-section mb-4" style="display: none;">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h3 class="card-title mb-0"><i class="bi bi-git-branch"></i> Market Feed Tasks</h3>
+                    <small class="text-muted" id="repoUpdatedAt">Awaiting data...</small>
+                </div>
+                <div class="repo-health-pills mb-3">
+                    <span class="repo-pill healthy" id="repoHealthyCount">0 good</span>
+                    <span class="repo-pill warning" id="repoWarningCount">0 warning</span>
+                    <span class="repo-pill critical" id="repoErrorCount">0 error</span>
+                    <!-- Issue #77: failed pill is hidden until at least one task is failed -->
+                    <span class="repo-pill failed" id="repoFailedCount" style="display: none;">0 failed</span>
+                </div>
+                <div id="repoHealthList" class="repo-health-list">
+                    <p class="text-muted mb-0">Waiting for repo data...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- GRQ#4174: per-day feed completion (GRQ#4168). One row per feed from
+             docs/feeds/<nyDateKey>.json, rolled up to a single at-a-glance badge
+             so a failed or never-run fetch is loud to a human, not just readable
+             by the scorer gate. -->
+        <div id="feedCompletionSection" class="card repo-health-section mb-4" style="display: none;">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h3 class="card-title mb-0"><i class="bi bi-calendar-check"></i> Feed Completion</h3>
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="feedRollupBadge" class="badge bg-secondary feed-rollup-badge">Loading…</span>
+                        <small class="text-muted" id="feedPanelDate"></small>
+                    </div>
+                </div>
+                <div id="feedCompletionList" class="repo-health-list">
+                    <p class="text-muted mb-0">Waiting for feed data...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading health data...</div>
+        </div>
+        
+        <!-- Footer with version info -->
+        <footer class="mt-5 py-3 text-center text-muted border-top">
+            <small>GRQ Health Dashboard v<span id="version">Loading...</span></small>
+        </footer>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+    <script src="./theme.js?v=1.1.20"></script>
+    <script src="./host-status.js?v=1.1.32"></script>
+    <script src="./dashboard.js?v=1.1.32"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        // Register service worker only if supported
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js?v=1.1.32')
+                    .then((registration) => {
+                        console.log('Service Worker registered successfully:', registration.scope);
+                        
+                        // Force update check on every page load
+                        registration.update();
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed') {
+                                    if (navigator.serviceWorker.controller) {
+                                        // New content is available, force immediate refresh
+                                        console.log('New version available, forcing refresh...');
+                                        
+                                        // Force immediate update for all browsers
+                                        navigator.serviceWorker.controller.postMessage({ type: 'FORCE_UPDATE' });
+                                        // Force reload immediately
+                                        window.location.reload(true);
+                                    } else {
+                                        // First time installation
+                                        console.log('Service worker installed for the first time');
+                                    }
+                                }
+                            });
+                        });
+                        
+                        // Listen for messages from service worker
+                        navigator.serviceWorker.addEventListener('message', (event) => {
+                            if (event.data && event.data.type === 'FORCE_RELOAD') {
+                                console.log('Service worker requested force reload');
+                                window.location.reload(true);
+                            }
+                            if (event.data && event.data.type === 'SW_UPDATED') {
+                                console.log('Service worker updated to version:', event.data.version);
+                                // Force reload for all browsers when SW updates
+                                console.log('SW updated, forcing reload');
+                                window.location.reload(true);
+                            }
+                        });
+                        
+                        // Listen for messages from service worker controller
+                        if (navigator.serviceWorker.controller) {
+                            navigator.serviceWorker.controller.addEventListener('message', (event) => {
+                                if (event.data && event.data.type === 'SW_UPDATED' && event.data.forceReload) {
+                                    console.log('Force reload requested due to version update');
+                                    window.location.reload(true);
+                                }
+                            });
+                        }
+                        
+                        // Check for updates every 30 seconds
+                        setInterval(() => {
+                            registration.update();
+                        }, 30000);
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker registration failed:', error);
+                        // If service worker registration fails, redirect to simple version
+                        console.log('Redirecting to simple version due to service worker failure');
+                        window.location.href = './simple.html';
+                    });
+            });
+        } else {
+            // Service worker not supported, redirect to simple version
+            console.log('Service Worker not supported, redirecting to simple version');
+            window.location.href = './simple.html';
+        }
+        
+        // Handle PWA install prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent the mini-infobar from appearing on mobile
+            e.preventDefault();
+            // Stash the event so it can be triggered later
+            deferredPrompt = e;
+            console.log('PWA install prompt available');
+        });
+        
+        // Handle PWA installed
+        window.addEventListener('appinstalled', (evt) => {
+            console.log('PWA was installed');
+            deferredPrompt = null;
+        });
+    </script>
+</body>
+</html> 

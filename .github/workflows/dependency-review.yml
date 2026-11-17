@@ -1,0 +1,30 @@
+name: Dependency Review
+
+on:
+  # No branches: filter — a bare pull_request trigger runs on every PR target.
+  # `branches: ["*"]` skipped nested targets such as milestone/<slug>, because
+  # the `*` glob matches zero or more characters excluding `/` (issue #192).
+  pull_request:
+
+# Cancel a superseded run when a new commit is pushed to the same PR
+# branch (issue #187). Keying the group on github.ref keeps each branch in
+# its own group, so concurrent PRs never cancel each other's runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    # Checkout plus a single dependency-review API call — 10 minutes is ample
+    # headroom, and caps a hung run well below GitHub's 360-minute default
+    # (issue #188).
+    timeout-minutes: 10
+    steps:
+      # actions/checkout v4 — pinned to commit SHA per supply-chain policy
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # actions/dependency-review-action v4.9.0 — pinned to commit SHA per supply-chain policy
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0

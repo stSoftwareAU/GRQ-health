@@ -1,0 +1,39 @@
+name: Gitleaks
+
+on:
+  # No branches: filter — a bare pull_request trigger runs on every PR target.
+  # `branches: ["*"]` skipped nested targets such as milestone/<slug>, because
+  # the `*` glob matches zero or more characters excluding `/` (issue #192).
+  pull_request:
+
+# Cancel a superseded run when a new commit is pushed to the same PR
+# branch (issue #187). Keying the group on github.ref keeps each branch in
+# its own group, so concurrent PRs never cancel each other's runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    # Full-history checkout, a gitleaks download and a scan of the PR range.
+    # Caps a hung download or scan below GitHub's 360-minute default
+    # (issue #188).
+    timeout-minutes: 10
+    steps:
+      # actions/checkout v4 — pinned to commit SHA per supply-chain policy
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install Gitleaks
+        run: |
+          set -euo pipefail
+          GITLEAKS_VERSION="8.27.2"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+      - name: Run Gitleaks
+        run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose --redact

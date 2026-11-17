@@ -1,0 +1,183 @@
+#!/bin/bash
+# Git retry helpers for graceful handling of GitHub rate limits and
+# transient network failures. Sourced by run.sh and helpers/repos.sh.
+#
+# Exposes:
+#   grq_timeout_cmd          — echoes the timeout binary (gtimeout/timeout)
+#                              or empty if neither is installed.
+#   grq_git_timeout_secs     — echoes the per-git-call timeout (default 120).
+#                              Override via GRQ_GIT_TIMEOUT_OVERRIDE.
+#   grq_backoff_delays       — echoes the space-separated backoff delays
+#                              (default "1 4 16 30 60" — ~111s total budget,
+#                              sized for 12+ concurrent Vibe Coder writers
+#                              racing on docs/repos.json; Issue #125).
+#                              Override via GRQ_PUSH_RETRY_DELAYS_OVERRIDE.
+#   grq_max_push_attempts    — echoes the max push attempts (default 5;
+#                              Issue #125). Override via GRQ_PUSH_MAX_ATTEMPTS.
+#   grq_run_git              — runs `git "$@"` wrapped in the timeout helper
+#                              (when available). Caller controls redirections.
+#   grq_is_rate_limit_error  — given stderr text on stdin, returns 0 if the
+#                              text matches a GitHub rate-limit response.
+#   grq_is_non_fast_forward_error — given stderr text on stdin, returns 0 if
+#                              the text matches a non-fast-forward / "fetch
+#                              first" push rejection (the expected outcome of a
+#                              concurrent push to the shared branch; #2754).
+#   grq_rate_limit_sleep_secs — when called after a detected rate limit,
+#                              echoes how many seconds to sleep before the
+#                              next attempt. Honours
+#                              GRQ_RATE_LIMIT_SLEEP_OVERRIDE for tests; if
+#                              `gh` is available it queries
+#                              `gh api rate_limit` for the reset window.
+#   grq_recover_to_remote    — discards local commits/working-tree changes
+#                              on the current branch by `git reset --hard
+#                              origin/<branch>` + `git clean -fd`. Caller
+#                              must already be in the repo directory.
+
+# Resolve timeout binary cross-platform.
+grq_timeout_cmd() {
+    if command -v gtimeout >/dev/null 2>&1; then
+        echo "gtimeout"
+    elif command -v timeout >/dev/null 2>&1; then
+        echo "timeout"
+    else
+        echo ""
+    fi
+}
+
+grq_git_timeout_secs() {
+    echo "${GRQ_GIT_TIMEOUT_OVERRIDE:-120}"
+}
+
+grq_backoff_delays() {
+    # Issue #125: bumped from "1 4 16" to "1 4 16 30 60" so a busy stretch
+    # with 12+ concurrent writers racing on docs/repos.json can clear.
+    echo "${GRQ_PUSH_RETRY_DELAYS_OVERRIDE:-1 4 16 30 60}"
+}
+
+grq_max_push_attempts() {
+    # Issue #125: bumped from 3 to 5 (paired with the longer backoff series).
+    echo "${GRQ_PUSH_MAX_ATTEMPTS:-5}"
+}
+
+# Add a small random jitter (0..GRQ_PUSH_JITTER_MAX secs, default 2) to a
+# backoff delay so a fleet of workers that all collided on the same shared
+# branch at the same instant do not retry in lock-step (Issue #139). A base
+# delay of 0 (used by tests via GIT_PUSH_RETRY_DELAY_OVERRIDE) is returned
+# unchanged so retries stay instant; set GRQ_PUSH_JITTER_MAX=0 to disable
+# jitter entirely.
+# Usage: grq_apply_jitter <base_seconds>  -> echoes base (+ jitter)
+grq_apply_jitter() {
+    local base="${1:-0}"
+    local max="${GRQ_PUSH_JITTER_MAX:-2}"
+    # Guard against non-numeric input and the disable/zero cases.
+    if ! [[ "$base" =~ ^[0-9]+$ ]] || [ "$base" -le 0 ] || \
+       ! [[ "$max" =~ ^[0-9]+$ ]] || [ "$max" -le 0 ]; then
+        echo "$base"
+        return 0
+    fi
+    echo $(( base + (RANDOM % (max + 1)) ))
+}
+
+# Run a git command wrapped with the timeout helper (when available).
+# Usage: grq_run_git <git args...>
+# Caller is responsible for stdout/stderr redirection.
+grq_run_git() {
+    local timeout_bin
+    timeout_bin=$(grq_timeout_cmd)
+    local secs
+    secs=$(grq_git_timeout_secs)
+    if [ -n "$timeout_bin" ]; then
+        "$timeout_bin" "$secs" git "$@"
+    else
+        git "$@"
+    fi
+}
+
+# Detect a GitHub rate-limit / abuse response in arbitrary stderr text on
+# stdin. Returns 0 (true) when it looks like a rate limit, 1 otherwise.
+grq_is_rate_limit_error() {
+    grep -Eiq "rate limit|x-ratelimit|429|too many requests|abuse detection|secondary rate limit"
+}
+
+# Detect a non-fast-forward / "fetch first" push rejection in arbitrary
+# stderr text on stdin. This is the EXPECTED outcome when another host pushes
+# to the shared health branch concurrently: our push is rejected as a
+# non-fast-forward and is recovered transparently via `git pull --rebase`.
+# Treating it as routine lets callers log it quietly instead of emitting the
+# alarming raw `error:`/`! [rejected]` git output (Issue #2754). Returns 0
+# (true) when the text looks like a non-fast-forward rejection, 1 otherwise.
+grq_is_non_fast_forward_error() {
+    grep -Eiq "\[rejected\]|fetch first|non-fast-forward|updates were rejected|tip of your current branch is behind"
+}
+
+# Compute how long to sleep when a rate-limit response was detected.
+# Echoes a non-negative integer number of seconds.
+#
+# Resolution order:
+#   1. GRQ_RATE_LIMIT_SLEEP_OVERRIDE (used by tests to force a known value).
+#   2. `gh api rate_limit` reset epoch minus current time (when `gh` exists).
+#   3. Fallback to the supplied backoff seconds (first arg, default 60).
+grq_rate_limit_sleep_secs() {
+    local fallback="${1:-60}"
+
+    if [ -n "${GRQ_RATE_LIMIT_SLEEP_OVERRIDE:-}" ]; then
+        echo "$GRQ_RATE_LIMIT_SLEEP_OVERRIDE"
+        return 0
+    fi
+
+    if command -v gh >/dev/null 2>&1; then
+        local timeout_bin
+        timeout_bin=$(grq_timeout_cmd)
+        local reset_epoch
+        if [ -n "$timeout_bin" ]; then
+            reset_epoch=$("$timeout_bin" 10 gh api rate_limit \
+                --jq '.resources.core.reset' 2>/dev/null || echo "")
+        else
+            reset_epoch=$(gh api rate_limit --jq '.resources.core.reset' 2>/dev/null || echo "")
+        fi
+        if [[ "$reset_epoch" =~ ^[0-9]+$ ]]; then
+            local now
+            now=$(date +%s)
+            local diff=$((reset_epoch - now))
+            if [ "$diff" -gt 0 ]; then
+                # Add a small jitter so multiple workers don't wake at exactly
+                # the same instant.
+                echo $((diff + 5))
+                return 0
+            fi
+        fi
+    fi
+
+    echo "$fallback"
+}
+
+# Discard any local-only commits and working-tree changes on the current
+# branch by hard-resetting to origin/<branch> and cleaning untracked files.
+# This guards against the next service update committing on top of a stale
+# unpushed commit, which would falsely mark the previous service as alive.
+#
+# Caller must already be in the repo directory.
+grq_recover_to_remote() {
+    local branch
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    if [ -z "$branch" ] || [ "$branch" = "HEAD" ]; then
+        echo "Warning: cannot recover detached HEAD to remote" >&2
+        return 1
+    fi
+
+    local timeout_bin
+    timeout_bin=$(grq_timeout_cmd)
+    local secs
+    secs=$(grq_git_timeout_secs)
+
+    # Fetch latest origin so the reset target reflects the remote tip.
+    if [ -n "$timeout_bin" ]; then
+        "$timeout_bin" "$secs" git fetch --quiet origin "$branch" 2>/dev/null || true
+    else
+        git fetch --quiet origin "$branch" 2>/dev/null || true
+    fi
+
+    git reset --hard "origin/${branch}" 2>/dev/null || return 1
+    git clean -fd 2>/dev/null || true
+    return 0
+}

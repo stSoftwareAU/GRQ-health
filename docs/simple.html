@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRQ Health Status</title>
+
+    <!-- Issue #161: apply the remembered theme before first paint to avoid a flash -->
+    <script data-theme-init>
+        (function () {
+            try {
+                var m = localStorage.getItem('grq-theme') || 'auto';
+                if (['light', 'dark', 'auto'].indexOf(m) === -1) { m = 'auto'; }
+                var dark = m === 'dark' || (m === 'auto' && window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme-mode', m);
+            } catch (e) { /* storage unavailable — fall back to light */ }
+        })();
+    </script>
+    <link href="./theme.css?v=1.1.20" rel="stylesheet">
+    <style>
+        /* Issue #161: theme-aware colours via CSS variables. Light keeps the
+           original plain look; the dark overrides sit under [data-theme]. */
+        :root {
+            --simple-bg: #f8f9fa;
+            --simple-text: #212529;
+            --simple-muted: #6c757d;
+            --simple-summary: #343a40;
+        }
+        [data-theme="dark"] {
+            --simple-bg: #16213e;
+            --simple-text: #e8e8f2;
+            --simple-muted: #9aa0b8;
+            --simple-summary: #c8ccdf;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            margin: 0;
+            background: var(--simple-bg);
+            color: var(--simple-text);
+        }
+        .status {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .ok { color: #28a745; }
+        .warning { color: #ffc107; }
+        .error { color: #dc3545; }
+        .loading { color: var(--simple-muted); }
+        .timestamp {
+            font-size: 14px;
+            color: var(--simple-muted);
+            margin-top: 20px;
+        }
+        .repo-summary {
+            margin-top: 30px;
+            font-size: 16px;
+            color: var(--simple-summary);
+        }
+        .repo-summary small {
+            display: block;
+            color: var(--simple-muted);
+            margin-top: 4px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div id="theme-toggle" class="theme-toggle theme-toggle--floating"></div>
+    <h1>GRQ Health Status</h1>
+    <div id="status" class="status loading">Loading...</div>
+    <div class="timestamp" id="timestamp"></div>
+    <div class="repo-summary" id="repoSummary"></div>
+
+    <!-- Issue #213: shared per-host health data loader -->
+    <script src="./host-status.js?v=1.1.31"></script>
+    <script>
+        // Escape HTML special characters to prevent XSS when interpolating into innerHTML
+        function escapeHtml(str) {
+            if (!str && str !== 0) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function checkHealth() {
+            try {
+                // Add timestamp to force fresh fetch and bypass cache
+                const timestamp = new Date().getTime();
+                // Issue #213: per-host documents, with the legacy fleet-wide
+                // index.json merged underneath for hosts still on an older run.sh.
+                const [health, repoResponse] = await Promise.all([
+                    GRQHostStatus.loadHostStatus(fetch, timestamp),
+                    fetch(`./repos.json?t=${timestamp}`)
+                ]);
+                health.errors.forEach(message => console.error('Health data:', message));
+                const data = health.data;
+                let repoData = { repos: [] };
+                if (repoResponse.ok) {
+                    repoData = await repoResponse.json();
+                } else {
+                    console.warn('Repo health data unavailable', repoResponse.status);
+                }
+                
+                // Convert to array of [hostname, data] pairs
+                const hosts = Object.entries(data);
+                
+                // Count different health statuses
+                let healthy = 0;
+                let warning = 0;
+                let critical = 0;
+                let mia = 0;
+                
+                hosts.forEach(([hostname, hostData]) => {
+                    const status = getHealthStatus(hostname, hostData);
+                    switch (status) {
+                        case 'healthy':
+                            healthy++;
+                            break;
+                        case 'warning':
+                            warning++;
+                            break;
+                        case 'critical':
+                            critical++;
+                            break;
+                        case 'mia':
+                            mia++;
+                            break;
+                    }
+                });
+                const repoStats = summariseRepoStats(repoData.repos || []);
+                const hasRepoError = repoStats.error > 0;
+                const hasRepoWarning = repoStats.warning > 0;
+                // Issue #77: any failed repo makes the overall status unhealthy.
+                const hasRepoFailed = repoStats.failed > 0;
+
+                // Determine overall status
+                let overallStatus = 'OK';
+                let statusClass = 'ok';
+
+                if (critical > 0 || hasRepoError || hasRepoFailed) {
+                    overallStatus = 'ERROR';
+                    statusClass = 'error';
+                } else if (warning > 0 || hasRepoWarning) {
+                    overallStatus = 'WARNING';
+                    statusClass = 'warning';
+                }
+                
+                // Update display
+                const statusElement = document.getElementById('status');
+                statusElement.textContent = overallStatus;
+                statusElement.className = `status ${statusClass}`;
+                
+                // Update timestamp
+                document.getElementById('timestamp').textContent = 
+                    `Last updated: ${new Date().toLocaleString()}`;
+                
+                // Calculate most recent update from repos
+                const repos = repoData.repos || [];
+                const mostRecentTs = repos.length > 0 ? Math.max(...repos.map(r => r.last_commit_ts || 0)) : null;
+                updateRepoSummary(repoStats, mostRecentTs);
+                
+            } catch (error) {
+                console.error('Health check failed:', error);
+                const statusElement = document.getElementById('status');
+                statusElement.textContent = 'ERROR';
+                statusElement.className = 'status error';
+                document.getElementById('timestamp').textContent = 
+                    `Error: ${error.message}`;
+                document.getElementById('repoSummary').textContent = 'Market feed status unavailable';
+            }
+        }
+        
+        // Get idle worker status by comparing 1m, 5m and 15m load averages - Issue #23
+        // Returns an object with idle status and details to help detect workers not doing meaningful work
+        function getIdleWorkerStatus(data) {
+            const result = {
+                isIdle: false,
+                reason: '',
+                load1m: null,
+                load5m: null,
+                load15m: null,
+                coreCount: 0
+            };
+
+            // Need load_averages and cpu_cores data
+            if (!data.load_averages || !data.cpu_cores) {
+                return result;
+            }
+
+            const coreCount = parseInt(data.cpu_cores);
+            if (!Number.isFinite(coreCount) || coreCount <= 0) {
+                return result;
+            }
+            result.coreCount = coreCount;
+
+            // Parse load averages from format like "43.6% (1m), 73.2% (5m), 56.6% (15m)"
+            const load1mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(1m\)/);
+            const load5mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(5m\)/);
+            const load15mMatch = data.load_averages.match(/(\d+\.?\d*)%\s*\(15m\)/);
+
+            if (!load1mMatch || !load5mMatch || !load15mMatch) {
+                return result;
+            }
+
+            const load1m = parseFloat(load1mMatch[1]);
+            const load5m = parseFloat(load5mMatch[1]);
+            const load15m = parseFloat(load15mMatch[1]);
+
+            if (!Number.isFinite(load1m) || !Number.isFinite(load5m) || !Number.isFinite(load15m)) {
+                return result;
+            }
+
+            result.load1m = load1m;
+            result.load5m = load5m;
+            result.load15m = load15m;
+
+            // Only check multi-core systems (> 4 cores)
+            if (coreCount <= 4) {
+                return result;
+            }
+
+            // Define thresholds for idle detection
+            const idleThreshold1m = 15;
+            const idleThreshold5m = 15;
+            const idleThreshold15m = 20;
+
+            // Check for consistently idle machine - all averages are low
+            if (load1m < idleThreshold1m && load5m < idleThreshold5m && load15m < idleThreshold15m) {
+                result.isIdle = true;
+                result.reason = `Worker idle: ${load1m.toFixed(1)}% (1m), ${load5m.toFixed(1)}% (5m), ${load15m.toFixed(1)}% (15m) on ${coreCount} cores`;
+                return result;
+            }
+
+            return result;
+        }
+
+        function getHealthStatus(hostname, data) {
+            // Check if this is a dead machine
+            if (data.death_date) {
+                return 'dead';
+            }
+
+            // Check if this is a mobile host without heartbeat
+            if (data.mobile && !data.heart_beat_ts) {
+                return 'historical';
+            }
+
+            // For active hosts without heartbeat, mark as critical (unless mobile)
+            if (!data.heart_beat_ts) {
+                return 'critical';
+            }
+
+            const now = Math.floor(Date.now() / 1000);
+            const hoursSinceHeartbeat = (now - data.heart_beat_ts) / 3600;
+
+            // Handle timezone issues - if heartbeat is in the future, assume it's recent
+            if (data.heart_beat_ts > now) {
+                return 'healthy';
+            }
+
+            // Check for MIA state (mobile hosts not seen for 24+ hours)
+            if (hoursSinceHeartbeat > 24 && data.mobile) {
+                return 'mia';
+            }
+
+            // Check for critical state (no heartbeat for 24+ hours)
+            if (hoursSinceHeartbeat > 24 && !data.mobile) {
+                return 'critical';
+            }
+
+            // Check for warning states
+            if (hoursSinceHeartbeat <= 24) {
+                // Disk usage warning (over 75% used)
+                if (data.used_disk_percent && parseFloat(data.used_disk_percent) > 75) {
+                    return 'warning';
+                }
+
+                // Config warning (missing PRIMARY_READ_URL or TRAINING_WRITE_URL)
+                if (data.config_warning && data.config_warning.trim().length > 0) {
+                    return 'warning';
+                }
+
+                // Idle worker detection - Issue #23
+                // Uses 1m, 5m, and 15m load averages to detect workers not doing meaningful work
+                const idleStatus = getIdleWorkerStatus(data);
+                if (idleStatus.isIdle) {
+                    return 'warning';
+                }
+
+                // OS version warning
+                if (data.os_info && data.os_version) {
+                    if (data.os_info.includes('macOS') && data.os_version < '14.0') {
+                        return 'warning';
+                    }
+                    if (data.os_info.includes('Ubuntu') && data.os_version < '22.04') {
+                        return 'warning';
+                    }
+                }
+
+                // Exception warning
+                if (data.exception_count && parseInt(data.exception_count) > 0) {
+                    return 'warning';
+                }
+
+                return 'healthy';
+            }
+
+            return 'healthy';
+        }
+
+        // Issue #77: Detect a failed repo — a recorded failure timestamp at
+        // least as new as the most recent successful commit. A failed task is
+        // always unhealthy and always renders a "View log" link.
+        function isRepoFailed(repo) {
+            if (!repo) return false;
+            const failureTs = Number(repo.last_failure_ts || 0);
+            if (!Number.isFinite(failureTs) || failureTs <= 0) {
+                return false;
+            }
+            const commitTs = Number(repo.last_commit_ts || 0);
+            return failureTs >= (Number.isFinite(commitTs) ? commitTs : 0);
+        }
+
+        // Issue #77: Build a link to log-viewer.html for a captured failure log.
+        function buildRepoFailureLogUrl(repo) {
+            if (!repo) return '';
+            const raw = String(repo.last_failure_log || '').trim();
+            if (!raw) return '';
+            const trimmed = raw.replace(/^\.\/+/, '').replace(/^\/+/, '');
+            const encoded = trimmed
+                .split('/')
+                .map((segment) => encodeURIComponent(segment))
+                .join('/');
+            return `./log-viewer.html?file=./${encoded}`;
+        }
+
+        function summariseRepoStats(repos) {
+            return (repos || []).reduce((acc, repo) => {
+                acc.total += 1;
+                // Issue #77: a recent failure dominates any other classification.
+                if (isRepoFailed(repo)) {
+                    acc.failed += 1;
+                    acc.failedEntries.push(repo);
+                } else if (repo.status === 'error') {
+                    acc.error += 1;
+                    acc.errorNames.push(repo.name);
+                    if (repo.error_message) {
+                        acc.errorMessages.push(`${repo.name}: ${repo.error_message}`);
+                    }
+                } else if (repo.status === 'warning') {
+                    acc.warning += 1;
+                    acc.warningNames.push(repo.name);
+                } else {
+                    acc.healthy += 1;
+                }
+                return acc;
+            }, { total: 0, healthy: 0, warning: 0, error: 0, failed: 0,
+                 warningNames: [], errorNames: [], errorMessages: [],
+                 failedEntries: [] });
+        }
+
+        function updateRepoSummary(repoStats, generatedAt) {
+            const summaryElement = document.getElementById('repoSummary');
+            if (!summaryElement) return;
+
+            if (repoStats.total === 0) {
+                summaryElement.textContent = 'Market feeds: no repos configured';
+                return;
+            }
+
+            const parts = [`${repoStats.healthy} good`];
+            if (repoStats.warning > 0) {
+                const warningNames = repoStats.warningNames.map(escapeHtml).join(', ');
+                parts.push(`${repoStats.warning} warning${warningNames ? ` (${warningNames})` : ''}`);
+            }
+            if (repoStats.error > 0) {
+                const errorNames = repoStats.errorNames.map(escapeHtml).join(', ');
+                parts.push(`${repoStats.error} error${errorNames ? ` (${errorNames})` : ''}`);
+            }
+            // Issue #77: surface failed tasks with links to their captured logs.
+            if (repoStats.failed > 0) {
+                const failedLinks = repoStats.failedEntries.map((entry) => {
+                    const name = escapeHtml(entry.name || 'Unknown');
+                    const url = buildRepoFailureLogUrl(entry);
+                    if (!url) return name;
+                    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${name}</a>`;
+                }).join(', ');
+                parts.push(`${repoStats.failed} failed${failedLinks ? ` (${failedLinks})` : ''}`);
+            }
+
+            summaryElement.innerHTML = `
+                Market feeds: ${parts.join(' &bull; ')}
+                ${generatedAt ? `<small>Repo data updated ${formatRelativeTime(generatedAt)}</small>` : ''}
+                ${repoStats.errorMessages.length ? `<small>Issues: ${repoStats.errorMessages.map(escapeHtml).join(' &bull; ')}</small>` : ''}
+            `;
+        }
+
+        function formatRelativeTime(timestamp) {
+            if (!timestamp || Number.isNaN(timestamp) || timestamp <= 0) {
+                return 'recently';
+            }
+            const now = Date.now();
+            const diffMs = now - (timestamp * 1000);
+            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            if (diffMinutes < 60) {
+                return `${diffMinutes}m ago`;
+            }
+            const diffHours = Math.floor(diffMinutes / 60);
+            if (diffHours < 24) {
+                return `${diffHours}h ago`;
+            }
+            const diffDays = Math.floor(diffHours / 24);
+            return `${diffDays}d ago`;
+        }
+        
+        // Check health on page load
+        checkHealth();
+        
+        // Refresh every 30 seconds
+        setInterval(checkHealth, 30000);
+    </script>
+    <script src="./theme.js?v=1.1.20"></script>
+</body>
+</html>

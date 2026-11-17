@@ -1,0 +1,1056 @@
+# GRQ Health Monitoring System
+
+A distributed health monitoring system that tracks the status of multiple hosts across different operating systems and timezones. The system provides a beautiful web dashboard to visualize host health status with location tracking, historical records, and smart health logic.
+
+## 🤖 AI Assistant Instructions
+
+**IMPORTANT: This README serves as the primary specification document for the AI assistant working on this project.**
+
+### Before Making Any Changes:
+1. **ALWAYS read this entire README first** to understand the current system architecture and specifications
+2. **Check the current version** in `run.sh` and increment it for any code changes
+3. **Run `./update_version.sh`** after making changes to sync version across all files
+4. **Update this README** if you modify system behavior, add features, or change specifications
+5. **Test changes** on both desktop and mobile views when applicable
+
+### Current System Specifications:
+
+#### Log Viewer Auto-Scroll Behavior:
+- **Function**: `scrollToFirstIssue()` in `log-viewer.html`
+- **Current Logic**: 
+  1. Find the first issue of any type in DOM order (error, stack trace, or warning)
+  2. Scroll to that first issue
+  3. If no issues found, stay at the top
+- **Highlighted Issues**: ERROR, Exception, Error:, ⚠️ (warning emoji), WARNING, Warning:, DEBUG:
+- **Stack Trace Detection**: 
+  - JavaScript stack traces: Lines matching `/^\s+at /` pattern
+  - C stack traces: Lines matching `/^\s+\d+\s+[^\s]+\s+0x[0-9a-fA-F]+/` pattern (allows periods, hyphens, and other valid characters in binary/library names, requires hex address to avoid false positives from git messages)
+- **All issues are counted** in the dashboard exception count
+
+#### Exception Detection in run.sh:
+- **Authoritative signal (Issue #127)**: When the log contains
+  `[stage-failure-health] failures=N firstStage=S firstExitCode=C firstHitLine=L`
+  (emitted by GRQ#2313), `scan_log_errors` trusts that line over every other
+  heuristic:
+  - `failures=0` → run classified as **successful**; any noisy
+    "Task failed with status N" line is ignored.
+  - `failures>0` → run classified as **failed**; `exception_count=N` and the
+    summary names `firstStage`, `firstExitCode`, `firstHitLine`.
+- **Reporting warnings (Issue #127)**: `[reporting-warning] …` lines are
+  counted into a separate `reporting_warning_count` field on the per-user
+  and per-host JSON, surfaced in `docs/host-status/<HOST>.json` so operators can
+  distinguish three states:
+  1. Healthy — `exception_count=0`, `reporting_warning_count=0`.
+  2. Healthy with transient reporting issues — `exception_count=0`,
+     `reporting_warning_count>0`.
+  3. Failed — `exception_count>0`.
+- **Legacy fall-back**: Logs without `[stage-failure-health]` (predating
+  GRQ#2313) continue to use the original heuristic classifier below.
+- **Stack traces**: Lines with "Exception", "Error", "MEMETIC" followed by stack trace lines
+- **Missing commands**: "No such file or directory" errors
+- **Warning emojis**: Lines containing "⚠️"
+- **Permission errors**: "Permission denied", "access denied", "EACCES"
+- **All exceptions trigger health updates** regardless of heartbeat timing
+- **Excluded**: Lines containing `[MemoryMonitor]` are filtered out before scanning — these are operational cache-clearing messages, not real errors
+
+#### get_system_info stdout contract (Issue #214):
+- **Rule**: `get_system_info()` writes **only** the host JSON document to stdout. Every diagnostic it emits — the "bc not found" dependency warning included — goes to **stderr**.
+- **Why**: `update_json` captures the function with `system_info=$(get_system_info)` and passes the result to `jq --argjson`. Anything else on stdout is prepended to the JSON, `jq` rejects it, and the host's health document is never updated.
+- **Applies to**: every helper `get_system_info` calls (`collect_gpu_info`, `scan_log_errors`, `collect_vibe_coder_state`) — their stdout is captured with the caller's.
+- **Test**: `tests/test-system-info-stdout-json.sh` runs `get_system_info` with `bc` masked off the PATH and asserts stdout still parses as JSON while the warning lands on stderr.
+
+#### Multi-user Hosts (per-user heartbeats):
+- **Problem**: Some machines run multiple unix users; one user's heartbeat can mask another user's stuck state if we only store a single host heartbeat.
+- **Storage**: `docs/host-status/<HOST>.json` stores a per-host `users` map keyed by username, each with its own `heart_beat_ts` (and related fields).
+- **Health logic**: The dashboard treats the host as unhealthy if **any discovered user** is stale (uses the *oldest* user heartbeat for host health classification).
+- **Logs**: `run.sh` writes only `docs/<HOST>/node-<user>.log` (one file per user). The generic `node.log` is no longer created.
+
+#### Published Logs Are a Tail Only (Issue #211):
+- **Problem**: `run.sh` copied the whole host log (up to ~8 MB) into `docs/<HOST>/` on every heartbeat and git kept every version. The repository reached 897 MB for a 32 MB working tree, and a full clone could no longer finish inside the fleet hooks' 60 s git bound.
+- **Rule**: No history of the logs is needed. `run.sh` publishes only the last 64 KB of `~/logs/node[-<pid>].log`, through `grq_copy_log_tail` in `helpers/log-tail.sh`. A truncated log starts on a line boundary under a one-line `[log truncated by run.sh: …]` marker. The full log stays on the host.
+- **Tuning**: set `GRQ_LOG_TAIL_BYTES` to change the limit. Invalid or zero values fall back to 64 KB.
+- **Unaffected**: `scan_log_errors` still reads the full local log, so exception counts on the dashboard do not change.
+- **Rollout**: each host shrinks its own `docs/<HOST>/node-<user>.log` on its next heartbeat. Do not truncate the committed logs by hand in a PR; every heartbeat rewrites them, so such a branch conflicts with `Develop` within minutes.
+- **Test**: `tests/test-log-tail.sh`.
+
+#### Cloning This Repository (Issue #211):
+Until the old log history is pruned, consumers that only need the current tree should avoid downloading it:
+
+```bash
+git clone --filter=blob:none --single-branch --branch Develop https://github.com/stSoftwareAU/GRQ-health.git
+```
+
+Pruning the history is a one-off maintainer job, run once every host is on `run.sh` 1.1.31 or later. It rewrites `Develop`, so every checkout must be re-cloned afterwards (`run.sh` and the hooks already treat their checkouts as disposable):
+
+```bash
+git clone --mirror https://github.com/stSoftwareAU/GRQ-health.git && cd GRQ-health.git
+git filter-repo --invert-paths --path-glob 'docs/*/node*.log'
+git push --force --mirror
+```
+
+#### Market Feed Repository Freshness:
+- **Manual updates**: Each background task updates `docs/repos.json` immediately after it finishes, recording its latest commit/publish timestamp.
+- **Helper script**: Use `helpers/update_repo_timestamp.sh` to update (or create) the entry for a service.
+  ```bash
+  # Record the current run for the dividends service
+  ./helpers/update_repo_timestamp.sh --name "dividends"
+
+  # Back-fill with an explicit unix timestamp
+  ./helpers/update_repo_timestamp.sh --name "FX" --timestamp 1752806400
+  ```
+- **Output**: `docs/repos.json` keeps a simple list of objects with `name` and `last_commit_ts`. Example:
+  ```json
+  {
+    "repos": [
+      { "name": "dividends", "last_commit_ts": 1752806400 },
+      { "name": "FX", "last_commit_ts": 1752720000 }
+    ]
+  }
+  ```
+- **Visualisation**: `docs/dashboard.js` and `docs/simple.html` fetch `docs/repos.json` and classify warning/error states (36h/72h thresholds) entirely on the client. The helper script intentionally does no health scoring.
+
+#### Version Management:
+- **Primary version**: Stored in `run.sh` VERSION variable
+- **Auto-sync**: `./update_version.sh` updates all HTML/JS files
+- **Required**: Increment version for any code changes
+
+## Features
+
+- **Cross-platform compatibility**: Works on macOS, Ubuntu, and AWS Linux
+- **Automatic health checks**: Monitors uptime, disk space, memory usage, CPU load, and network connectivity
+- **Smart updates**: Only updates when heartbeat is older than 12 hours
+- **Beautiful dashboard**: Modern web interface with real-time health status
+- **Location tracking**: Shows where each host is located with emoji indicators
+- **Historical records**: Maintains information about dead machines and MacBook Airs
+- **Smart health logic**: 
+  - Known dead machines don't affect system health
+  - MacBook Airs are expected to be offline and only marked critical after 7 days
+  - Slow machines are identified and tracked separately
+- **Dynamic page title**: Changes between "GRQ Healthy" and "GRQ Unhealthy" for uptime monitoring
+- **GitHub Pages integration**: Automatic deployment of the dashboard
+- **Timezone awareness**: Handles hosts in different timezones correctly
+
+## System Requirements
+
+- Bash shell
+- `jq` (optional, for better JSON handling)
+- `git` (for automatic commits and pushes)
+- Basic Unix tools (`uptime`, `df`, `free`, `ping`, etc.)
+
+## Quick Start
+
+1. **Clone the repository**:
+   ```bash
+   git clone <your-repo-url>
+   cd GRQ-health
+   ```
+
+2. **Make the script executable**:
+   ```bash
+   chmod +x run.sh
+   ```
+
+3. **Run the health check**:
+   ```bash
+   ./run.sh
+   ```
+
+4. **View the dashboard**: The dashboard will be available at your GitHub Pages URL once you push the changes.
+
+## How It Works
+
+### The `run.sh` Script
+
+The script performs the following operations:
+
+1. **System Information Collection**:
+   - Uptime (in seconds)
+   - Free disk space (in GB)
+   - Memory usage percentage
+   - CPU load average
+   - GPU usage (cross-platform, non-privileged — see below)
+   - Operating system information
+   - Network connectivity status
+   - Timezone information
+
+   **GPU metrics (Issue #136)** are collected during the same scan, with no
+   `sudo`/`powermetrics` required. Any value that cannot be read degrades to
+   `N/A` rather than erroring or blocking the scan:
+   - **Apple Silicon** — live `Device Utilization %` and GPU memory in use via
+     `ioreg -r -d 1 -c IOAccelerator`; chipset model + core count via
+     `system_profiler SPDisplaysDataType`.
+   - **NVIDIA (Linux/Windows)** — utilisation %, VRAM used/total, temperature
+     and product name from a single `nvidia-smi` call.
+   - Other vendors (AMD, Intel integrated) and non-GPU hosts simply report
+     `N/A`. The dashboard shows a **GPU Load** card next to **CPU Load**.
+
+2. **Health Check Logic**:
+   - Checks if the last heartbeat was more than 12 hours ago
+   - Only updates if an update is needed (prevents unnecessary writes)
+   - Creates a backup of the existing document before updates, in
+     `.health-state/` at the repository root (outside `docs/`, so recovery
+     copies are never committed)
+
+3. **Data Storage**:
+   - Updates `docs/host-status/<HOST>.json` with current host information
+   - Writes only this host's document, so a heartbeat commits ~2 KB, not the whole fleet
+   - Refreshes `docs/host-status/index.json` (the manifest) only when the host list changes
+   - Maintains timestamp of last heartbeat
+
+4. **Git Integration**:
+   - Automatically commits changes
+   - Pushes to remote repository
+   - Triggers GitHub Pages deployment
+
+### Enhanced JSON Data Structure
+
+The system uses a simple structure where each hostname is a key:
+
+```json
+{
+  "GRQ-23": {
+    "uptime": 86400,
+    "free_disk_space": "50",
+    "disk_usage_percent": "39.7",
+    "mem_usage_percent": "65.2",
+    "cpu_load": "1.25",
+    "gpu_load": "4%",
+    "gpu_model": "Apple M4 Pro",
+    "gpu_cores": "16",
+    "gpu_memory": "0.36 GB in use",
+    "gpu_breakdown": "N/A",
+    "timezone": "AEST",
+    "os_info": "macOS",
+    "os_version": "15.5",
+    "network_status": "connected",
+    "heart_beat_ts": 1704067200,
+    "location": "Newport Office",
+    "info": "Mac m4",
+    "emoji": "🍭"
+  },
+  "GRQ-2": {
+    "death_date": "5 May 2024",
+    "location": "Silicon Heaven",
+    "emoji": "💀",
+    "os_info": "",
+    "info": ""
+  },
+  "Tina's": {
+    "location": "Out 'n about",
+    "emoji": "🕊️",
+    "os_info": "Mac",
+    "info": "Mac m3",
+    "last_seen": "2 Jun 2025",
+    "sample_rate": "1m 1s"
+  }
+}
+```
+
+### Per-Host Status Documents (Issue #213)
+
+A heartbeat used to rewrite the whole fleet-wide `docs/index.json` (~34 KB) to
+change a few fields of one host — roughly 250 commits a day across the fleet.
+`run.sh` now writes only this host's own document:
+
+- `docs/host-status/<HOST>.json` — one host, ~2 KB, the same fields the host's
+  entry in `docs/index.json` used to hold, plus a `host` field naming it.
+- `docs/host-status/index.json` — the manifest, `{"hosts": ["GRQ-3", …]}`,
+  rebuilt from the directory and written **only when the host list changes**.
+
+`docs/index.json` is no longer written by `run.sh`. It is read twice: to seed a
+host's first per-host document (so hand-edited `location`/`emoji` and other
+users' heartbeats survive), and by the dashboard, which merges it underneath the
+per-host documents. Hosts run their own checkout of `run.sh`, so the fleet
+migrates one host at a time and both sources stay live until every host has
+updated.
+
+```mermaid
+flowchart LR
+    subgraph Host["Host running run.sh"]
+        RUN[run.sh heartbeat]
+    end
+    LEGACY[("docs/index.json<br/>legacy, read-only")]
+    DOC[("docs/host-status/HOST.json<br/>~2 KB, written")]
+    MAN[("docs/host-status/index.json<br/>manifest, rarely written")]
+    DASH[dashboard.js / simple.html]
+
+    LEGACY -- "seed on first write" --> RUN
+    RUN --> DOC
+    RUN -- "only when the host list changes" --> MAN
+    MAN -- "which hosts?" --> DASH
+    DOC -- "wins for that host" --> DASH
+    LEGACY -- "hosts not migrated yet" --> DASH
+```
+
+Both pages load the data through `docs/host-status.js`, which fetches the
+manifest, then each listed document, and merges the legacy file underneath.
+Manifest entries are validated as untrusted input — an entry that is not a bare
+filename component is rejected and reported, never fetched. When nothing loads
+at all the loader throws rather than rendering an empty fleet.
+
+The merge is **per user**, not per host. On a multi-user host each unix account
+runs its own checkout, so one user can be writing the per-host document while
+another still writes `docs/index.json`; the `users` maps are merged and the
+newer `heart_beat_ts` wins for a user present in both. The host-level roll-ups
+(`user_count`, `worst_user_heart_beat_ts`, `best_user_heart_beat_ts`,
+`heart_beat_ts`, `exception_count`, `reporting_warning_count`,
+`exception_summary`) are then recomputed from the merged map, so a user who has
+not migrated is never shown as stuck and never silently disappears.
+
+#### Finishing the migration
+
+The legacy file is retired by hand once every host has moved, so the dashboard
+never has to guess:
+
+1. Check that every host in `docs/index.json` also has a document in
+   `docs/host-status/` — compare the manifest's `hosts` array with the keys of
+   `docs/index.json`.
+2. Confirm each of those documents has a recent `heart_beat_ts` (a host that
+   stopped reporting is not migrated, it is dead — mark it dead in the usual
+   way first).
+3. Delete `docs/index.json` and the orphaned `docs/index.json.bak`. The loader
+   treats a missing legacy file as normal: `sources.legacy` becomes `false` and
+   nothing is reported as an error.
+
+Until step 3 happens, `docs/index.json` stays frozen at the moment each host
+migrated — old hosts still rewrite it, migrated ones do not.
+
+### Repo Freshness JSON (`docs/repos.json`)
+
+```json
+{
+  "repos": [
+    {
+      "name": "FX",
+      "last_commit_ts": 1752806400,
+      "warning_days": 1.5,
+      "error_days": 4,
+      "business_days_only": true
+    },
+    {
+      "name": "shareprices2025Q3",
+      "last_commit_ts": 1752720000
+    },
+    {
+      "name": "commodities",
+      "last_commit_ts": 1752600000
+    },
+    {
+      "name": "Listings",
+      "last_commit_ts": 1752806400,
+      "warning_days": 5,
+      "error_days": 6
+    },
+    {
+      "name": "Quality",
+      "last_commit_ts": 1776265324,
+      "last_failure_ts": 1776300000,
+      "last_failure_log": "logs/Quality/20260417-013200.log",
+      "last_failure_exit_code": 1,
+      "last_failure_message": "3 shellcheck errors"
+    }
+  ]
+}
+```
+
+The dashboard calculates status from `last_commit_ts`:
+- **ERROR** (red): Last commit more than the error threshold (default: 2 business days)
+- **WARNING** (yellow): Last commit more than the warning threshold (default: 1 business day)
+- **OK** (green): Last commit within the warning threshold
+
+**Weekend grace period (Issue #47)**: Repos using default thresholds count only business days (weekdays), so a normal weekend without commits does not trigger false alarms. Repos with explicitly configured `warning_days` and/or `error_days` continue to use calendar days.
+
+**Per-repo thresholds**: Each repo can optionally specify `warning_days` and `error_days` to customise the thresholds (in calendar days). If not specified, defaults to 1 business day (warning) and 2 business days (error). For example, the "Listings" repo uses 5 days for warning and 6 days for error.
+
+**Weekend-aware repos (Issue #67)**: Repos that only receive data on weekdays (e.g., FX market feeds that run Monday–Friday) can set `"business_days_only": true` to skip weekends when calculating staleness, even with explicit thresholds. Without this flag, explicit thresholds count calendar days/hours. With it, only business days are counted, preventing false alarms on Monday mornings.
+
+**Holiday-aware staleness (Issue #155)**: Business-days counting also skips US (NYSE) and AU (ASX) market holidays, so a public holiday that extends a weekend — e.g. a Monday public holiday — does not burn into a repo's staleness budget. The consequence is asymmetric by design: mid-week silence, where every elapsed day is a trading day, accrues staleness faster and alerts sooner than a holiday-extended weekend gap of the same wall-clock length. The holiday calendar is the `MARKET_HOLIDAYS` set in `docs/dashboard.js` (UTC ISO dates, observed in-lieu where the actual date lands on a weekend) and needs annual maintenance as new years' schedules are published. No config change is required — any `business_days_only` repo inherits holiday skipping automatically.
+
+```mermaid
+flowchart LR
+    A[Day since last commit] --> B{Weekend?}
+    B -- Yes --> S[Skip: no staleness]
+    B -- No --> C{Market holiday?}
+    C -- Yes --> S
+    C -- No --> D[Count as 1 business day]
+```
+
+**Hour-grain thresholds (Issue #105)**: Repos that report frequently — for example Vibe Coders that should check in every hour — can specify `warning_hours` and/or `error_hours` instead of (or in addition to) the day-based thresholds. When either hour field is set it takes precedence over `warning_days`/`error_days`, and the elapsed time is compared in calendar hours so dead workers are flagged within hours rather than waiting ~24h for the day-grain check.
+
+```json
+{
+  "name": "Vibe Coder:GRQ-23",
+  "last_commit_ts": 1777588547,
+  "warning_hours": 4,
+  "error_hours": 8
+}
+```
+
+**Vibe Coder 8-hour dead threshold (Issue #112)**: Vibe Coders call `helpers/repos.sh` frequently while alive; the rate limit in `repos.sh` keeps the heartbeat to at most one update per hour. So if the heartbeat is more than 8 hours old, the worker is dead and the dashboard flags it as `error`. The default Vibe Coder configuration is `warning_hours: 4`, `error_hours: 8`.
+
+**Vibe Coder worker state (Issue #212)**: An 8-hour-old heartbeat means the row is *not reporting* — it does not say the worker is dead. `run.sh` runs on the same host as the worker, so it reads the worker's own log directory (`~/logs`, override with `VIBE_LOG_DIR`) and publishes what it finds into the host record in `docs/index.json`:
+
+```json
+"vibe_coder": {
+  "worker_live_ts": 1789682384,
+  "last_success_ts": 1789661507,
+  "last_claim_ts": 1789661107,
+  "run_pid_alive": true,
+  "hook_failures": { "success": 12, "failure": 2, "since_ts": 1789520314,
+                     "last_stderr": "could not fetch https://github.com/stSoftwareAU/GRQ-health.git …" },
+  "volume_reset_ts": 1789538554
+}
+```
+
+| Field | Source on the host |
+| --- | --- |
+| `worker_live_ts`, `last_success_ts`, `last_claim_ts` | the newest `[liveness] … live_epoch= last_productive= last_idle_claimed=` line in `~/logs/worker.log` |
+| `run_pid_alive` | `kill -0` on the PID in `~/logs/.run.pid` |
+| `hook_failures` | `~/logs/callback-failure-streaks.json` when the worker publishes it (stSoftwareAU/VibeCoder#2297), otherwise the `callback … failed` lines in `~/logs/worker.log`; `last_stderr` is always the newest hook stderr |
+| `volume_reset_ts` | the newest `work-volume: recreating` line in `~/logs/run_core.log` — a reset wipes the hooks' checkout, so it explains a hook failure |
+
+The block is omitted entirely on hosts with no worker installed.
+
+The dashboard then reinterprets a **red** `Vibe Coder:<host>` row — and only a red one — when the host saw the worker alive inside the same window that declared the row dead:
+
+```mermaid
+flowchart TD
+    A["Vibe Coder:host row is 'error'"] --> B{"worker_live_ts fresh<br/>within error_hours?"}
+    B -- No --> D["error — the worker really is dead"]
+    B -- Yes --> C{"success hooks failing AND<br/>last_success_ts newer than the row?"}
+    C -- Yes --> E["Hooks failing (warning)<br/>+ the hook's stderr — fix the hooks"]
+    C -- No --> F{"last_claim_ts older than<br/>the error window?"}
+    F -- Yes --> G["Idle (healthy) — nothing to do"]
+    F -- No --> D
+```
+
+Anything that cannot be explained stays `error`: an unexplained silence must stay loud. The counters above the repo list follow the same diagnosis, so the rows and the totals agree.
+
+**Task failure tracking (Issue #76)**: Each repo entry can optionally include failure fields to record the most recent failed run:
+- `last_failure_ts` — Unix timestamp of the last failure
+- `last_failure_log` — path to the stored log file, relative to `docs/` (e.g., `logs/Quality/20260417-013200.log`)
+- `last_failure_exit_code` — (optional) the non-zero exit status of the failed task
+- `last_failure_message` — (optional) a one-line summary of the failure
+
+When a successful run occurs (`last_commit_ts > last_failure_ts`), the failure fields are left in place so operators can still inspect the most recent failure, but the dashboard treats them as stale. Log files are stored under `docs/logs/<task-slug>/` with a retention cap of 5 files per task. Task slugs are derived from the task name with unsafe characters replaced by hyphens.
+
+**⚠️ Security note**: Log file contents are committed publicly. Callers must ensure logs do not contain secrets or sensitive data before passing them to `repos.sh --failed --log`.
+
+The "last updated" timestamp shown in the dashboard is calculated from the most recent `last_commit_ts` among all repos.
+
+#### Recording failures
+
+```bash
+# Record a successful run (unchanged)
+./helpers/repos.sh "Quality"
+
+# Record a failed run with log capture
+./helpers/repos.sh "Quality" --failed --log /path/to/run.log
+
+# Record a failed run reading log from stdin
+./helpers/repos.sh "Quality" --failed --log - < run.log
+
+# Optional: include exit code and message
+./helpers/repos.sh "Quality" --failed --log /path/to/run.log --exit-code 1 --message "3 shellcheck errors"
+```
+
+External task runners (e.g. a Quality gate in a worker repo) should follow the copy-paste patterns in [`helpers/REPO_HEALTH_SNIPPET.md`](helpers/REPO_HEALTH_SNIPPET.md), which documents both the inline if/else form and a sourceable `report_repo_health` helper that picks success vs. failure automatically from `$?`. See [Reporting failures with a log file](helpers/REPO_HEALTH_SNIPPET.md#reporting-failures-with-a-log-file) for the full caller contract (flags, public-log warning, retention).
+
+### Enhanced Health Status Classification
+
+- **Healthy**: 
+  - Heartbeat within 24 hours
+  - Disk usage under 90%
+  - OS version up to date
+- **Warning**:
+  - Disk usage at or above 90% (with hysteresis: clears only when dropping to or below 87%)
+  - A host can remain in warning state between 87% and 90% until it drops below the clear threshold — this hysteresis band prevents status oscillation when disk usage hovers near the boundary
+  - Outdated OS version
+  - Heartbeat within 24 hours
+- **Critical**: 
+  - No heartbeat for 24+ hours (except MacBook Airs)
+  - MacBook Airs only marked critical after 7 days offline
+- **Dead**: Known dead machines (don't affect system health)
+- **Historical**: MacBook Airs and other mobile devices
+
+## Dashboard Features
+
+The enhanced web dashboard (`docs/index.html`) provides:
+
+- **Real-time statistics**: Total hosts, healthy, warning, and critical counts
+- **Host cards**: Individual cards for each host with detailed information
+- **Location display**: Shows where each host is located with emoji indicators
+- **Historical section**: Displays dead machines and MacBook Airs
+- **Filtering**: Filter by health status (all, healthy, warning, critical)
+- **Auto-refresh**: Updates every 60 seconds
+- **Responsive design**: Works on desktop and mobile devices
+- **Visual indicators**: Color-coded status indicators and borders
+- **Dynamic title**: Changes between "GRQ Healthy" and "GRQ Unhealthy"
+- **Theme selector**: Light / dark / auto colour theme, remembered per browser
+
+### Colour Theme (Issue #161)
+
+Every dashboard page (`docs/index.html`, `docs/simple.html`, `docs/log-viewer.html`)
+carries a light/dark/auto theme selector in the top-right corner. The chosen
+mode is stored in `localStorage` (`grq-theme`) and restored on every visit, so
+the choice is remembered per browser with no server sync.
+
+- **Light** — the original purple-gradient design.
+- **Dark** — a deep navy palette with WCAG-AA readable text.
+- **Auto** (default for first-time visitors) — follows the operating system's
+  `prefers-color-scheme` setting and reacts live when the OS setting changes.
+
+The shared controller lives in `docs/theme.js` (pure `resolveTheme` /
+`sanitiseThemeMode` helpers plus the DOM wiring); the selector styling is in
+`docs/theme.css`; the dashboard's dark palette and theme-aware offline (brown)
+colours live in `docs/styles.css` as CSS variables. It is vanilla JS + CSS with
+no new dependencies. A small inline `<script data-theme-init>` in each page's
+`<head>` applies the remembered theme before first paint to avoid a flash.
+
+```mermaid
+flowchart LR
+    A[Page load] --> B{localStorage<br/>grq-theme?}
+    B -- stored --> C[Use stored mode]
+    B -- none --> D[Default: auto]
+    C --> E{Mode?}
+    D --> E
+    E -- light --> F[data-theme=light]
+    E -- dark --> G[data-theme=dark]
+    E -- auto --> H{OS prefers dark?}
+    H -- yes --> G
+    H -- no --> F
+    I[Click Light/Dark/Auto] --> J[Save to localStorage] --> E
+    K[OS theme changes] -->|only when mode=auto| H
+```
+
+#### Bootstrap components in dark mode (Issue #165)
+
+The dashboard themes itself with its own `data-theme` attribute, **not**
+Bootstrap's `data-bs-theme`. Bootstrap therefore stays in its light theme and
+any component that resolves a colour from `--bs-body-bg` / `--bs-emphasis-color`
+keeps its light default — which is how the per-host Users table came to render
+as a white block on the dark page.
+
+When adding a Bootstrap component to a dashboard page, give it a matching
+`[data-theme="dark"]` block in `docs/styles.css` that re-points the component's
+own `--bs-*` variables at the dark palette variables (`--card-bg`,
+`--card-text`, `--card-bg-active`, `--border-subtle`). `.table` and
+`.btn-outline-secondary` are covered; `tests/test-dark-mode-table.sh` measures
+the resulting luminance and WCAG contrast so a regression to light surfaces
+fails the quality gate.
+
+#### Host-card surfaces in dark mode (Issue #170)
+
+The same trap applies to the dashboard's own host cards. Any `.host-card.*`
+variant that paints a colour literal instead of `var(--card-bg)` keeps that
+light surface in dark mode while the card text flips to the light dark-palette
+colours — which is how the "Off the Grid" (MIA) card came to render near-white
+text on a near-white mint gradient. Each such variant needs a matching
+`[data-theme="dark"] .host-card.<variant>` rule that washes its accent colour
+over `var(--card-bg)` rather than over a light literal, so the accent identity
+survives and the text stays readable. `tests/test-dark-mode-table.sh` asserts
+≥4.5:1 contrast between the resolved MIA surface and both `--card-text` and
+`--muted-color`.
+
+#### The host-card contrast sweep (Issue #172)
+
+That same fault shipped three times (#165, #169, #171) before a human spotted it
+on a phone screenshot, so the check no longer names variants.
+`tests/test-dark-mode-host-cards.sh` runs `tests/dark-mode-card-check.js`, which
+**enumerates** every `.host-card.<variant>` rule in `docs/styles.css` and
+measures each one — no test edit is needed when a variant is added.
+
+```mermaid
+flowchart LR
+    A[docs/styles.css] --> B[enumerate .host-card variants]
+    B --> C{dark override?}
+    C -->|yes| D["[data-theme=dark] rule background"]
+    C -->|no| E[base rule background]
+    D --> F[composite layers + gradient stops<br/>over the dark --card-bg]
+    E --> F
+    F --> G{">= 4.5:1 vs --card-text<br/>and --muted-color?"}
+    G -->|no| H[TEST_RESULT ... FAIL]
+    G -->|yes| I[TEST_RESULT ... PASS]
+```
+
+A translucent `rgba()` wash is composited before the ratio is computed, and
+every stop of a multi-stop gradient is measured, so a gradient that starts dark
+and ends light still fails. Enumerating zero variants is itself a failure, so a
+stylesheet rename cannot turn the guard green by vacuity. The fixtures in
+`tests/fixtures/dark-mode-cards/` are the checker's own self-test: known-good
+and known-bad variants it must keep telling apart.
+
+#### Host-card decorations must stay behind the content (Issue #173)
+
+The `.mia`, `.mobile` and `.outdated-macos` cards carry decorative emoji as
+absolutely-positioned `::before`/`::after` pseudo-elements anchored to the same
+top-right corner the `.health-status` badge occupies. They used to sit at
+`z-index: 1`, so they painted over the badge and clipped "OFF THE GRID".
+
+A decoration must therefore be `z-index: -1` and `pointer-events: none`, and the
+card must be its own stacking context (`isolation: isolate` on `.host-card`) so
+a negative z-index paints above the card background rather than escaping behind
+it. `z-index: 0` is **not** enough — a positioned box still paints above in-flow
+content — and nudging the emoji's `right` offset only moves the collision to a
+different status string.
+
+```mermaid
+flowchart TB
+    A[".host-card — isolation: isolate<br/>(its own stacking context)"] --> B["z-index: -1 — decorative emoji"]
+    A --> C["in-flow content — .health-status badge, hostname, stats"]
+    B -.->|painted first| C
+```
+
+`tests/test-decoration-stacking.sh` runs `tests/decoration-stacking-check.js`,
+which **enumerates** every `.host-card.<variant>::before/::after` rule in
+`docs/styles.css` and resolves its painting order against the badge, so a newly
+decorated variant is covered without a test edit. The fixtures in
+`tests/fixtures/decoration-stacking/` are the checker's self-test, and
+`tests/status-overflow.test.html` carries the matching browser cases, which
+hit-test the rendered badge with `document.elementFromPoint()`.
+
+#### The hostname truncates, it never wraps (Issue #174)
+
+`.host-card h5` carried `overflow: hidden; text-overflow: ellipsis` with no
+`white-space: nowrap`. `text-overflow` only fires on text that overflows a
+**single** line, so a long hostname such as `Tinas-MacBook-Air` wrapped instead
+— "Air" dropped onto a second line, the header grew taller and pushed into the
+"OFF THE GRID" badge.
+
+The header is a flex row, and a flex container cannot truncate its own children,
+so the ellipsis is applied to the hostname **text run** rather than the header:
+each card template wraps the hostname in `<span class="hostname-text">`, which
+carries `min-width: 0`, `overflow: hidden`, `text-overflow: ellipsis` and
+`white-space: nowrap`. The machine-type and "Worker silent" badges are its
+siblings with `flex-shrink: 0`, so they stay beside the ellipsis rather than
+being clipped away, and the span carries a `title` attribute so the full
+hostname is still readable on a phone.
+
+```mermaid
+flowchart LR
+    A[".host-card h5 — display: flex, overflow: hidden"] --> B["span.hostname-text<br/>min-width: 0, nowrap, ellipsis"]
+    A --> C["span.badge — flex-shrink: 0<br/>Mac mini / Worker silent"]
+    B -->|"title attribute"| D["full hostname on hover/long-press"]
+```
+
+`tests/test-status-overflow.sh` runs `tests/hostname-truncation-check.js`, which
+locates the element holding the hostname text run in **every** `<h5>` card
+template in `docs/dashboard.js`, resolves the CSS applying to it and asks whether
+that box can truncate — so the header may be restructured freely as long as the
+hostname still lands in a truncating box with its badges intact. The fixtures in
+`tests/fixtures/hostname-truncation/` are the checker's self-test, and
+`tests/status-overflow.test.html` carries the matching browser cases, which
+measure the rendered line boxes of a `Tinas-MacBook-Air` card.
+
+### Emoji Legend
+
+- 💀 Dead machines (in Silicon Heaven)
+- 👌 Healthy machines
+- 🐌 Slow machines
+- 🏭 Mac Studio/Workstation
+- 👴🏻 Old Linux machines
+- 🍭 Mac m4 machines
+- 🚀 High-performance machines
+- 🕊️ MacBook Airs (mobile)
+
+## Manual Host Management
+
+You can manually edit a host's document — `docs/host-status/<HOST>.json` for a
+host that has already reported under Issue #213, or its entry in the legacy
+`docs/index.json` for one that has not. A new host only needs the file; the
+manifest is rebuilt from the directory on the next heartbeat.
+
+The examples below show the entry **as it appears in `docs/index.json`**, keyed
+by hostname. In `docs/host-status/<HOST>.json` the file holds just the inner
+object, with a `"host": "<HOST>"` field added — no hostname key wrapping it.
+
+### Adding a New Active Host
+```json
+{
+  "GRQ-24": {
+    "uptime": 0,
+    "free_disk_space": "100",
+    "disk_usage_percent": "20",
+    "mem_usage_percent": "10",
+    "cpu_load": "5%",
+    "timezone": "AEST",
+    "os_info": "macOS",
+    "os_version": "15.5",
+    "network_status": "connected",
+    "heart_beat_ts": 1752728062,
+    "location": "Newport Office",
+    "info": "New Mac",
+    "emoji": "🍭"
+  }
+}
+```
+
+### Marking a Host as Dead
+```json
+{
+  "GRQ-25": {
+    "death_date": "15 Jun 2025",
+    "location": "Silicon Heaven",
+    "emoji": "💀",
+    "os_info": "Linux",
+    "info": "Old server"
+  }
+}
+```
+
+### Adding a MacBook Air
+```json
+{
+  "New MacBook": {
+    "location": "Out 'n about",
+    "emoji": "🕊️",
+    "os_info": "Mac",
+    "info": "Mac m4",
+    "last_seen": "15 Jun 2025",
+    "sample_rate": "2m 30s"
+  }
+}
+```
+
+## Setup Instructions
+
+### 1. Repository Setup
+
+1. Create a new GitHub repository
+2. Clone it to your local machine
+3. Copy the files from this project
+4. Enable GitHub Pages in your repository settings:
+   - Go to Settings → Pages
+   - Source: Deploy from a branch
+   - Branch: main/master
+   - Folder: /docs
+
+### 2. Host Configuration
+
+For each host you want to monitor:
+
+1. Clone the repository to the host
+2. Make the script executable: `chmod +x run.sh`
+3. Set up a cron job for regular execution:
+   ```bash
+   # Edit crontab
+   crontab -e
+   
+   # Add this line to run every 6 hours
+   0 */6 * * * /path/to/GRQ-health/run.sh
+   ```
+
+### 3. Dependencies Installation
+
+#### Ubuntu/Debian:
+```bash
+sudo apt update
+sudo apt install jq bc
+```
+
+#### macOS:
+```bash
+brew install jq bc
+```
+
+#### AWS Linux/Amazon Linux:
+```bash
+sudo yum install jq bc
+# or for newer versions:
+sudo dnf install jq bc
+```
+
+## Configuration
+
+You can modify the following variables in `run.sh`:
+
+- `HEARTBEAT_THRESHOLD_HOURS`: How often to update the heartbeat (default: 8 hours)
+- `USER_STALE_HOURS_DEFAULT`: How long before a user is marked as stale (default: 24 hours)
+- `JSON_FILE`: Path to the legacy fleet-wide JSON file, read-only since Issue #213 (default: docs/index.json)
+- `HOST_STATUS_DIR`: Directory of per-host documents (default: docs/host-status)
+
+### Heartbeat vs Stale Threshold
+
+**IMPORTANT**: The stale threshold must be significantly larger than the heartbeat threshold to avoid false positives.
+
+- **Heartbeat threshold (8 hours)**: How often `run.sh` updates the heartbeat timestamp
+- **Stale threshold (24 hours)**: How long before a user is marked as "stale" on the dashboard
+
+If processes run hourly but the heartbeat only updates every 8 hours, marking a user as stale after exactly 8 hours would cause false positives. The default stale threshold of 24 hours (3x the heartbeat threshold) provides adequate margin for timing variations.
+
+You can override the stale threshold per-host via the environment variable `GRQ_USER_STALE_HOURS`.
+
+## Uptime Monitoring
+
+The page title automatically changes to:
+- **"GRQ Healthy"** when all active hosts are healthy
+- **"GRQ Unhealthy"** when any active host is critical
+
+This allows uptime monitoring services to check the page title for system health status.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Script fails to run**:
+   - Check if bash is available: `which bash`
+   - Ensure script is executable: `chmod +x run.sh`
+   - Check for required commands: `which uptime df ping`
+
+2. **JSON parsing errors**:
+   - Install `jq`: The script will work without it but with limited functionality
+   - Check JSON syntax: `jq . docs/host-status/<HOST>.json`
+
+3. **Git push fails**:
+   - Ensure you have write access to the repository
+   - Check if remote is configured: `git remote -v`
+   - Verify authentication is set up
+
+4. **Dashboard not updating**:
+   - Check GitHub Pages settings
+   - Verify the workflow ran successfully in Actions tab
+   - Clear browser cache
+
+### Debug Mode
+
+Run the script with debug output:
+```bash
+bash -x run.sh
+```
+
+## Security Considerations
+
+- **Reporting a vulnerability, triaging a failed Gitleaks/Semgrep run, or shipping an emergency dependency bump**: see [SECURITY.md](SECURITY.md), which names who is alerted, the route each security signal takes to a human, and the [emergency-bump procedure](SECURITY.md#emergency-dependency-bump) for an actively-exploited CVE
+- The script runs with the same permissions as the user executing it
+- No sensitive information is collected or stored
+- Hostnames are used as identifiers (ensure they don't contain sensitive data)
+- Consider using SSH keys for git authentication instead of passwords
+
+## Testing
+
+### Unit Tests vs Benchmarks
+
+- **Unit tests** verify functionality — call a function with test data and assert on the result. They must not validate performance (timing).
+- **Benchmarks** measure performance — dedicated scripts that compare execution time. Benchmarks are expected to take time and must not run inside unit tests.
+- **Why?** Unit tests run in parallel, making timing measurements unreliable.
+
+### "What" Tests vs "How" Tests
+
+All tests must be **"what" tests** — they check **what** the code produces, not **how** it is implemented:
+
+- **Good ("what" test):** Call `getHealthStatus("host", data)` and assert the return value is `"warning"`.
+- **Bad ("how" test):** Grep the source code for `grep -q 'anyUserStale'` to check if a variable name exists.
+
+"How" tests break whenever you refactor (e.g., renaming a variable, switching algorithms) even though the behaviour is unchanged. They offer no real value.
+
+### Writing JS Tests
+
+The project uses `deno` to run pure functions extracted from `docs/dashboard.js`.
+Tests locate the binary via `tests/find-deno.sh`: an explicit `$DENO` first, then
+`deno` on `PATH`, then the installer default `$HOME/.deno/bin/deno`. If none
+resolve, the test fails immediately with a message saying so.
+
+```bash
+source tests/extract-functions.sh
+run_js_test '
+    const result = getHealthStatus("host", { heart_beat_ts: 1700000000 });
+    if (result === "healthy") {
+        console.log("TEST_RESULT:my-test:PASS:correct status");
+    } else {
+        console.log("TEST_RESULT:my-test:FAIL:expected healthy, got " + result);
+    }
+'
+```
+
+Test protocol: JS prints `TEST_RESULT:<name>:<PASS|FAIL>:<detail>`, the shell harness parses these lines.
+
+### Test File Conventions
+
+- Test files: `tests/test-*.sh` (run by `quality.sh`)
+- Helper files: `tests/*.sh` without the `test-` prefix (not run as tests)
+- CSS tests: Extract CSS property values with `sed` and compare directly
+
+### What NOT to Do in Tests
+
+- Do **not** grep source files for patterns, variable names, or function bodies
+- Do **not** check that one function calls another
+- Do **not** use `extract_function ... | grep` patterns
+- Do **not** reduce iteration counts to make performance tests faster — create proper benchmarks instead
+- If a function requires external services (e.g., GitHub API), skip the test rather than faking it with grep
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. **Always update the version number** in `run.sh` when making code changes
+5. **Run the version update script**: `./update_version.sh` to sync version across all files
+6. Test on different operating systems
+7. Submit a pull request
+
+### Version Management
+
+When making code changes, you must:
+1. Update the `VERSION` variable in `run.sh` (e.g., from "1.0.32" to "1.0.33")
+2. Run `./update_version.sh` to automatically update version numbers in all HTML and JavaScript files
+3. This ensures version consistency across the entire project
+
+## Dependency Maintenance
+
+Third-party GitHub Actions are pinned to commit SHAs and refreshed by an
+automated weekly job. The flow looks like:
+
+```mermaid
+flowchart LR
+    A[Cron: Mon 06:00 UTC] --> B[bump-deps.sh]
+    B --> R{Registry and<br/>tools reachable?}
+    R -- no --> S[Warn, skip the action,<br/>exit 0 -- nothing written]
+    R -- yes --> C{Audit gate<br/>./quality.sh}
+    C -- pass --> D[PR on chore/bump-deps]
+    C -- fail --> E[Exit 1 -- worker reverts]
+```
+
+### SHA pinning convention
+
+Every `uses:` line in `.github/workflows/*.yml` is pinned to a 40-char
+commit SHA, with the human-readable version recorded as a trailing
+comment. Never replace the SHA with a moving tag (e.g. `@v4`) — pinning
+to a SHA defends against supply-chain attacks where a release tag is
+re-pointed at malicious code. When the SHA is bumped, update the `# vX.Y.Z`
+comment in lock-step so reviewers can see the version change at a glance.
+
+```yaml
+- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+```
+
+### `bump-deps.sh`
+
+`./bump-deps.sh` walks every `uses:` line in `.github/workflows/*.yml`,
+resolves each action's latest release tag to its commit SHA, and rewrites
+the SHA + version comment in place. After applying bumps it runs
+`./quality.sh` as the audit gate; a rejected bump exits non-zero so the
+worker can revert the change.
+
+Flags:
+
+- `--dry-run` — print the planned bumps without writing files; the audit
+  gate is skipped.
+- `--quarantine-hours <H>` — override `VIBE_BUMP_QUARANTINE_HOURS` for
+  this run. Must be a non-negative integer.
+- `--help`, `-h` — print full usage and exit.
+
+Environment overrides:
+
+- `VIBE_BUMP_QUARANTINE_HOURS` — default quarantine window in hours (24).
+- `BUMP_DEPS_API_ATTEMPTS` — registry attempts per lookup (3).
+- `BUMP_DEPS_RETRY_DELAY_SECONDS` — delay between attempts (2).
+- `BUMP_DEPS_GH` / `BUMP_DEPS_JQ` — override the `gh` / `jq` binaries
+  (test hooks).
+
+Run a manual bump locally:
+
+```bash
+# Preview the bumps without touching files
+./bump-deps.sh --dry-run
+
+# Apply bumps and run the audit gate
+./bump-deps.sh
+
+# Use a longer quarantine window (e.g. 72h)
+./bump-deps.sh --quarantine-hours 72
+```
+
+### Scheduled workflow
+
+`.github/workflows/bump-deps.yml` runs `./bump-deps.sh` on a weekly
+schedule at **06:00 UTC every Monday** — outside Australian business
+hours so any resulting PR is ready at the start of the week. It can also
+be triggered on demand via `workflow_dispatch` from the Actions tab.
+
+The workflow opens (or updates) a PR titled `chore: bump GitHub Action
+SHAs` on branch `chore/bump-deps`. It does not run on `pull_request` so
+the PR does not retrigger itself.
+
+### Quarantine policy
+
+External actions are quarantined to dodge fast-flagged supply-chain
+attacks: a release is only eligible to be bumped once it is at least
+`VIBE_BUMP_QUARANTINE_HOURS` old (default 24 hours). Internal actions
+under `stSoftwareAU/*` skip the quarantine and bump immediately, since
+we control the upstream.
+
+To ship a fix for an actively-exploited CVE ahead of that window, follow
+the [emergency-bump procedure](SECURITY.md#emergency-dependency-bump) in
+`SECURITY.md`. It overrides the window for a single run only — never
+lower the committed default.
+
+### Audit gate
+
+After applying bumps, `bump-deps.sh` invokes `./quality.sh` as the audit
+gate. If quality checks fail, the script exits non-zero and prints the
+offending bump diff so the worker can revert the change per the
+VibeCoding #1613 contract. The scheduled workflow only opens a PR when
+the audit gate passes.
+
+### Upstream failures and the exit-code contract
+
+The exit status is a verdict on **this repo**, not on the upstream
+registry. A non-zero exit means *"a bump was written and it is bad —
+revert it"*, so a GitHub API outage must never produce one: nothing was
+written, so there is nothing to revert, and three such exits in a row
+would disable dependency bumps for the repo entirely (Issue #195).
+
+| Condition | Behaviour | Exit |
+| --- | --- | --- |
+| Nothing to bump | `OK no bumps -- actions already current` | 0 |
+| Bump applied, audit gate green | `OK bumped: <N> action(s)` + diff | 0 |
+| Registry lookup fails for an action | `WARNING:` on stderr, that action's pin is left untouched, remaining actions still bump | 0 |
+| `gh` or `jq` missing from `PATH` | `WARNING:` on stderr, no bump attempted | 0 |
+| Applied bump rejected by the audit gate | Gate output + offending diff on stderr | 1 |
+| Invalid flag or option value | Usage error on stderr | 1 |
+
+Transient registry errors (rate limit, 5xx, network blip) are retried
+`BUMP_DEPS_API_ATTEMPTS` times before the action is skipped. An `HTTP
+404` is a settled answer rather than a blip, so it is reported on the
+first attempt without burning further API quota.
+
+A skip is never silent: `gh`'s (or `jq`'s) own diagnostic is reported
+verbatim on stderr and each skipped action is listed in the run summary,
+so an operator can tell a rate limit from a deleted repository. The
+scheduled workflow re-surfaces that summary as a `::warning::`
+annotation, so a green run that bumped nothing because the registry was
+unreachable is still distinguishable from one where everything was
+already current.
+
+The scheduled workflow passes its own `GITHUB_TOKEN` to the script.
+Without it `gh api` falls back to GitHub's shared per-IP limit on hosted
+runners, which is what starved every lookup and failed the job on three
+consecutive runs (Issue #195).
+
+### Reviewer responsibilities
+
+Before merging an auto-generated `chore: bump GitHub Action SHAs` PR:
+
+- Confirm each new 40-char SHA matches the release tag listed in the
+  trailing `# vX.Y.Z` comment (spot-check on GitHub).
+- Confirm only `.github/workflows/*.yml` files changed — no unrelated
+  edits should appear.
+- Confirm CI is green; the audit gate has already run, but a fresh CI
+  run on the PR branch catches any flakiness.
+- For any new external action, confirm the upstream repository looks
+  legitimate (recent activity, real maintainer, not a typosquat).
+
+## License
+
+This project is open source. Feel free to modify and distribute as needed.
+
+## Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review the script output for error messages
+3. Open an issue in the GitHub repository
+
+## Documentation
+
+For detailed documentation about the dashboard features and data structure, see [docs/README.md](docs/README.md).
